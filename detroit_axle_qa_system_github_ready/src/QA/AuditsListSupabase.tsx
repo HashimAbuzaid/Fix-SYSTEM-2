@@ -96,6 +96,13 @@ const PROGRESS_GROUPS = [
 ] as const;
 
 type ProgressGroupKey = (typeof PROGRESS_GROUPS)[number]['key'];
+
+type ProgressColumn = {
+  index: number;
+  label: string;
+  groupKey: ProgressGroupKey;
+  groupLabel: string;
+};
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 
@@ -361,6 +368,7 @@ function AuditsListSupabase() {
     g2: false,
     g3: false,
   });
+  const [selectedOffEvalIndex, setSelectedOffEvalIndex] = useState(0);
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -1019,6 +1027,24 @@ const visibleProgressColumns = useMemo(() => {
   });
 }, [evaluationProgressData.evaluationColumns, focusedEvalGroup, collapsedEvalGroups]);
 
+useEffect(() => {
+  if (visibleProgressColumns.length === 0) return;
+  const selectedVisible = visibleProgressColumns.some(
+    (column) => column.index === selectedOffEvalIndex
+  );
+  if (!selectedVisible) {
+    setSelectedOffEvalIndex(visibleProgressColumns[0].index);
+  }
+}, [visibleProgressColumns, selectedOffEvalIndex]);
+
+const selectedOffColumn = useMemo<ProgressColumn | null>(() => {
+  return (
+    evaluationProgressData.evaluationColumns.find(
+      (column) => column.index === selectedOffEvalIndex
+    ) || null
+  );
+}, [evaluationProgressData.evaluationColumns, selectedOffEvalIndex]);
+
 const visibleProgressGroupSpans = useMemo(() => {
   return PROGRESS_GROUPS.map((group) => {
     const count = visibleProgressColumns.filter(
@@ -1055,6 +1081,63 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
   setFocusedEvalGroup(groupKey);
 }
 
+
+  function getOffEvalCellStyle(isSelectedTarget: boolean) {
+    return {
+      ...progressOffEvalCellStyle,
+      ...(isSelectedTarget ? progressOffEvalCellSelectedStyle : {}),
+    };
+  }
+
+  function renderEvaluationCell(
+    row: (typeof evaluationProgressData.rows)[number],
+    column: ProgressColumn
+  ) {
+    const evaluation = row.evaluations[column.index] || {
+      score: null,
+      label: '',
+    };
+    const hasValue =
+      evaluation.score !== null && Number.isFinite(evaluation.score);
+    const isOffCell = row.offToday && column.index === selectedOffEvalIndex;
+    const isSelectedTarget = column.index === selectedOffEvalIndex;
+
+    if (isOffCell) {
+      return (
+        <div
+          key={`${row.agent_id}-${row.team}-${column.index}`}
+          style={getOffEvalCellStyle(isSelectedTarget)}
+          title={`OFF placed in ${column.label}`}
+        >
+          OFF
+        </div>
+      );
+    }
+
+    const cellTone = hasValue
+      ? getProgressCellTone(evaluation.score)
+      : progressEmptyCellStyle;
+
+    return (
+      <div
+        key={`${row.agent_id}-${row.team}-${column.index}`}
+        style={{
+          ...progressEvalCellStyle,
+          ...cellTone,
+          ...(isSelectedTarget ? progressEvalCellSelectedStyle : {}),
+        }}
+        title={
+          isSelectedTarget
+            ? `${column.label} is the current OFF target${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            : hasValue
+            ? evaluation.label || `${evaluation.score}%`
+            : 'No evaluation'
+        }
+      >
+        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
+      </div>
+    );
+  }
 
   function getProgressCellTone(score: number | null) {
     if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
@@ -1654,6 +1737,9 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
         <span style={progressMetaPillStyle}>
           Max Evals: {evaluationProgressData.evaluationColumns.length}
         </span>
+        <span style={progressMetaPillStyle}>
+          OFF Target: {selectedOffColumn?.label || 'None'}
+        </span>
         {importedFileName ? (
           <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
         ) : null}
@@ -1713,6 +1799,10 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
       </div>
     </div>
 
+    <div style={progressHintStyle}>
+      Click any Eval header to choose where the OFF marker should appear. Then press OFF in the Today column for that agent.
+    </div>
+
     {evaluationProgressData.rows.length === 0 ? (
       <div style={progressEmptyStateStyle}>
         No evaluation progress data matches the current filters yet.
@@ -1760,9 +1850,20 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
             <div style={{ ...progressMetaCellStyle, ...progressStickyTeamHeaderCellStyle }}>Team</div>
             <div style={{ ...progressMetaCellStyle, ...progressStickyTodayHeaderCellStyle }}>Today</div>
             {visibleProgressColumns.map((column) => (
-              <div key={column.label} style={progressEvalCellStyle}>
+              <button
+                key={column.label}
+                type="button"
+                onClick={() => setSelectedOffEvalIndex(column.index)}
+                style={{
+                  ...progressEvalHeaderButtonStyle,
+                  ...(selectedOffEvalIndex === column.index
+                    ? progressEvalHeaderButtonActiveStyle
+                    : {}),
+                }}
+                title={`Set ${column.label} as the OFF target`}
+              >
                 {column.label}
-              </div>
+              </button>
             ))}
             <div style={progressMetaCellStyle}>Latest Date</div>
             <div style={progressMetaCellStyle}>Average</div>
@@ -1817,43 +1918,28 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
                             }
                       }
                     >
-                      {row.offToday ? 'OFF' : 'Mark OFF'}
+                      {row.offToday ? `OFF ${selectedOffColumn ? `• ${selectedOffColumn.label}` : ''}` : `OFF → ${selectedOffColumn?.label || 'Select Eval'}`}
                     </button>
                   </div>
 
-                  {visibleProgressColumns.map((column) => {
-                    const evaluation = row.evaluations[column.index] || {
-                      score: null,
-                      label: '',
-                    };
-                    const hasValue =
-                      evaluation.score !== null && Number.isFinite(evaluation.score);
-                    const cellTone = hasValue
-                      ? getProgressCellTone(evaluation.score)
-                      : progressEmptyCellStyle;
-
-                    return (
-                      <div
-                        key={`${row.agent_id}-${row.team}-${column.index}`}
-                        style={{
-                          ...progressEvalCellStyle,
-                          ...cellTone,
-                        }}
-                        title={hasValue ? evaluation.label || `${evaluation.score}%` : 'No evaluation'}
-                      >
-                        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
-                      </div>
-                    );
-                  })}
+                  {visibleProgressColumns.map((column) =>
+                    renderEvaluationCell(row, column)
+                  )}
 
                   <div style={progressMetaCellStyle}>
-                    {row.offToday ? (
-                      <span style={progressOffPillStyle}>OFF</span>
-                    ) : row.latestAuditDate ? (
+                    {row.latestAuditDate ? (
                       <div>
                         <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
-                        <div style={secondaryCellTextStyle}>Latest evaluated audit</div>
+                        <div style={secondaryCellTextStyle}>
+                          {row.offToday
+                            ? `OFF shown in ${selectedOffColumn?.label || 'selected eval'}`
+                            : 'Latest evaluated audit'}
+                        </div>
                       </div>
+                    ) : row.offToday ? (
+                      <span style={progressOffPillStyle}>
+                        {selectedOffColumn?.label || 'OFF'}
+                      </span>
                     ) : (
                       <span style={secondaryCellTextStyle}>-</span>
                     )}
@@ -2893,6 +2979,38 @@ const progressEvalCellStyle = {
   border: '1px solid var(--screen-border)',
   fontWeight: 800,
   fontSize: '13px',
+};
+const progressHintStyle = {
+  marginBottom: '14px',
+  color: 'var(--screen-muted)',
+  fontSize: '13px',
+  lineHeight: 1.6,
+};
+const progressEvalHeaderButtonStyle = {
+  ...progressEvalCellStyle,
+  minHeight: '40px',
+  background: 'transparent',
+  color: '#93c5fd',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap' as const,
+};
+const progressEvalHeaderButtonActiveStyle = {
+  border: '1px solid rgba(167,243,208,0.6)',
+  background: 'rgba(16,185,129,0.16)',
+  color: '#d1fae5',
+  boxShadow: '0 0 0 1px rgba(167,243,208,0.18) inset',
+};
+const progressEvalCellSelectedStyle = {
+  boxShadow: '0 0 0 2px rgba(96,165,250,0.22) inset',
+};
+const progressOffEvalCellStyle = {
+  ...progressEvalCellStyle,
+  background: 'var(--progress-off-bg)',
+  color: 'var(--progress-off-text)',
+  border: '1px solid var(--progress-off-border)',
+};
+const progressOffEvalCellSelectedStyle = {
+  boxShadow: '0 0 0 2px rgba(196,181,253,0.28) inset',
 };
 const progressStrongCellStyle = {
   background: 'var(--progress-strong-bg)',
