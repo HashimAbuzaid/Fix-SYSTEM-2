@@ -103,6 +103,18 @@ type ProgressColumn = {
   groupKey: ProgressGroupKey;
   groupLabel: string;
 };
+const PROGRESS_OFF_STORAGE_KEY = 'detroit-axle-progress-off-evals-v3';
+
+function normalizeOffEvalIndexes(indexes: number[]) {
+  return Array.from(
+    new Set(
+      indexes.filter(
+        (value) =>
+          Number.isInteger(value) && value >= 0 && value < MAX_PROGRESS_EVALS
+      )
+    )
+  ).sort((a, b) => a - b);
+}
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 
@@ -368,7 +380,8 @@ function AuditsListSupabase() {
     g2: false,
     g3: false,
   });
-  const [selectedOffEvalIndex, setSelectedOffEvalIndex] = useState(0);
+  const [selectedOffEvalIndexes, setSelectedOffEvalIndexes] = useState<number[]>([0]);
+  const [manualOffEvalIndexesByAgent, setManualOffEvalIndexesByAgent] = useState<Record<string, number[]>>({});
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -390,6 +403,29 @@ function AuditsListSupabase() {
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(PROGRESS_OFF_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Record<string, number[]>;
+      const sanitized: Record<string, number[]> = {};
+      Object.entries(parsed || {}).forEach(([key, value]) => {
+        sanitized[key] = normalizeOffEvalIndexes(Array.isArray(value) ? value : []);
+      });
+      setManualOffEvalIndexesByAgent(sanitized);
+    } catch {
+      setManualOffEvalIndexesByAgent({});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      PROGRESS_OFF_STORAGE_KEY,
+      JSON.stringify(manualOffEvalIndexesByAgent)
+    );
+  }, [manualOffEvalIndexesByAgent]);
   async function loadAuditsAndProfiles() {
     setLoading(true);
     setErrorMessage('');
@@ -598,24 +634,45 @@ function AuditsListSupabase() {
       label.includes(search)
     );
   }
-  async function toggleAgentOffToday(agentId?: string | null, team?: string | null) {
-    setErrorMessage('');
-    setSuccessMessage('');
+  function getSelectedOffTargetIndexes() {
+    return normalizeOffEvalIndexes(selectedOffEvalIndexes);
+  }
 
-    if (!canManageOffToday) {
-      setErrorMessage('Only admin or QA can update OFF today status.');
-      return;
-    }
-
-    if (!agentId || !team) {
-      setErrorMessage('Agent ID or team is missing for OFF today.');
-      return;
-    }
-
+  function getManualOffIndexes(agentId?: string | null, team?: string | null) {
     const key = getAgentProgressKey(agentId, team);
-    const nextValue = !offTodayByAgent[key];
+    return normalizeOffEvalIndexes(manualOffEvalIndexesByAgent[key] || []);
+  }
 
-    if (nextValue) {
+  function getEffectiveOffIndexesForAgent(
+    agentId?: string | null,
+    team?: string | null,
+    hasLegacyOffToday?: boolean
+  ) {
+    const manualIndexes = getManualOffIndexes(agentId, team);
+    if (manualIndexes.length > 0) return manualIndexes;
+    if (hasLegacyOffToday) return getSelectedOffTargetIndexes();
+    return [];
+  }
+
+  function formatEvalIndexLabel(index: number) {
+    return `Eval ${index + 1}`;
+  }
+
+  function formatOffTargetSummary(indexes: number[]) {
+    const normalized = normalizeOffEvalIndexes(indexes);
+    if (normalized.length === 0) return 'None';
+    if (normalized.length <= 3) {
+      return normalized.map((index) => formatEvalIndexLabel(index)).join(', ');
+    }
+    return `${normalized.length} evals selected`;
+  }
+
+  async function syncAgentOffPresence(
+    agentId: string,
+    team: 'Calls' | 'Tickets' | 'Sales',
+    shouldHaveOff: boolean
+  ) {
+    if (shouldHaveOff) {
       const { error } = await supabase
         .from('agent_daily_status')
         .upsert(
@@ -630,13 +687,7 @@ function AuditsListSupabase() {
           { onConflict: 'agent_id,team,status_date' }
         );
 
-      if (error) {
-        setErrorMessage(error.message);
-        return;
-      }
-
-      setOffTodayByAgent((prev) => ({ ...prev, [key]: true }));
-      setSuccessMessage('Agent marked as OFF today.');
+      if (error) throw error;
       return;
     }
 
@@ -648,18 +699,80 @@ function AuditsListSupabase() {
       .eq('status_date', todayStatusDate)
       .eq('status', 'OFF');
 
-    if (error) {
-      setErrorMessage(error.message);
+    if (error) throw error;
+  }
+
+  async function toggleAgentOffToday(agentId?: string | null, team?: string | null) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!canManageOffToday) {
+      setErrorMessage('Only admin or QA can update OFF day markers.');
       return;
     }
 
-    setOffTodayByAgent((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-    setSuccessMessage('OFF today cleared for agent.');
+    if (!agentId || !team) {
+      setErrorMessage('Agent ID or team is missing for OFF control.');
+      return;
+    }
+
+    const targetIndexes = getSelectedOffTargetIndexes();
+    if (targetIndexes.length === 0) {
+      setErrorMessage('Choose at least one Eval header before applying OFF.');
+      return;
+    }
+
+    const key = getAgentProgressKey(agentId, team);
+    const hasLegacyOffToday = !!offTodayByAgent[key];
+    const currentIndexes = getEffectiveOffIndexesForAgent(
+      agentId,
+      team,
+      hasLegacyOffToday
+    );
+    const currentSet = new Set(currentIndexes);
+    const allTargetsAlreadyOff = targetIndexes.every((index) =>
+      currentSet.has(index)
+    );
+
+    const nextIndexes = allTargetsAlreadyOff
+      ? currentIndexes.filter((index) => !targetIndexes.includes(index))
+      : normalizeOffEvalIndexes([...currentIndexes, ...targetIndexes]);
+
+    try {
+      await syncAgentOffPresence(agentId, team, nextIndexes.length > 0);
+
+      setManualOffEvalIndexesByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = nextIndexes;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setOffTodayByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = true;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setSuccessMessage(
+        nextIndexes.length > 0
+          ? `OFF set for ${formatOffTargetSummary(nextIndexes)}.`
+          : 'All OFF markers cleared for this agent.'
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not update OFF markers.'
+      );
+    }
   }
+
   async function handleProgressImport(file?: File | null) {
     if (!file) return;
 
@@ -1029,21 +1142,25 @@ const visibleProgressColumns = useMemo(() => {
 
 useEffect(() => {
   if (visibleProgressColumns.length === 0) return;
-  const selectedVisible = visibleProgressColumns.some(
-    (column) => column.index === selectedOffEvalIndex
-  );
-  if (!selectedVisible) {
-    setSelectedOffEvalIndex(visibleProgressColumns[0].index);
-  }
-}, [visibleProgressColumns, selectedOffEvalIndex]);
+  const visibleIndexSet = new Set(visibleProgressColumns.map((column) => column.index));
+  setSelectedOffEvalIndexes((prev) => {
+    const filtered = normalizeOffEvalIndexes(
+      prev.filter((index) => visibleIndexSet.has(index))
+    );
+    return filtered.length > 0 ? filtered : [visibleProgressColumns[0].index];
+  });
+}, [visibleProgressColumns]);
 
-const selectedOffColumn = useMemo<ProgressColumn | null>(() => {
-  return (
-    evaluationProgressData.evaluationColumns.find(
-      (column) => column.index === selectedOffEvalIndex
-    ) || null
-  );
-}, [evaluationProgressData.evaluationColumns, selectedOffEvalIndex]);
+const selectedOffColumns = useMemo<ProgressColumn[]>(() => {
+  return normalizeOffEvalIndexes(selectedOffEvalIndexes)
+    .map(
+      (index) =>
+        evaluationProgressData.evaluationColumns.find(
+          (column) => column.index === index
+        ) || null
+    )
+    .filter((column): column is ProgressColumn => column !== null);
+}, [evaluationProgressData.evaluationColumns, selectedOffEvalIndexes]);
 
 const visibleProgressGroupSpans = useMemo(() => {
   return PROGRESS_GROUPS.map((group) => {
@@ -1081,6 +1198,29 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
   setFocusedEvalGroup(groupKey);
 }
 
+function toggleOffTargetEval(index: number) {
+  setSelectedOffEvalIndexes((prev) => {
+    if (prev.includes(index)) {
+      return normalizeOffEvalIndexes(prev.filter((value) => value !== index));
+    }
+    return normalizeOffEvalIndexes([...prev, index]);
+  });
+}
+
+function selectAllVisibleOffTargets() {
+  setSelectedOffEvalIndexes(
+    normalizeOffEvalIndexes(visibleProgressColumns.map((column) => column.index))
+  );
+}
+
+function clearSelectedOffTargets() {
+  setSelectedOffEvalIndexes([]);
+}
+
+function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[number]) {
+  return getEffectiveOffIndexesForAgent(row.agent_id, row.team, row.offToday);
+}
+
 
   function getOffEvalCellStyle(isSelectedTarget: boolean) {
     return {
@@ -1099,8 +1239,9 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
     };
     const hasValue =
       evaluation.score !== null && Number.isFinite(evaluation.score);
-    const isOffCell = row.offToday && column.index === selectedOffEvalIndex;
-    const isSelectedTarget = column.index === selectedOffEvalIndex;
+    const rowOffIndexes = getRowEffectiveOffIndexes(row);
+    const isOffCell = rowOffIndexes.includes(column.index);
+    const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
     if (isOffCell) {
       return (
@@ -1128,7 +1269,7 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
         }}
         title={
           isSelectedTarget
-            ? `${column.label} is the current OFF target${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
             : hasValue
             ? evaluation.label || `${evaluation.score}%`
             : 'No evaluation'
@@ -1738,7 +1879,7 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
           Max Evals: {evaluationProgressData.evaluationColumns.length}
         </span>
         <span style={progressMetaPillStyle}>
-          OFF Target: {selectedOffColumn?.label || 'None'}
+          OFF Targets: {formatOffTargetSummary(selectedOffEvalIndexes)}
         </span>
         {importedFileName ? (
           <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
@@ -1797,10 +1938,35 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
           ))}
         </div>
       </div>
+
+      <div style={progressControlsBlockStyle}>
+        <div style={progressControlsLabelStyle}>OFF Targets</div>
+        <div style={progressControlsRowStyle}>
+          <button
+            type="button"
+            onClick={selectAllVisibleOffTargets}
+            style={progressControlButtonStyle}
+          >
+            Select All Visible
+          </button>
+          <button
+            type="button"
+            onClick={clearSelectedOffTargets}
+            style={progressControlButtonStyle}
+          >
+            Clear Selection
+          </button>
+          <span style={progressSelectedTargetsStyle}>
+            {selectedOffEvalIndexes.length > 0
+              ? `Selected: ${formatOffTargetSummary(selectedOffEvalIndexes)}`
+              : 'Selected: None'}
+          </span>
+        </div>
+      </div>
     </div>
 
     <div style={progressHintStyle}>
-      Click any Eval header to choose where the OFF marker should appear. Then press OFF in the Today column for that agent.
+      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days.
     </div>
 
     {evaluationProgressData.rows.length === 0 ? (
@@ -1853,14 +2019,14 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
               <button
                 key={column.label}
                 type="button"
-                onClick={() => setSelectedOffEvalIndex(column.index)}
+                onClick={() => toggleOffTargetEval(column.index)}
                 style={{
                   ...progressEvalHeaderButtonStyle,
-                  ...(selectedOffEvalIndex === column.index
+                  ...(selectedOffEvalIndexes.includes(column.index)
                     ? progressEvalHeaderButtonActiveStyle
                     : {}),
                 }}
-                title={`Set ${column.label} as the OFF target`}
+                title={`Toggle ${column.label} for OFF control`}
               >
                 {column.label}
               </button>
@@ -1870,6 +2036,12 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
           </div>
 
           {evaluationProgressData.rows.map((row) => {
+            const rowOffIndexes = getRowEffectiveOffIndexes(row);
+            const rowHasAnyOff = rowOffIndexes.length > 0;
+            const allSelectedTargetsAreOff =
+              selectedOffEvalIndexes.length > 0 &&
+              selectedOffEvalIndexes.every((index) => rowOffIndexes.includes(index));
+
             return (
               <div
                 key={getAgentProgressKey(row.agent_id, row.team)}
@@ -1899,13 +2071,15 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
                       disabled={!canManageOffToday}
                       title={
                         canManageOffToday
-                          ? row.offToday
-                            ? 'Clear OFF today'
-                            : 'Mark agent as OFF today'
-                          : 'Only admin or QA can update OFF today'
+                          ? selectedOffEvalIndexes.length === 0
+                            ? 'Choose at least one Eval header first'
+                            : allSelectedTargetsAreOff
+                            ? `Clear OFF from ${formatOffTargetSummary(selectedOffEvalIndexes)}`
+                            : `Apply OFF to ${formatOffTargetSummary(selectedOffEvalIndexes)}`
+                          : 'Only admin or QA can update OFF days'
                       }
                       style={
-                        row.offToday
+                        rowHasAnyOff
                           ? {
                               ...progressOffButtonActiveStyle,
                               opacity: canManageOffToday ? 1 : 0.7,
@@ -1918,7 +2092,11 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
                             }
                       }
                     >
-                      {row.offToday ? `OFF ${selectedOffColumn ? `• ${selectedOffColumn.label}` : ''}` : `OFF → ${selectedOffColumn?.label || 'Select Eval'}`}
+                      {selectedOffEvalIndexes.length === 0
+                        ? 'Select Eval'
+                        : allSelectedTargetsAreOff
+                        ? `Clear ${selectedOffEvalIndexes.length} OFF`
+                        : `OFF × ${selectedOffEvalIndexes.length}`}
                     </button>
                   </div>
 
@@ -1931,14 +2109,16 @@ function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
                       <div>
                         <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
                         <div style={secondaryCellTextStyle}>
-                          {row.offToday
-                            ? `OFF shown in ${selectedOffColumn?.label || 'selected eval'}`
+                          {rowHasAnyOff
+                            ? `OFF in ${formatOffTargetSummary(rowOffIndexes)}`
                             : 'Latest evaluated audit'}
                         </div>
                       </div>
-                    ) : row.offToday ? (
+                    ) : rowHasAnyOff ? (
                       <span style={progressOffPillStyle}>
-                        {selectedOffColumn?.label || 'OFF'}
+                        {rowOffIndexes.length === 1
+                          ? formatEvalIndexLabel(rowOffIndexes[0])
+                          : `${rowOffIndexes.length} OFF`}
                       </span>
                     ) : (
                       <span style={secondaryCellTextStyle}>-</span>
@@ -2985,6 +3165,18 @@ const progressHintStyle = {
   color: 'var(--screen-muted)',
   fontSize: '13px',
   lineHeight: 1.6,
+};
+const progressSelectedTargetsStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '9px 12px',
+  borderRadius: '999px',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-text)',
+  fontSize: '12px',
+  fontWeight: 700,
+  whiteSpace: 'nowrap' as const,
 };
 const progressEvalHeaderButtonStyle = {
   ...progressEvalCellStyle,
