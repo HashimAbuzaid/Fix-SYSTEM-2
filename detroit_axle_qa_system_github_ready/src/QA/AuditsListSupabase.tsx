@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 type ScoreDetail = {
   metric: string;
@@ -86,6 +86,19 @@ type ImportedProgressRow = {
   offToday?: boolean;
   latestScore?: number | null;
   averageScore?: number | null;
+};
+
+type ProgressRowData = {
+  agent_id: string;
+  agent_name: string;
+  display_name: string | null;
+  team: 'Calls' | 'Tickets' | 'Sales';
+  evaluations: ImportedEvaluation[];
+  averageScore: number | null;
+  latestScore: number | null;
+  latestAuditDate: string | null;
+  offToday: boolean;
+  offEvalIndexes: number[];
 };
 
 const MAX_PROGRESS_EVALS = 24;
@@ -334,6 +347,186 @@ function getThemeVars(): Record<string, string> {
   };
 }
 
+
+const ProgressBoardRow = memo(function ProgressBoardRow({
+  row,
+  visibleProgressColumns,
+  progressGridTemplate,
+  canManageOffToday,
+  selectedOffEvalIndexes,
+  selectedOffEvalIndexesLabel,
+  onToggleAgentOff,
+}: {
+  row: ProgressRowData;
+  visibleProgressColumns: ProgressColumn[];
+  progressGridTemplate: string;
+  canManageOffToday: boolean;
+  selectedOffEvalIndexes: number[];
+  selectedOffEvalIndexesLabel: string;
+  onToggleAgentOff: (agentId: string, team: AuditItem['team']) => void;
+}) {
+  const selectedOffEvalIndexSet = useMemo(
+    () => new Set(selectedOffEvalIndexes),
+    [selectedOffEvalIndexes]
+  );
+
+  const rowHasAnyOff = row.offEvalIndexes.length > 0;
+  const allSelectedTargetsAreOff =
+    selectedOffEvalIndexes.length > 0 &&
+    selectedOffEvalIndexes.every((index) => row.offEvalIndexes.includes(index));
+
+  function getOffEvalCellStyle(isSelectedTarget: boolean) {
+    return {
+      ...progressOffEvalCellStyle,
+      ...(isSelectedTarget ? progressOffEvalCellSelectedStyle : {}),
+    };
+  }
+
+  function getProgressCellTone(score: number | null) {
+    if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
+    if (score >= 90) return progressStrongCellStyle;
+    if (score >= 75) return progressMediumCellStyle;
+    return progressWeakCellStyle;
+  }
+
+  function renderEvaluationCell(column: ProgressColumn) {
+    const evaluation = row.evaluations[column.index] || {
+      score: null,
+      label: '',
+    };
+    const hasValue =
+      evaluation.score !== null && Number.isFinite(evaluation.score);
+    const isOffCell = row.offEvalIndexes.includes(column.index);
+    const isSelectedTarget = selectedOffEvalIndexSet.has(column.index);
+
+    if (isOffCell) {
+      return (
+        <div
+          key={`${row.agent_id}-${row.team}-${column.index}`}
+          style={getOffEvalCellStyle(isSelectedTarget)}
+          title={`OFF placed in ${column.label}`}
+        >
+          OFF
+        </div>
+      );
+    }
+
+    const cellTone = hasValue
+      ? getProgressCellTone(evaluation.score)
+      : progressEmptyCellStyle;
+
+    return (
+      <div
+        key={`${row.agent_id}-${row.team}-${column.index}`}
+        style={{
+          ...progressEvalCellStyle,
+          ...cellTone,
+          ...(isSelectedTarget ? progressEvalCellSelectedStyle : {}),
+        }}
+        title={
+          isSelectedTarget
+            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            : hasValue
+            ? evaluation.label || `${evaluation.score}%`
+            : 'No evaluation'
+        }
+      >
+        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={`${row.agent_id}-${row.team}`}
+      style={progressEntryStyle}
+    >
+      <div
+        style={{
+          ...progressRowStyle,
+          gridTemplateColumns: progressGridTemplate,
+        }}
+      >
+        <div style={{ ...progressAgentCellStyle, ...progressStickyAgentCellStyle }}>
+          <div style={primaryCellTextStyle}>{row.agent_name}</div>
+          <div style={secondaryCellTextStyle}>
+            {row.display_name || '-'} • {row.agent_id}
+          </div>
+        </div>
+
+        <div style={{ ...progressMetaCellStyle, ...progressStickyTeamCellStyle }}>
+          <span style={teamMiniPillStyle}>{row.team}</span>
+        </div>
+
+        <div style={{ ...progressMetaCellStyle, ...progressStickyTodayCellStyle }}>
+          <button
+            type="button"
+            onClick={() => onToggleAgentOff(row.agent_id, row.team)}
+            disabled={!canManageOffToday}
+            title={
+              canManageOffToday
+                ? selectedOffEvalIndexes.length === 0
+                  ? 'Choose at least one Eval header first'
+                  : allSelectedTargetsAreOff
+                  ? `Clear OFF from ${selectedOffEvalIndexesLabel}`
+                  : `Apply OFF to ${selectedOffEvalIndexesLabel}`
+                : 'Only admin or QA can update OFF days'
+            }
+            style={
+              rowHasAnyOff
+                ? {
+                    ...progressOffButtonActiveStyle,
+                    opacity: canManageOffToday ? 1 : 0.7,
+                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                  }
+                : {
+                    ...progressOffButtonStyle,
+                    opacity: canManageOffToday ? 1 : 0.7,
+                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                  }
+            }
+          >
+            {selectedOffEvalIndexes.length === 0
+              ? 'Select Eval'
+              : allSelectedTargetsAreOff
+              ? `Clear ${selectedOffEvalIndexes.length} OFF`
+              : `OFF × ${selectedOffEvalIndexes.length}`}
+          </button>
+        </div>
+
+        {visibleProgressColumns.map((column) => renderEvaluationCell(column))}
+
+        <div style={progressMetaCellStyle}>
+          {row.latestAuditDate ? (
+            <div>
+              <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
+              <div style={secondaryCellTextStyle}>
+                {rowHasAnyOff
+                  ? `OFF in ${formatOffTargetSummary(row.offEvalIndexes)}`
+                  : 'Latest evaluated audit'}
+              </div>
+            </div>
+          ) : rowHasAnyOff ? (
+            <span style={progressOffPillStyle}>
+              {row.offEvalIndexes.length === 1
+                ? formatEvalIndexLabel(row.offEvalIndexes[0])
+                : `${row.offEvalIndexes.length} OFF`}
+            </span>
+          ) : (
+            <span style={secondaryCellTextStyle}>-</span>
+          )}
+        </div>
+
+        <div style={progressMetaCellStyle}>
+          <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
+            {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
 function AuditsListSupabase() {
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -385,6 +578,8 @@ function AuditsListSupabase() {
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
+  const deferredSearchText = useDeferredValue(searchText);
+  const deferredAgentSearch = useDeferredValue(agentSearch);
   const isAdmin = currentProfile?.role === 'admin';
   const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
   const todayStatusDate = getTodayDateValue();
@@ -488,6 +683,28 @@ function AuditsListSupabase() {
     });
     setOffTodayByAgent(nextOffTodayMap);
   }
+  const profileDisplayNameByKey = useMemo(() => {
+    const map = new Map<string, string | null>();
+    profiles.forEach((profile) => {
+      if (!profile.agent_id || !profile.team) return;
+      map.set(
+        getAgentProgressKey(profile.agent_id, profile.team),
+        profile.display_name || null
+      );
+    });
+    return map;
+  }, [profiles]);
+
+  const profileByAuditKey = useMemo(() => {
+    const map = new Map<string, AgentProfile>();
+    profiles.forEach((profile) => {
+      if (!profile.agent_id || !profile.team) return;
+      const key = `${profile.agent_id}||${profile.agent_name}||${profile.team}`;
+      map.set(key, profile);
+    });
+    return map;
+  }, [profiles]);
+
   function getMetricsForTeam(team: EditFormState['team']) {
     if (team === 'Calls') return callsMetrics;
     if (team === 'Tickets') return ticketsMetrics;
@@ -610,13 +827,10 @@ function AuditsListSupabase() {
       : `${profile.agent_name} - ${profile.agent_id}`;
   }
   function getDisplayName(audit: AuditItem) {
-    const matchedProfile = profiles.find(
-      (profile) =>
-        profile.agent_id === audit.agent_id &&
-        profile.agent_name === audit.agent_name &&
-        profile.team === audit.team
+    return (
+      profileDisplayNameByKey.get(getAgentProgressKey(audit.agent_id, audit.team)) ||
+      null
     );
-    return matchedProfile?.display_name || null;
   }
   function getCreatedByLabel(audit: AuditItem) {
     return audit.created_by_name || audit.created_by_email || '-';
@@ -922,7 +1136,7 @@ function AuditsListSupabase() {
     );
   }, [profiles, editForm.team]);
   const visibleAgents = useMemo(() => {
-    const search = agentSearch.trim().toLowerCase();
+    const search = deferredAgentSearch.trim().toLowerCase();
     if (!search) return editTeamAgents;
     return editTeamAgents.filter((profile) => {
       const label = getAgentLabel(profile);
@@ -933,12 +1147,12 @@ function AuditsListSupabase() {
         label.toLowerCase().includes(search)
       );
     });
-  }, [editTeamAgents, agentSearch]);
+  }, [editTeamAgents, deferredAgentSearch]);
   const selectedAgent =
     editTeamAgents.find((profile) => profile.id === selectedAgentProfileId) ||
     null;
   const filteredAudits = useMemo(() => {
-    const search = searchText.trim().toLowerCase();
+    const search = deferredSearchText.trim().toLowerCase();
     return audits.filter((audit) => {
       const displayName = (getDisplayName(audit) || '').toLowerCase();
       const matchesSearch =
@@ -980,7 +1194,7 @@ function AuditsListSupabase() {
   const hiddenAllCount = audits.length - sharedAllCount;
   
 const evaluationProgressData = useMemo(() => {
-  const normalizedSearch = searchText.trim().toLowerCase();
+  const normalizedSearch = deferredSearchText.trim().toLowerCase();
   const scopedProfiles = profiles.filter((profile) => {
     const matchesTeam = teamFilter ? profile.team === teamFilter : true;
     return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
@@ -1094,6 +1308,10 @@ const evaluationProgressData = useMemo(() => {
               .slice(-1)[0]?.audit_date ?? null
           : null;
 
+      const offToday =
+        imported?.offToday === true ||
+        !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)];
+
       return {
         agent_id: row.agent_id,
         agent_name: imported?.agent_name || row.agent_name,
@@ -1104,9 +1322,8 @@ const evaluationProgressData = useMemo(() => {
           averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
         latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
         latestAuditDate,
-        offToday:
-          imported?.offToday === true ||
-          !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
+        offToday,
+        offEvalIndexes: getEffectiveOffIndexesForAgent(row.agent_id, row.team, offToday),
       };
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
@@ -1133,7 +1350,1051 @@ const evaluationProgressData = useMemo(() => {
   );
 
   return { rows, evaluationColumns };
-}, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent, importedProgressByAgent]);
+}, [filteredAudits, profiles, deferredSearchText, teamFilter, offTodayByAgent, importedProgressByAgent, manualOffEvalIndexesByAgent]);
+
+const visibleProgressColumns = useMemo(() => {
+  return evaluationProgressData.evaluationColumns.filter((column) => {
+    const matchesFocus =
+      focusedEvalGroup === 'all' || column.groupKey === focusedEvalGroup;
+    return matchesFocus && !collapsedEvalGroups[column.groupKey];
+  });
+}, [evaluationProgressData.evaluationColumns, focusedEvalGroup, collapsedEvalGroups]);
+
+useEffect(() => {
+  if (visibleProgressColumns.length === 0) return;
+  const visibleIndexSet = new Set(visibleProgressColumns.map((column) => column.index));
+  setSelectedOffEvalIndexes((prev) => {
+    const filtered = normalizeOffEvalIndexes(
+      prev.filter((index) => visibleIndexSet.has(index))
+    );
+    return filtered.length > 0 ? filtered : [visibleProgressColumns[0].index];
+  });
+}, [visibleProgressColumns]);
+
+const visibleProgressGroupSpans = useMemo(() => {
+  return PROGRESS_GROUPS.map((group) => {
+    const count = visibleProgressColumns.filter(
+      (column) => column.groupKey === group.key
+    ).length;
+    return {
+      ...group,
+      count,
+    };
+  }).filter((group) => group.count > 0);
+}, [visibleProgressColumns]);
+
+const progressGridTemplate = useMemo(() => {
+  return `260px 110px 116px repeat(${visibleProgressColumns.length}, 82px) 140px 120px`;
+}, [visibleProgressColumns.length]);
+
+function toggleProgressGroupCollapse(groupKey: ProgressGroupKey) {
+  setCollapsedEvalGroups((prev) => {
+    const next = {
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    };
+
+    return next;
+  });
+
+  setFocusedEvalGroup((prev) => {
+    if (prev !== groupKey) return prev;
+    return 'all';
+  });
+}
+
+function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
+  setFocusedEvalGroup(groupKey);
+}
+
+function toggleOffTargetEval(index: number) {
+  setSelectedOffEvalIndexes((prev) => {
+    if (prev.includes(index)) {
+      return normalizeOffEvalIndexes(prev.filter((value) => value !== index));
+    }
+    return normalizeOffEvalIndexes([...prev, index]);
+  });
+}
+
+function selectAllVisibleOffTargets() {
+  setSelectedOffEvalIndexes(
+    normalizeOffEvalIndexes(visibleProgressColumns.map((column) => column.index))
+  );
+}
+
+function clearSelectedOffTargets() {
+  setSelectedOffEvalIndexes([]);
+}
+
+  function getProgressCellTone(score: number | null) {
+    if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
+    if (score >= 90) return progressStrongCellStyle;
+    if (score >= 75) return progressMediumCellStyle;
+    return progressWeakCellStyle;
+  }
+
+  function renderEvaluationCell(column: ProgressColumn) {
+    const evaluation = row.evaluations[column.index] || {
+      score: null,
+      label: '',
+    };
+    const hasValue =
+      evaluation.score !== null && Number.isFinite(evaluation.score);
+    const isOffCell = row.offEvalIndexes.includes(column.index);
+    const isSelectedTarget = selectedOffEvalIndexSet.has(column.index);
+
+    if (isOffCell) {
+      return (
+        <div
+          key={`${row.agent_id}-${row.team}-${column.index}`}
+          style={getOffEvalCellStyle(isSelectedTarget)}
+          title={`OFF placed in ${column.label}`}
+        >
+          OFF
+        </div>
+      );
+    }
+
+    const cellTone = hasValue
+      ? getProgressCellTone(evaluation.score)
+      : progressEmptyCellStyle;
+
+    return (
+      <div
+        key={`${row.agent_id}-${row.team}-${column.index}`}
+        style={{
+          ...progressEvalCellStyle,
+          ...cellTone,
+          ...(isSelectedTarget ? progressEvalCellSelectedStyle : {}),
+        }}
+        title={
+          isSelectedTarget
+            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            : hasValue
+            ? evaluation.label || `${evaluation.score}%`
+            : 'No evaluation'
+        }
+      >
+        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      key={`${row.agent_id}-${row.team}`}
+      style={progressEntryStyle}
+    >
+      <div
+        style={{
+          ...progressRowStyle,
+          gridTemplateColumns: progressGridTemplate,
+        }}
+      >
+        <div style={{ ...progressAgentCellStyle, ...progressStickyAgentCellStyle }}>
+          <div style={primaryCellTextStyle}>{row.agent_name}</div>
+          <div style={secondaryCellTextStyle}>
+            {row.display_name || '-'} • {row.agent_id}
+          </div>
+        </div>
+
+        <div style={{ ...progressMetaCellStyle, ...progressStickyTeamCellStyle }}>
+          <span style={teamMiniPillStyle}>{row.team}</span>
+        </div>
+
+        <div style={{ ...progressMetaCellStyle, ...progressStickyTodayCellStyle }}>
+          <button
+            type="button"
+            onClick={() => onToggleAgentOff(row.agent_id, row.team)}
+            disabled={!canManageOffToday}
+            title={
+              canManageOffToday
+                ? selectedOffEvalIndexes.length === 0
+                  ? 'Choose at least one Eval header first'
+                  : allSelectedTargetsAreOff
+                  ? `Clear OFF from ${selectedOffEvalIndexesLabel}`
+                  : `Apply OFF to ${selectedOffEvalIndexesLabel}`
+                : 'Only admin or QA can update OFF days'
+            }
+            style={
+              rowHasAnyOff
+                ? {
+                    ...progressOffButtonActiveStyle,
+                    opacity: canManageOffToday ? 1 : 0.7,
+                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                  }
+                : {
+                    ...progressOffButtonStyle,
+                    opacity: canManageOffToday ? 1 : 0.7,
+                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                  }
+            }
+          >
+            {selectedOffEvalIndexes.length === 0
+              ? 'Select Eval'
+              : allSelectedTargetsAreOff
+              ? `Clear ${selectedOffEvalIndexes.length} OFF`
+              : `OFF × ${selectedOffEvalIndexes.length}`}
+          </button>
+        </div>
+
+        {visibleProgressColumns.map((column) => renderEvaluationCell(column))}
+
+        <div style={progressMetaCellStyle}>
+          {row.latestAuditDate ? (
+            <div>
+              <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
+              <div style={secondaryCellTextStyle}>
+                {rowHasAnyOff
+                  ? `OFF in ${formatOffTargetSummary(row.offEvalIndexes)}`
+                  : 'Latest evaluated audit'}
+              </div>
+            </div>
+          ) : rowHasAnyOff ? (
+            <span style={progressOffPillStyle}>
+              {row.offEvalIndexes.length === 1
+                ? formatEvalIndexLabel(row.offEvalIndexes[0])
+                : `${row.offEvalIndexes.length} OFF`}
+            </span>
+          ) : (
+            <span style={secondaryCellTextStyle}>-</span>
+          )}
+        </div>
+
+        <div style={progressMetaCellStyle}>
+          <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
+            {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+function AuditsListSupabase() {
+  const [audits, setAudits] = useState<AuditItem[]>([]);
+  const [profiles, setProfiles] = useState<AgentProfile[]>([]);
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
+    null
+  );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [releaseLoadingId, setReleaseLoadingId] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState('');
+  const [teamFilter, setTeamFilter] = useState('');
+  const [caseTypeFilter, setCaseTypeFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingAuditId, setEditingAuditId] = useState<string | null>(null);
+  const [selectedAgentProfileId, setSelectedAgentProfileId] = useState('');
+  const [agentSearch, setAgentSearch] = useState('');
+  const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [editForm, setEditForm] = useState<EditFormState>({
+    team: '',
+    caseType: '',
+    auditDate: '',
+    orderNumber: '',
+    phoneNumber: '',
+    ticketId: '',
+    comments: '',
+  });
+  const [editScores, setEditScores] = useState<Record<string, string>>({});
+  const [editMetricComments, setEditMetricComments] = useState<
+    Record<string, string>
+  >({});
+  const [showEvaluationProgress, setShowEvaluationProgress] = useState(false);
+  const [offTodayByAgent, setOffTodayByAgent] = useState<Record<string, boolean>>({});
+  const [importedProgressByAgent, setImportedProgressByAgent] = useState<Record<string, ImportedProgressRow>>({});
+  const [importedFileName, setImportedFileName] = useState('');
+  const [importingBoard, setImportingBoard] = useState(false);
+  const [focusedEvalGroup, setFocusedEvalGroup] = useState<'all' | ProgressGroupKey>('all');
+  const [collapsedEvalGroups, setCollapsedEvalGroups] = useState<Record<ProgressGroupKey, boolean>>({
+    g1: false,
+    g2: false,
+    g3: false,
+  });
+  const [selectedOffEvalIndexes, setSelectedOffEvalIndexes] = useState<number[]>([0]);
+  const [manualOffEvalIndexesByAgent, setManualOffEvalIndexesByAgent] = useState<Record<string, number[]>>({});
+  const themeVars = getThemeVars();
+  const agentPickerRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const deferredSearchText = useDeferredValue(searchText);
+  const deferredAgentSearch = useDeferredValue(agentSearch);
+  const isAdmin = currentProfile?.role === 'admin';
+  const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
+  const todayStatusDate = getTodayDateValue();
+  useEffect(() => {
+    void loadAuditsAndProfiles();
+  }, []);
+  useEffect(() => {
+    function handleOutsideClick(event: MouseEvent) {
+      if (
+        agentPickerRef.current &&
+        !agentPickerRef.current.contains(event.target as Node)
+      ) {
+        setIsAgentPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(PROGRESS_OFF_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Record<string, number[]>;
+      const sanitized: Record<string, number[]> = {};
+      Object.entries(parsed || {}).forEach(([key, value]) => {
+        sanitized[key] = normalizeOffEvalIndexes(Array.isArray(value) ? value : []);
+      });
+      setManualOffEvalIndexesByAgent(sanitized);
+    } catch {
+      setManualOffEvalIndexesByAgent({});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      PROGRESS_OFF_STORAGE_KEY,
+      JSON.stringify(manualOffEvalIndexesByAgent)
+    );
+  }, [manualOffEvalIndexesByAgent]);
+  async function loadAuditsAndProfiles() {
+    setLoading(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    if (authError) {
+      setLoading(false);
+      setErrorMessage(authError.message);
+      return;
+    }
+    const userId = authData.user?.id;
+    const [auditsResult, profilesResult, currentProfileResult, offTodayResult] =
+      await Promise.all([
+        supabase
+          .from('audits')
+          .select('*')
+          .order('audit_date', { ascending: false }),
+        supabase
+          .from('profiles')
+          .select('id, role, agent_id, agent_name, display_name, team')
+          .eq('role', 'agent')
+          .order('agent_name', { ascending: true }),
+        userId
+          ? supabase
+              .from('profiles')
+              .select('id, role, agent_name')
+              .eq('id', userId)
+              .maybeSingle()
+          : Promise.resolve({ data: null, error: null }),
+        supabase
+          .from('agent_daily_status')
+          .select('agent_id, team, status_date, status')
+          .eq('status_date', todayStatusDate)
+          .eq('status', 'OFF'),
+      ]);
+    setLoading(false);
+    if (auditsResult.error) {
+      setErrorMessage(auditsResult.error.message);
+      return;
+    }
+    if (profilesResult.error) {
+      setErrorMessage(profilesResult.error.message);
+      return;
+    }
+    if (currentProfileResult.error) {
+      setErrorMessage(currentProfileResult.error.message);
+      return;
+    }
+    if (offTodayResult.error) {
+      setErrorMessage(offTodayResult.error.message);
+      return;
+    }
+    setAudits((auditsResult.data as AuditItem[]) || []);
+    setProfiles((profilesResult.data as AgentProfile[]) || []);
+    setCurrentProfile((currentProfileResult.data as CurrentProfile) || null);
+
+    const nextOffTodayMap: Record<string, boolean> = {};
+    ((offTodayResult.data as AgentDailyStatus[]) || []).forEach((item) => {
+      nextOffTodayMap[getAgentProgressKey(item.agent_id, item.team)] = true;
+    });
+    setOffTodayByAgent(nextOffTodayMap);
+  }
+  const profileDisplayNameByKey = useMemo(() => {
+    const map = new Map<string, string | null>();
+    profiles.forEach((profile) => {
+      if (!profile.agent_id || !profile.team) return;
+      map.set(
+        getAgentProgressKey(profile.agent_id, profile.team),
+        profile.display_name || null
+      );
+    });
+    return map;
+  }, [profiles]);
+
+  const profileByAuditKey = useMemo(() => {
+    const map = new Map<string, AgentProfile>();
+    profiles.forEach((profile) => {
+      if (!profile.agent_id || !profile.team) return;
+      const key = `${profile.agent_id}||${profile.agent_name}||${profile.team}`;
+      map.set(key, profile);
+    });
+    return map;
+  }, [profiles]);
+
+  function getMetricsForTeam(team: EditFormState['team']) {
+    if (team === 'Calls') return callsMetrics;
+    if (team === 'Tickets') return ticketsMetrics;
+    if (team === 'Sales') return salesMetrics;
+    return [];
+  }
+  function getMetricOptions(metric: Metric) {
+    if (metric.options?.length) return metric.options;
+    if (LOCKED_NA_METRICS.has(metric.name)) return ['N/A'];
+    const options = ['N/A', 'Pass', 'Borderline', 'Fail'];
+    if (AUTO_FAIL_METRICS.has(metric.name)) options.push('Auto-Fail');
+    return options;
+  }
+  function getMetricStoredValue(
+    metric: Metric,
+    scores: Record<string, string>
+  ) {
+    if (LOCKED_NA_METRICS.has(metric.name)) return 'N/A';
+    return scores[metric.name] ?? metric.defaultValue ?? 'N/A';
+  }
+  function createDefaultScores(team: EditFormState['team']) {
+    const defaults: Record<string, string> = {};
+    getMetricsForTeam(team).forEach((metric) => {
+      defaults[metric.name] = metric.defaultValue ?? 'N/A';
+    });
+    return defaults;
+  }
+  function getMissingRequiredMetricLabels(
+    team: EditFormState['team'],
+    scores: Record<string, string>
+  ) {
+    return getMetricsForTeam(team)
+      .filter((metric) => Array.isArray(metric.options) && metric.defaultValue === '')
+      .filter((metric) => !getMetricStoredValue(metric, scores))
+      .map((metric) => metric.name);
+  }
+  function buildScoreMapFromAudit(audit: AuditItem) {
+    const defaults = createDefaultScores(audit.team);
+    (audit.score_details || []).forEach((item) => {
+      defaults[item.metric] = item.result || 'N/A';
+    });
+    getMetricsForTeam(audit.team).forEach((metric) => {
+      if (LOCKED_NA_METRICS.has(metric.name)) {
+        defaults[metric.name] = 'N/A';
+      }
+    });
+    return defaults;
+  }
+
+  function buildMetricCommentsFromAudit(audit: AuditItem) {
+    const defaults: Record<string, string> = {};
+    (audit.score_details || []).forEach((item) => {
+      defaults[item.metric] = item.metric_comment || '';
+    });
+    return defaults;
+  }
+
+  function getAdjustedScoreData(
+    team: EditFormState['team'],
+    scores: Record<string, string>,
+    metricComments: Record<string, string>
+  ) {
+    const metrics = getMetricsForTeam(team);
+    const scoredMetrics = metrics.filter((item) => countsTowardScore(item));
+    const activeMetrics = scoredMetrics.filter((item) => {
+      const itemResult = getMetricStoredValue(item, scores);
+      return itemResult !== 'N/A' && itemResult !== '';
+    });
+    const activeTotalWeight = activeMetrics.reduce(
+      (sum, item) => sum + item.pass,
+      0
+    );
+    const fullTotalWeight = scoredMetrics.reduce((sum, item) => sum + item.pass, 0);
+    const scoreDetails = metrics.map((metric) => {
+      const result = getMetricStoredValue(metric, scores);
+      const scored = countsTowardScore(metric);
+      const adjustedWeight =
+        !scored || result === 'N/A' || result === '' || activeTotalWeight === 0
+          ? 0
+          : (metric.pass / activeTotalWeight) * fullTotalWeight;
+      let earned = 0;
+      if (scored && result === 'Pass') {
+        earned = adjustedWeight;
+      } else if (scored && result === 'Borderline') {
+        earned =
+          metric.pass > 0
+            ? adjustedWeight * (metric.borderline / metric.pass)
+            : 0;
+      }
+      return {
+        metric: metric.name,
+        result,
+        pass: metric.pass,
+        borderline: metric.borderline,
+        adjustedWeight,
+        earned,
+        counts_toward_score: scored,
+        metric_comment:
+          scored && shouldShowMetricComment(result)
+            ? (metricComments[metric.name] || '').trim() || null
+            : null,
+      };
+    });
+    const hasAutoFail = scoreDetails.some(
+      (item) =>
+        item.counts_toward_score !== false &&
+        AUTO_FAIL_METRICS.has(item.metric) && item.result === 'Auto-Fail'
+    );
+    const qualityScore = hasAutoFail
+      ? '0.00'
+      : scoreDetails
+          .filter((item) => item.counts_toward_score !== false)
+          .reduce((sum, item) => sum + item.earned, 0)
+          .toFixed(2);
+    return { scoreDetails, qualityScore, hasAutoFail };
+  }
+  function getAgentLabel(profile: AgentProfile) {
+    return profile.display_name
+      ? `${profile.agent_name} - ${profile.display_name}`
+      : `${profile.agent_name} - ${profile.agent_id}`;
+  }
+  function getDisplayName(audit: AuditItem) {
+    return (
+      profileDisplayNameByKey.get(getAgentProgressKey(audit.agent_id, audit.team)) ||
+      null
+    );
+  }
+  function getCreatedByLabel(audit: AuditItem) {
+    return audit.created_by_name || audit.created_by_email || '-';
+  }
+  function getAgentProgressKey(agentId?: string | null, team?: string | null) {
+    return `${agentId || ''}||${team || ''}`;
+  }
+  function matchesProfileSearch(profile: AgentProfile, search: string) {
+    if (!search) return true;
+    const label = getAgentLabel(profile).toLowerCase();
+    return (
+      profile.agent_name.toLowerCase().includes(search) ||
+      (profile.agent_id || '').toLowerCase().includes(search) ||
+      (profile.display_name || '').toLowerCase().includes(search) ||
+      label.includes(search)
+    );
+  }
+  function getSelectedOffTargetIndexes() {
+    return normalizeOffEvalIndexes(selectedOffEvalIndexes);
+  }
+
+  function getManualOffIndexes(agentId?: string | null, team?: string | null) {
+    const key = getAgentProgressKey(agentId, team);
+    return normalizeOffEvalIndexes(manualOffEvalIndexesByAgent[key] || []);
+  }
+
+  function getEffectiveOffIndexesForAgent(
+    agentId?: string | null,
+    team?: string | null,
+    hasLegacyOffToday?: boolean
+  ) {
+    const manualIndexes = getManualOffIndexes(agentId, team);
+    if (manualIndexes.length > 0) return manualIndexes;
+    if (hasLegacyOffToday) return getSelectedOffTargetIndexes();
+    return [];
+  }
+
+  function formatEvalIndexLabel(index: number) {
+    return `Eval ${index + 1}`;
+  }
+
+  function formatOffTargetSummary(indexes: number[]) {
+    const normalized = normalizeOffEvalIndexes(indexes);
+    if (normalized.length === 0) return 'None';
+    if (normalized.length <= 3) {
+      return normalized.map((index) => formatEvalIndexLabel(index)).join(', ');
+    }
+    return `${normalized.length} evals selected`;
+  }
+
+  async function syncAgentOffPresence(
+    agentId: string,
+    team: 'Calls' | 'Tickets' | 'Sales',
+    shouldHaveOff: boolean
+  ) {
+    if (shouldHaveOff) {
+      const { error } = await supabase
+        .from('agent_daily_status')
+        .upsert(
+          {
+            agent_id: agentId,
+            team,
+            status_date: todayStatusDate,
+            status: 'OFF',
+            created_by_user_id: currentProfile?.id || null,
+            created_by_name: currentProfile?.agent_name || null,
+          },
+          { onConflict: 'agent_id,team,status_date' }
+        );
+
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase
+      .from('agent_daily_status')
+      .delete()
+      .eq('agent_id', agentId)
+      .eq('team', team)
+      .eq('status_date', todayStatusDate)
+      .eq('status', 'OFF');
+
+    if (error) throw error;
+  }
+
+  async function toggleAgentOffToday(
+    agentId?: string | null,
+    team?: AuditItem['team'] | null
+  ) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!canManageOffToday) {
+      setErrorMessage('Only admin or QA can update OFF day markers.');
+      return;
+    }
+
+    if (!agentId || !team) {
+      setErrorMessage('Agent ID or team is missing for OFF control.');
+      return;
+    }
+
+    const targetIndexes = getSelectedOffTargetIndexes();
+    if (targetIndexes.length === 0) {
+      setErrorMessage('Choose at least one Eval header before applying OFF.');
+      return;
+    }
+
+    const key = getAgentProgressKey(agentId, team);
+    const hasLegacyOffToday = !!offTodayByAgent[key];
+    const currentIndexes = getEffectiveOffIndexesForAgent(
+      agentId,
+      team,
+      hasLegacyOffToday
+    );
+    const currentSet = new Set(currentIndexes);
+    const allTargetsAlreadyOff = targetIndexes.every((index) =>
+      currentSet.has(index)
+    );
+
+    const nextIndexes = allTargetsAlreadyOff
+      ? currentIndexes.filter((index) => !targetIndexes.includes(index))
+      : normalizeOffEvalIndexes([...currentIndexes, ...targetIndexes]);
+
+    try {
+      await syncAgentOffPresence(agentId, team, nextIndexes.length > 0);
+
+      setManualOffEvalIndexesByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = nextIndexes;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setOffTodayByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = true;
+        } else {
+          delete next[key];
+        }
+        return next;
+      });
+
+      setSuccessMessage(
+        nextIndexes.length > 0
+          ? `OFF set for ${formatOffTargetSummary(nextIndexes)}.`
+          : 'All OFF markers cleared for this agent.'
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Could not update OFF markers.'
+      );
+    }
+  }
+
+  async function handleProgressImport(file?: File | null) {
+    if (!file) return;
+
+    setImportingBoard(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        setErrorMessage('Please upload a CSV file for the progress board import.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const csvText = await file.text();
+      const rows = parseCsv(csvText);
+
+      if (rows.length === 0) {
+        setErrorMessage('The uploaded CSV is empty.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const headers = rows[0].map((item) => normalizeHeader(item));
+      const findIndex = (...names: string[]) => headers.findIndex((header) => names.includes(header));
+
+      const agentNameIndex = findIndex('agentname', 'agent');
+      const displayNameIndex = findIndex('displayname', 'display');
+      const agentIdIndex = findIndex('agentid', 'agent');
+      const teamIndex = findIndex('team');
+      const todayIndex = findIndex('today', 'offtoday', 'status');
+
+      const evalIndices = headers
+        .map((header, index) => ({ header, index }))
+        .filter((item) => /^eval\d+$/.test(item.header) || /^evaluation\d+$/.test(item.header) || /^qc\d+$/.test(item.header))
+        .sort((a, b) => a.index - b.index)
+        .slice(0, MAX_PROGRESS_EVALS);
+
+      const latestIndex = findIndex('latest', 'latestscore');
+      const averageIndex = findIndex('average', 'avg', 'averagescore');
+
+      if (agentNameIndex === -1 && agentIdIndex === -1) {
+        setErrorMessage('The CSV must include at least Agent Name or Agent ID columns.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const nextImported: Record<string, ImportedProgressRow> = {};
+
+      rows.slice(1).forEach((cells) => {
+        const agentName = normalizeText(cells[agentNameIndex] || '');
+        const displayName = displayNameIndex >= 0 ? normalizeText(cells[displayNameIndex] || '') : '';
+        const agentId = normalizeAgentId(cells[agentIdIndex] || '');
+        const rawTeam = normalizeText(cells[teamIndex] || '');
+        const team = (rawTeam === 'Calls' || rawTeam === 'Tickets' || rawTeam === 'Sales'
+          ? rawTeam
+          : teamFilter === 'Calls' || teamFilter === 'Tickets' || teamFilter === 'Sales'
+          ? teamFilter
+          : '') as '' | 'Calls' | 'Tickets' | 'Sales';
+
+        if (!team) return;
+        if (!agentName && !agentId) return;
+
+        const key = getAgentProgressKey(agentId || agentName, team);
+        const evaluations: ImportedEvaluation[] = evalIndices.map(({ index }) => {
+          const raw = cells[index] || '';
+          return {
+            score: parsePercentLike(raw),
+            label: normalizeText(raw),
+          };
+        });
+
+        const todayValue = todayIndex >= 0 ? normalizeText(cells[todayIndex] || '').toLowerCase() : '';
+        const latestScore = latestIndex >= 0 ? parsePercentLike(cells[latestIndex] || '') : null;
+        const averageScore = averageIndex >= 0 ? parsePercentLike(cells[averageIndex] || '') : null;
+
+        nextImported[key] = {
+          agent_id: agentId,
+          agent_name: agentName || agentId,
+          display_name: displayName || null,
+          team,
+          evaluations,
+          offToday: todayValue === 'off',
+          latestScore,
+          averageScore,
+        };
+      });
+
+      setImportedProgressByAgent(nextImported);
+      setImportedFileName(file.name);
+      setSuccessMessage(`Imported ${Object.keys(nextImported).length} progress row(s) from ${file.name}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not import evaluation table.');
+    } finally {
+      setImportingBoard(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = '';
+      }
+    }
+  }
+
+  function clearImportedProgress() {
+    setImportedProgressByAgent({});
+    setImportedFileName('');
+    setSuccessMessage('Imported progress table cleared.');
+  }
+
+  function formatDate(dateValue?: string | null) {
+    if (!dateValue) return '-';
+    const date = new Date(dateValue);
+    if (Number.isNaN(date.getTime())) return '-';
+    return date.toLocaleString();
+  }
+  function formatDateOnly(dateValue?: string | null) {
+    if (!dateValue) return '-';
+    const date = new Date(`${dateValue}T00:00:00`);
+    if (Number.isNaN(date.getTime())) return dateValue;
+    return date.toLocaleDateString();
+  }
+  function getAuditReference(audit: AuditItem) {
+    if (audit.team === 'Tickets') {
+      return `Ticket ID: ${audit.ticket_id || '-'}`;
+    }
+    return `Order #: ${audit.order_number || '-'} | Phone: ${
+      audit.phone_number || '-'
+    }`;
+  }
+  function getCommentsPreview(value?: string | null) {
+    const text = (value || '').trim();
+    if (!text) return '-';
+    if (text.length <= 120) return text;
+    return `${text.slice(0, 117)}...`;
+  }
+  function isNoScoreDetail(detail: ScoreDetail) {
+    return detail.counts_toward_score === false;
+  }
+  const editTeamAgents = useMemo(() => {
+    return profiles.filter(
+      (profile) =>
+        profile.role === 'agent' &&
+        profile.team === editForm.team &&
+        profile.agent_id &&
+        profile.agent_name
+    );
+  }, [profiles, editForm.team]);
+  const visibleAgents = useMemo(() => {
+    const search = deferredAgentSearch.trim().toLowerCase();
+    if (!search) return editTeamAgents;
+    return editTeamAgents.filter((profile) => {
+      const label = getAgentLabel(profile);
+      return (
+        profile.agent_name.toLowerCase().includes(search) ||
+        (profile.agent_id || '').toLowerCase().includes(search) ||
+        (profile.display_name || '').toLowerCase().includes(search) ||
+        label.toLowerCase().includes(search)
+      );
+    });
+  }, [editTeamAgents, deferredAgentSearch]);
+  const selectedAgent =
+    editTeamAgents.find((profile) => profile.id === selectedAgentProfileId) ||
+    null;
+  const filteredAudits = useMemo(() => {
+    const search = deferredSearchText.trim().toLowerCase();
+    return audits.filter((audit) => {
+      const displayName = (getDisplayName(audit) || '').toLowerCase();
+      const matchesSearch =
+        !search ||
+        audit.agent_name.toLowerCase().includes(search) ||
+        audit.agent_id.toLowerCase().includes(search) ||
+        displayName.includes(search);
+      const matchesTeam = teamFilter ? audit.team === teamFilter : true;
+      const matchesCaseType = caseTypeFilter
+        ? audit.case_type === caseTypeFilter
+        : true;
+      const matchesDateFrom = dateFrom ? audit.audit_date >= dateFrom : true;
+      const matchesDateTo = dateTo ? audit.audit_date <= dateTo : true;
+      return (
+        matchesSearch &&
+        matchesTeam &&
+        matchesCaseType &&
+        matchesDateFrom &&
+        matchesDateTo
+      );
+    });
+  }, [
+    audits,
+    searchText,
+    teamFilter,
+    caseTypeFilter,
+    dateFrom,
+    dateTo,
+    profiles,
+  ]);
+  const uniqueCaseTypes = Array.from(
+    new Set(audits.map((audit) => audit.case_type))
+  );
+  const sharedFilteredCount = filteredAudits.filter(
+    (item) => item.shared_with_agent
+  ).length;
+  const hiddenFilteredCount = filteredAudits.length - sharedFilteredCount;
+  const sharedAllCount = audits.filter((item) => item.shared_with_agent).length;
+  const hiddenAllCount = audits.length - sharedAllCount;
+  
+const evaluationProgressData = useMemo(() => {
+  const normalizedSearch = deferredSearchText.trim().toLowerCase();
+  const scopedProfiles = profiles.filter((profile) => {
+    const matchesTeam = teamFilter ? profile.team === teamFilter : true;
+    return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
+  });
+
+  const groupedRows = new Map<
+    string,
+    {
+      agent_id: string;
+      agent_name: string;
+      display_name: string | null;
+      team: 'Calls' | 'Tickets' | 'Sales';
+      evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
+    }
+  >();
+
+  filteredAudits.forEach((audit) => {
+    const key = getAgentProgressKey(audit.agent_id, audit.team);
+    const existing = groupedRows.get(key) || {
+      agent_id: audit.agent_id,
+      agent_name: audit.agent_name,
+      display_name: getDisplayName(audit),
+      team: audit.team,
+      evaluations: [],
+    };
+
+    existing.evaluations.push({
+      id: audit.id,
+      audit_date: audit.audit_date,
+      quality_score: Number(audit.quality_score),
+      case_type: audit.case_type,
+    });
+
+    if (!existing.display_name) {
+      existing.display_name = getDisplayName(audit);
+    }
+
+    groupedRows.set(key, existing);
+  });
+
+  scopedProfiles.forEach((profile) => {
+    if (!profile.agent_id || !profile.team) return;
+    const key = getAgentProgressKey(profile.agent_id, profile.team);
+    if (!groupedRows.has(key)) {
+      groupedRows.set(key, {
+        agent_id: profile.agent_id,
+        agent_name: profile.agent_name,
+        display_name: profile.display_name,
+        team: profile.team,
+        evaluations: [],
+      });
+    }
+  });
+
+  Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
+    if (teamFilter && importedRow.team !== teamFilter) return;
+    if (normalizedSearch) {
+      const haystack = [
+        importedRow.agent_name,
+        importedRow.display_name || '',
+        importedRow.agent_id,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(normalizedSearch)) return;
+    }
+
+    const existing = groupedRows.get(key) || {
+      agent_id: importedRow.agent_id,
+      agent_name: importedRow.agent_name,
+      display_name: importedRow.display_name,
+      team: importedRow.team,
+      evaluations: [],
+    };
+
+    groupedRows.set(key, existing);
+  });
+
+  const rows = Array.from(groupedRows.values())
+    .map((row) => {
+      const key = getAgentProgressKey(row.agent_id, row.team);
+      const imported = importedProgressByAgent[key] || null;
+
+      const dbEvaluations = [...row.evaluations]
+        .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+        .slice(-MAX_PROGRESS_EVALS)
+        .map((item) => ({
+          score: Number.isFinite(item.quality_score) ? item.quality_score : null,
+          label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
+        }));
+
+      const evaluations = imported?.evaluations?.length
+        ? imported.evaluations.slice(0, MAX_PROGRESS_EVALS)
+        : dbEvaluations;
+
+      const scoredItems = evaluations.filter((item) => item.score !== null);
+      const averageScore =
+        imported?.averageScore ??
+        (scoredItems.length > 0
+          ? scoredItems.reduce((sum, item) => sum + (item.score ?? 0), 0) / scoredItems.length
+          : null);
+
+      const latestScore =
+        imported?.latestScore ??
+        (scoredItems.length > 0 ? scoredItems.slice(-1)[0]?.score ?? null : null);
+
+      const latestAuditDate =
+        row.evaluations.length > 0
+          ? [...row.evaluations]
+              .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+              .slice(-1)[0]?.audit_date ?? null
+          : null;
+
+      const offToday =
+        imported?.offToday === true ||
+        !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)];
+
+      return {
+        agent_id: row.agent_id,
+        agent_name: imported?.agent_name || row.agent_name,
+        display_name: imported?.display_name ?? row.display_name,
+        team: row.team,
+        evaluations,
+        averageScore:
+          averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
+        latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
+        latestAuditDate,
+        offToday,
+        offEvalIndexes: getEffectiveOffIndexesForAgent(row.agent_id, row.team, offToday),
+      };
+    })
+    .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
+
+  const maxEvaluations = Math.max(
+    1,
+    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
+  );
+
+  const evaluationColumns = Array.from(
+    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    (_, index) => {
+      const group = PROGRESS_GROUPS.find(
+        (item) => index >= item.start && index < item.end
+      ) || PROGRESS_GROUPS[0];
+
+      return {
+        index,
+        label: `Eval ${index + 1}`,
+        groupKey: group.key,
+        groupLabel: group.label,
+      };
+    }
+  );
+
+  return { rows, evaluationColumns };
+}, [filteredAudits, profiles, deferredSearchText, teamFilter, offTodayByAgent, importedProgressByAgent, manualOffEvalIndexesByAgent]);
 
 const visibleProgressColumns = useMemo(() => {
   return evaluationProgressData.evaluationColumns.filter((column) => {
@@ -1283,12 +2544,10 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
       setErrorMessage('Only admin can edit audits.');
       return;
     }
-    const matchedProfile = profiles.find(
-      (profile) =>
-        profile.agent_id === audit.agent_id &&
-        profile.agent_name === audit.agent_name &&
-        profile.team === audit.team
-    );
+    const matchedProfile =
+      profileByAuditKey.get(
+        `${audit.agent_id}||${audit.agent_name}||${audit.team}`
+      ) || null;
     setErrorMessage('');
     setSuccessMessage('');
     setEditingAuditId(audit.id);
@@ -1628,6 +2887,35 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     if (editingAuditId === auditId) cancelEdit();
     setSuccessMessage('Audit deleted successfully.');
   }
+  const selectedOffEvalIndexesLabel = useMemo(
+    () => formatOffTargetSummary(selectedOffEvalIndexes),
+    [selectedOffEvalIndexes]
+  );
+
+  const progressRowElements = useMemo(() => {
+    return evaluationProgressData.rows.map((row) => (
+      <ProgressBoardRow
+        key={getAgentProgressKey(row.agent_id, row.team)}
+        row={row}
+        visibleProgressColumns={visibleProgressColumns}
+        progressGridTemplate={progressGridTemplate}
+        canManageOffToday={canManageOffToday}
+        selectedOffEvalIndexes={selectedOffEvalIndexes}
+        selectedOffEvalIndexesLabel={selectedOffEvalIndexesLabel}
+        onToggleAgentOff={(agentId, team) => {
+          void toggleAgentOffToday(agentId, team);
+        }}
+      />
+    ));
+  }, [
+    evaluationProgressData.rows,
+    visibleProgressColumns,
+    progressGridTemplate,
+    canManageOffToday,
+    selectedOffEvalIndexes,
+    selectedOffEvalIndexesLabel,
+  ]);
+
   function getResultBadgeColor(result: string) {
     if (result === 'Pass') return '#166534';
     if (result === 'Borderline') return '#92400e';
@@ -2027,105 +3315,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
             <div style={progressMetaCellStyle}>Average</div>
           </div>
 
-          {evaluationProgressData.rows.map((row) => {
-            const rowOffIndexes = getRowEffectiveOffIndexes(row);
-            const rowHasAnyOff = rowOffIndexes.length > 0;
-            const allSelectedTargetsAreOff =
-              selectedOffEvalIndexes.length > 0 &&
-              selectedOffEvalIndexes.every((index) => rowOffIndexes.includes(index));
-
-            return (
-              <div
-                key={getAgentProgressKey(row.agent_id, row.team)}
-                style={progressEntryStyle}
-              >
-                <div
-                  style={{
-                    ...progressRowStyle,
-                    gridTemplateColumns: progressGridTemplate,
-                  }}
-                >
-                  <div style={{ ...progressAgentCellStyle, ...progressStickyAgentCellStyle }}>
-                    <div style={primaryCellTextStyle}>{row.agent_name}</div>
-                    <div style={secondaryCellTextStyle}>
-                      {row.display_name || '-'} • {row.agent_id}
-                    </div>
-                  </div>
-
-                  <div style={{ ...progressMetaCellStyle, ...progressStickyTeamCellStyle }}>
-                    <span style={teamMiniPillStyle}>{row.team}</span>
-                  </div>
-
-                  <div style={{ ...progressMetaCellStyle, ...progressStickyTodayCellStyle }}>
-                    <button
-                      type="button"
-                      onClick={() => void toggleAgentOffToday(row.agent_id, row.team)}
-                      disabled={!canManageOffToday}
-                      title={
-                        canManageOffToday
-                          ? selectedOffEvalIndexes.length === 0
-                            ? 'Choose at least one Eval header first'
-                            : allSelectedTargetsAreOff
-                            ? `Clear OFF from ${formatOffTargetSummary(selectedOffEvalIndexes)}`
-                            : `Apply OFF to ${formatOffTargetSummary(selectedOffEvalIndexes)}`
-                          : 'Only admin or QA can update OFF days'
-                      }
-                      style={
-                        rowHasAnyOff
-                          ? {
-                              ...progressOffButtonActiveStyle,
-                              opacity: canManageOffToday ? 1 : 0.7,
-                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                            }
-                          : {
-                              ...progressOffButtonStyle,
-                              opacity: canManageOffToday ? 1 : 0.7,
-                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                            }
-                      }
-                    >
-                      {selectedOffEvalIndexes.length === 0
-                        ? 'Select Eval'
-                        : allSelectedTargetsAreOff
-                        ? `Clear ${selectedOffEvalIndexes.length} OFF`
-                        : `OFF × ${selectedOffEvalIndexes.length}`}
-                    </button>
-                  </div>
-
-                  {visibleProgressColumns.map((column) =>
-                    renderEvaluationCell(row, column)
-                  )}
-
-                  <div style={progressMetaCellStyle}>
-                    {row.latestAuditDate ? (
-                      <div>
-                        <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
-                        <div style={secondaryCellTextStyle}>
-                          {rowHasAnyOff
-                            ? `OFF in ${formatOffTargetSummary(rowOffIndexes)}`
-                            : 'Latest evaluated audit'}
-                        </div>
-                      </div>
-                    ) : rowHasAnyOff ? (
-                      <span style={progressOffPillStyle}>
-                        {rowOffIndexes.length === 1
-                          ? formatEvalIndexLabel(rowOffIndexes[0])
-                          : `${rowOffIndexes.length} OFF`}
-                      </span>
-                    ) : (
-                      <span style={secondaryCellTextStyle}>-</span>
-                    )}
-                  </div>
-
-                  <div style={progressMetaCellStyle}>
-                    <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
-                      {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+          {progressRowElements}
         </div>
       </div>
     )}
