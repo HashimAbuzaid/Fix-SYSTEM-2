@@ -71,11 +71,15 @@ type ExistingAuditRow = {
   id: string;
   team: TeamName;
   agent_id: string;
+  agent_name: string;
   audit_date: string;
   case_type: string;
   order_number?: string | null;
   phone_number?: string | null;
   ticket_id?: string | null;
+  quality_score?: number | null;
+  comments?: string | null;
+  score_details?: Array<Record<string, unknown>> | null;
 };
 
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
@@ -382,21 +386,49 @@ function getAuditReferenceKey(audit: {
   ).toLowerCase()}`;
 }
 
+function normalizeScoreDetailSignature(
+  scoreDetails?: Array<Record<string, unknown>> | ScoreDetail[] | null
+) {
+  return JSON.stringify(
+    (scoreDetails || []).map((detail) => ({
+      metric: normalizeText(String(detail.metric ?? '')).toLowerCase(),
+      result: normalizeText(String(detail.result ?? '')).toLowerCase(),
+      pass: Number(detail.pass ?? 0),
+      borderline: Number(detail.borderline ?? 0),
+      adjustedWeight: Number(detail.adjustedWeight ?? detail.adjusted_weight ?? 0),
+      earned: Number(detail.earned ?? 0),
+      countsTowardScore:
+        detail.counts_toward_score ?? detail.countsTowardScore ?? true,
+      metricComment: normalizeText(
+        String(detail.metric_comment ?? detail.metricComment ?? '')
+      ),
+    }))
+  );
+}
+
 function getAuditDuplicateKey(audit: {
   team: TeamName;
   agent_id: string;
+  agent_name?: string | null;
   audit_date: string;
   case_type: string;
   order_number?: string | null;
   phone_number?: string | null;
   ticket_id?: string | null;
+  quality_score?: number | null;
+  comments?: string | null;
+  score_details?: Array<Record<string, unknown>> | ScoreDetail[] | null;
 }) {
   return [
     audit.team,
     normalizeAgentId(audit.agent_id),
+    normalizeAgentName(audit.agent_name),
     audit.audit_date,
     normalizeCaseType(audit.case_type),
     getAuditReferenceKey(audit),
+    Number(audit.quality_score ?? 0).toFixed(2),
+    normalizeText(audit.comments),
+    normalizeScoreDetailSignature(audit.score_details),
   ].join('||');
 }
 
@@ -648,7 +680,7 @@ async function detectDuplicateAudits(
   let query = supabase
     .from('audits')
     .select(
-      'id, team, agent_id, audit_date, case_type, order_number, phone_number, ticket_id'
+      'id, team, agent_id, agent_name, audit_date, case_type, order_number, phone_number, ticket_id, quality_score, comments, score_details'
     )
     .eq('team', team);
 
@@ -674,11 +706,15 @@ async function detectDuplicateAudits(
     getAuditDuplicateKey({
       team: item.team,
       agent_id: item.agent_id,
+      agent_name: item.agent_name,
       audit_date: item.audit_date,
       case_type: item.case_type,
       order_number: item.order_number || null,
       phone_number: item.phone_number || null,
       ticket_id: item.ticket_id || null,
+      quality_score: item.quality_score ?? 0,
+      comments: item.comments || null,
+      score_details: item.score_details || [],
     })
   );
 
@@ -999,7 +1035,7 @@ function AuditsImportSupabase() {
               style={fieldStyle}
             />
             <div style={helperTextStyle}>
-              Supported formats: the Calls and Tickets CSV files you uploaded in this chat. Duplicate detection checks both the uploaded CSV and existing audits already saved in Supabase.
+              Supported formats: the Calls and Tickets CSV files you uploaded in this chat. Duplicate detection now skips an audit only when the full audit payload matches exactly, including score details and comments.
             </div>
           </div>
 
