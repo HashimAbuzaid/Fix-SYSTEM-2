@@ -305,8 +305,7 @@ async function parseUploadFile(file: File) {
       raw: false,
     });
 
-    const firstSheetName = workbook.SheetNames[0];
-    if (!firstSheetName) {
+    if (!workbook.SheetNames.length) {
       return {
         headers: [] as string[],
         normalizedHeaders: [] as string[],
@@ -314,15 +313,52 @@ async function parseUploadFile(file: File) {
       };
     }
 
-    const sheet = workbook.Sheets[firstSheetName];
-    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
-      header: 1,
-      raw: false,
-      defval: '',
-      blankrows: false,
+    const sheetCandidates = workbook.SheetNames.map((sheetName) => {
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
+        header: 1,
+        raw: false,
+        defval: '',
+        blankrows: false,
+      });
+      const parsed = buildParsedRecordsFromRows(rows);
+      const team = detectTeam(parsed.normalizedHeaders);
+      const preferredNameScore =
+        normalizeHeader(sheetName) === 'main'
+          ? 1000
+          : normalizeHeader(sheetName).includes('forqa')
+          ? 200
+          : normalizeHeader(sheetName).includes('rawdata')
+          ? -100
+          : 0;
+
+      return {
+        sheetName,
+        parsed,
+        team,
+        score:
+          preferredNameScore +
+          parsed.records.length +
+          (team ? 500 : 0),
+      };
     });
 
-    return buildParsedRecordsFromRows(rows);
+    const matchedSheet =
+      sheetCandidates
+        .filter((item) => item.team)
+        .sort((a, b) => b.score - a.score)[0] ||
+      null;
+
+    if (matchedSheet) {
+      return matchedSheet.parsed;
+    }
+
+    return sheetCandidates
+      .sort((a, b) => b.score - a.score)[0]?.parsed || {
+        headers: [] as string[],
+        normalizedHeaders: [] as string[],
+        records: [] as Array<Record<string, string>>,
+      };
   }
 
   throw new Error('Unsupported file type. Please upload a CSV or Excel file (.xlsx, .xls, .xlsm).');
@@ -1097,7 +1133,7 @@ function AuditsImportSupabase() {
           <div style={sectionEyebrow}>Audit Import</div>
           <h2 style={pageTitleStyle}>Import Calls and Tickets Audits</h2>
           <p style={pageSubtextStyle}>
-            Upload one Calls or Tickets audit CSV at a time. The importer matches only agents that already exist in profiles and skips the rest.
+            Upload one Calls or Tickets audit Excel or CSV file at a time. For Excel workbooks with many tabs, the importer automatically looks for the sheet that matches the Calls or Tickets audit layout.
           </p>
         </div>
 
@@ -1198,7 +1234,7 @@ function AuditsImportSupabase() {
       <div style={panelStyle}>
         <div style={sectionEyebrow}>Preview</div>
         {previewRows.length === 0 ? (
-          <p style={pageSubtextStyle}>Load a CSV file to preview the audits that will be imported.</p>
+          <p style={pageSubtextStyle}>Load an Excel or CSV file to preview the audits that will be imported.</p>
         ) : (
           <div style={tableWrapStyle}>
             <div style={tableStyle}>
