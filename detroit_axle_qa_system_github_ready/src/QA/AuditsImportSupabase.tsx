@@ -151,6 +151,27 @@ function normalizeAgentName(value?: string | null) {
   return normalizeText(value).toLowerCase().replace(/\s+/g, ' ');
 }
 
+function getRecordValue(record: Record<string, string>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = normalizeText(record[key]);
+    if (value) return value;
+  }
+  return '';
+}
+
+function getImportAgentId(record: Record<string, string>) {
+  return normalizeAgentId(
+    getRecordValue(
+      record,
+      'vonageid',
+      'agentid',
+      'agentcode',
+      'employeeid',
+      'userid'
+    )
+  );
+}
+
 function formatDateOnly(dateValue?: string | null) {
   if (!dateValue) return '-';
   const date = new Date(`${dateValue}T00:00:00`);
@@ -158,82 +179,21 @@ function formatDateOnly(dateValue?: string | null) {
   return date.toLocaleDateString();
 }
 
-function padDatePart(value: number) {
-  return String(value).padStart(2, '0');
-}
-
-function formatDateToIso(date: Date) {
-  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
-}
-
-function formatDateToUs(date: Date) {
-  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-}
-
-function excelSerialDateToIso(serial: number) {
-  if (!Number.isFinite(serial) || serial <= 0) return '';
-  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-  const wholeDays = Math.floor(serial);
-  const fractionalDay = serial - wholeDays;
-  const date = new Date(
-    excelEpoch.getTime() +
-      wholeDays * 86400000 +
-      Math.round(fractionalDay * 86400000)
-  );
-  if (Number.isNaN(date.getTime())) return '';
-  return formatDateToIso(date);
-}
-
-function parseUsDateToIso(value?: string | number | Date | null) {
-  if (value instanceof Date) {
-    return Number.isNaN(value.getTime()) ? '' : formatDateToIso(value);
-  }
-
-  if (typeof value === 'number') {
-    return excelSerialDateToIso(value);
-  }
-
-  const raw = normalizeText(typeof value === 'string' ? value : String(value ?? ''));
+function parseUsDateToIso(value?: string | null) {
+  const raw = normalizeText(value);
   if (!raw) return '';
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
-
-  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
-  if (usMatch) {
-    let [, month, day, year] = usMatch;
-    if (year.length === 2) {
-      const yearNumber = Number(year);
-      year = String(yearNumber >= 70 ? 1900 + yearNumber : 2000 + yearNumber);
-    }
-    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-  }
-
-  if (/^\d{5}(\.\d+)?$/.test(raw)) {
-    const fromSerial = excelSerialDateToIso(Number(raw));
-    if (fromSerial) return fromSerial;
-  }
-
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) {
-    return formatDateToIso(parsed);
-  }
-
-  return '';
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return '';
+  const [, month, day, year] = match;
+  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 }
 
-function parsePercent(value?: string | number | null) {
-  if (typeof value === 'number') {
-    if (Number.isNaN(value)) return null;
-    return value <= 1 ? value * 100 : value;
-  }
-
-  const raw = normalizeText(typeof value === 'string' ? value : String(value ?? '')).replace('%', '');
+function parsePercent(value?: string | null) {
+  const raw = normalizeText(value).replace('%', '');
   if (!raw) return null;
   const parsed = Number(raw);
   if (Number.isNaN(parsed)) return null;
-  return parsed <= 1 ? parsed * 100 : parsed;
+  return parsed;
 }
 
 function parseCsv(text: string) {
@@ -305,30 +265,7 @@ function parseCsv(text: string) {
 }
 
 
-const CALLS_HEADER_HINTS = ['agentname', 'dateofthecall', 'casetype', 'greeting'];
-const TICKETS_HEADER_HINTS = ['agentname', 'ticketdate', 'ticketnumber', 'question'];
-
-function scoreHeaderRow(normalizedHeaders: string[]) {
-  const callsScore = CALLS_HEADER_HINTS.filter((item) => normalizedHeaders.includes(item)).length;
-  const ticketsScore = TICKETS_HEADER_HINTS.filter((item) => normalizedHeaders.includes(item)).length;
-  return {
-    callsScore,
-    ticketsScore,
-    score: Math.max(callsScore, ticketsScore),
-  };
-}
-
-function normalizeSpreadsheetCell(
-  cell: string | number | boolean | Date | null | undefined
-) {
-  if (cell === null || cell === undefined) return '';
-  if (cell instanceof Date) return formatDateToUs(cell);
-  return normalizeText(String(cell));
-}
-
-function buildParsedRecordsFromRows(
-  rows: Array<Array<string | number | boolean | Date | null | undefined>>
-) {
+function buildParsedRecordsFromRows(rows: Array<Array<string | number | boolean | null | undefined>>) {
   if (rows.length === 0) {
     return {
       headers: [] as string[],
@@ -338,7 +275,7 @@ function buildParsedRecordsFromRows(
   }
 
   const normalizedRows = rows.map((row) =>
-    row.map((cell) => normalizeSpreadsheetCell(cell))
+    row.map((cell) => normalizeText(cell === null || cell === undefined ? '' : String(cell)))
   );
 
   const nonEmptyRows = normalizedRows.filter((row) =>
@@ -353,22 +290,10 @@ function buildParsedRecordsFromRows(
     };
   }
 
-  let headerRowIndex = 0;
-  let bestScore = -1;
-
-  nonEmptyRows.slice(0, 15).forEach((row, index) => {
-    const normalizedHeaders = row.map((item) => normalizeHeader(item));
-    const { score } = scoreHeaderRow(normalizedHeaders);
-    if (score > bestScore) {
-      bestScore = score;
-      headerRowIndex = index;
-    }
-  });
-
-  const headers = nonEmptyRows[headerRowIndex].map((item) => normalizeText(item));
+  const headers = nonEmptyRows[0].map((item) => normalizeText(item));
   const normalizedHeaders = headers.map((item) => normalizeHeader(item));
 
-  const records = nonEmptyRows.slice(headerRowIndex + 1).map((cells) => {
+  const records = nonEmptyRows.slice(1).map((cells) => {
     const record: Record<string, string> = {};
     normalizedHeaders.forEach((header, index) => {
       if (!header || header.startsWith('unnamed')) return;
@@ -397,11 +322,12 @@ async function parseUploadFile(file: File) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, {
       type: 'array',
-      cellDates: true,
-      raw: true,
+      cellDates: false,
+      raw: false,
     });
 
-    if (!workbook.SheetNames.length) {
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
       return {
         headers: [] as string[],
         normalizedHeaders: [] as string[],
@@ -409,72 +335,26 @@ async function parseUploadFile(file: File) {
       };
     }
 
-    const sheetCandidates = workbook.SheetNames.map((sheetName) => {
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<
-        Array<string | number | boolean | Date | null>
-      >(sheet, {
-        header: 1,
-        raw: true,
-        defval: '',
-        blankrows: false,
-      });
-      const parsed = buildParsedRecordsFromRows(rows);
-      const team = detectTeam(parsed.normalizedHeaders);
-      const headerScore = scoreHeaderRow(parsed.normalizedHeaders).score;
-      const normalizedSheetName = normalizeHeader(sheetName);
-
-      const preferredNameScore =
-        normalizedSheetName === 'main'
-          ? 1000
-          : normalizedSheetName.includes('forqa')
-          ? 250
-          : normalizedSheetName.includes('rawdata')
-          ? -200
-          : 0;
-
-      return {
-        sheetName,
-        parsed,
-        team,
-        score:
-          preferredNameScore +
-          headerScore * 300 +
-          parsed.records.length +
-          (team ? 500 : 0),
-      };
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: false,
     });
 
-    const matchedSheet =
-      sheetCandidates
-        .filter((item) => item.team)
-        .sort((a, b) => b.score - a.score)[0] || null;
-
-    if (matchedSheet) {
-      return matchedSheet.parsed;
-    }
-
-    return (
-      sheetCandidates.sort((a, b) => b.score - a.score)[0]?.parsed || {
-        headers: [] as string[],
-        normalizedHeaders: [] as string[],
-        records: [] as Array<Record<string, string>>,
-      }
-    );
+    return buildParsedRecordsFromRows(rows);
   }
 
   throw new Error('Unsupported file type. Please upload a CSV or Excel file (.xlsx, .xls, .xlsm).');
 }
 
 function detectTeam(normalizedHeaders: string[]): TeamName | '' {
-  const callsScore = CALLS_HEADER_HINTS.filter((item) => normalizedHeaders.includes(item)).length;
-  const ticketsScore = TICKETS_HEADER_HINTS.filter((item) => normalizedHeaders.includes(item)).length;
-
-  if (ticketsScore >= 2 && ticketsScore >= callsScore) {
+  if (normalizedHeaders.includes('ticketnumber') && normalizedHeaders.includes('ticketdate')) {
     return 'Tickets';
   }
 
-  if (callsScore >= 2 && callsScore >= ticketsScore) {
+  if (normalizedHeaders.includes('dateofthecall') && normalizedHeaders.includes('casetype')) {
     return 'Calls';
   }
 
@@ -671,7 +551,7 @@ function matchProfile(
   );
 
   const agentId = normalizeAgentId(rawAgentId);
-  if (agentId && !['#n/a', 'n/a', 'na', '#value!'].includes(agentId.toLowerCase())) {
+  if (agentId) {
     const byId = teamProfiles.find(
       (profile) => normalizeAgentId(profile.agent_id) === agentId
     );
@@ -684,56 +564,24 @@ function matchProfile(
       (profile) => normalizeAgentName(getProfileLabel(profile)) === normalizedLabel
     );
     if (byFullLabel) return byFullLabel;
-
-    const byReverseFullLabel = teamProfiles.find((profile) => {
-      const reverseLabel = profile.display_name
-        ? `${profile.display_name} - ${profile.agent_name}`
-        : '';
-      return normalizeAgentName(reverseLabel) === normalizedLabel;
-    });
-    if (byReverseFullLabel) return byReverseFullLabel;
-
-    const byAgentName = teamProfiles.filter(
-      (profile) => normalizeAgentName(profile.agent_name) === normalizedLabel
-    );
-    if (byAgentName.length === 1) return byAgentName[0];
-
-    const byDisplayName = teamProfiles.filter(
-      (profile) => normalizeAgentName(profile.display_name) === normalizedLabel
-    );
-    if (byDisplayName.length === 1) return byDisplayName[0];
   }
 
   const { agentName, displayName } = splitAgentLabel(rawAgentName);
-  const normalizedAgentName = normalizeAgentName(agentName);
-  const normalizedDisplayName = normalizeAgentName(displayName);
-
-  if (normalizedAgentName && normalizedDisplayName) {
+  if (agentName && displayName) {
     const bySplit = teamProfiles.find(
       (profile) =>
-        normalizeAgentName(profile.agent_name) === normalizedAgentName &&
-        normalizeAgentName(profile.display_name) === normalizedDisplayName
+        normalizeAgentName(profile.agent_name) === normalizeAgentName(agentName) &&
+        normalizeAgentName(profile.display_name) === normalizeAgentName(displayName)
     );
     if (bySplit) return bySplit;
+  }
 
-    const bySwappedSplit = teamProfiles.find(
+  if (agentName) {
+    const byAgentName = teamProfiles.filter(
       (profile) =>
-        normalizeAgentName(profile.agent_name) === normalizedDisplayName &&
-        normalizeAgentName(profile.display_name) === normalizedAgentName
+        normalizeAgentName(profile.agent_name) === normalizeAgentName(agentName)
     );
-    if (bySwappedSplit) return bySwappedSplit;
-
-    const byEitherHalf = teamProfiles.filter((profile) => {
-      const profileAgent = normalizeAgentName(profile.agent_name);
-      const profileDisplay = normalizeAgentName(profile.display_name);
-      return (
-        profileAgent === normalizedAgentName ||
-        profileAgent === normalizedDisplayName ||
-        profileDisplay === normalizedAgentName ||
-        profileDisplay === normalizedDisplayName
-      );
-    });
-    if (byEitherHalf.length === 1) return byEitherHalf[0];
+    if (byAgentName.length === 1) return byAgentName[0];
   }
 
   return null;
@@ -746,7 +594,8 @@ function buildCallsAudit(
   currentProfile: CurrentProfile | null
 ): { audit?: ImportableAudit; skipped?: SkippedRow } {
   const rawAgentName = record.agentname || '';
-  const profile = matchProfile('Calls', rawAgentName, record.agentid || '', profiles);
+  const rawAgentId = getImportAgentId(record);
+  const profile = matchProfile('Calls', rawAgentName, rawAgentId, profiles);
   const auditDate = parseUsDateToIso(record.dateofthecall);
   const caseType = normalizeText(record.casetype);
   const orderNumber = normalizeText(record.ordernumber) || null;
@@ -829,7 +678,8 @@ function buildTicketsAudit(
   currentProfile: CurrentProfile | null
 ): { audit?: ImportableAudit; skipped?: SkippedRow } {
   const rawAgentName = record.agentname || '';
-  const profile = matchProfile('Tickets', rawAgentName, record.agentid || '', profiles);
+  const rawAgentId = getImportAgentId(record);
+  const profile = matchProfile('Tickets', rawAgentName, rawAgentId, profiles);
   const auditDate = parseUsDateToIso(record.ticketdate);
   const caseType = normalizeText(record.question);
   const ticketId = normalizeText(record.ticketnumber) || null;
@@ -1157,7 +1007,7 @@ function AuditsImportSupabase() {
         );
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not parse the uploaded Excel or CSV file.');
+      setErrorMessage(error instanceof Error ? error.message : 'Could not parse CSV.');
     } finally {
       setParsing(false);
     }
@@ -1371,7 +1221,7 @@ function AuditsImportSupabase() {
       <div style={panelStyle}>
         <div style={sectionEyebrow}>Preview</div>
         {previewRows.length === 0 ? (
-          <p style={pageSubtextStyle}>Load an Excel or CSV file to preview the audits that will be imported.</p>
+          <p style={pageSubtextStyle}>Load a CSV file to preview the audits that will be imported.</p>
         ) : (
           <div style={tableWrapStyle}>
             <div style={tableStyle}>
