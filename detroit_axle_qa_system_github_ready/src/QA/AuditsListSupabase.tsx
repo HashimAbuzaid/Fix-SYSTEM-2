@@ -121,10 +121,6 @@ function normalizeAgentId(value?: string | null) {
   return normalizeText(value).replace(/\.0+$/, '');
 }
 
-function normalizeAgentName(value?: string | null) {
-  return normalizeText(value).toLowerCase().replace(/\s+/g, ' ');
-}
-
 function parsePercentLike(value?: string | null) {
   const raw = normalizeText(value).replace('%', '').replace(/,/g, '');
   if (!raw || raw === '-' || raw.toLowerCase() === '#div/0!' || raw.toLowerCase() === 'off') {
@@ -1602,10 +1598,8 @@ function AuditsListSupabase() {
                   const paddedEvaluations = [...row.evaluations];
                   while (paddedEvaluations.length < evaluationProgressData.evaluationColumns.length) {
                     paddedEvaluations.push({
-                      id: `empty-${row.agent_id}-${row.team}-${paddedEvaluations.length}`,
-                      audit_date: '',
-                      quality_score: Number.NaN,
-                      case_type: '',
+                      score: null,
+                      label: '',
                     });
                   }
 
