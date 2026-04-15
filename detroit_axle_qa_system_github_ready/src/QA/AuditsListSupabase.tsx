@@ -702,7 +702,10 @@ function AuditsListSupabase() {
     if (error) throw error;
   }
 
-  async function toggleAgentOffToday(agentId?: string | null, team?: string | null) {
+  async function toggleAgentOffToday(
+    agentId?: string | null,
+    team?: AuditItem['team'] | null
+  ) {
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -1150,17 +1153,6 @@ useEffect(() => {
     return filtered.length > 0 ? filtered : [visibleProgressColumns[0].index];
   });
 }, [visibleProgressColumns]);
-
-const selectedOffColumns = useMemo<ProgressColumn[]>(() => {
-  return normalizeOffEvalIndexes(selectedOffEvalIndexes)
-    .map(
-      (index) =>
-        evaluationProgressData.evaluationColumns.find(
-          (column) => column.index === index
-        ) || null
-    )
-    .filter((column): column is ProgressColumn => column !== null);
-}, [evaluationProgressData.evaluationColumns, selectedOffEvalIndexes]);
 
 const visibleProgressGroupSpans = useMemo(() => {
   return PROGRESS_GROUPS.map((group) => {
