@@ -1,4 +1,4 @@
-import { useMemo, type CSSProperties } from 'react';
+import { useMemo } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -25,7 +25,6 @@ import ReportsSupabase from './QA/ReportsSupabase';
 import MonitoringSupabase from './QA/MonitoringSupabase';
 import type { UserProfile } from './context/AuthContext';
 
-// ─── Route constants ─────────────────────────────────────────────────────────
 const ROUTES = {
   dashboard: '/',
   newAudit: '/new-audit',
@@ -44,7 +43,6 @@ const ROUTES = {
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
 
-// ─── Nav items builder ────────────────────────────────────────────────────────
 function buildNavItems(profile: UserProfile) {
   const isAdmin = profile.role === 'admin';
   const isStaff = isAdmin || profile.role === 'qa';
@@ -78,8 +76,11 @@ function buildNavItems(profile: UserProfile) {
   return items;
 }
 
-// ─── Profile card ─────────────────────────────────────────────────────────────
-function ProfileInfoCard({ label, value, styles }: {
+function ProfileInfoCard({
+  label,
+  value,
+  styles,
+}: {
   label: string;
   value: string;
   styles: ReturnType<typeof createStyles>;
@@ -92,8 +93,11 @@ function ProfileInfoCard({ label, value, styles }: {
   );
 }
 
-// ─── Staff page router ────────────────────────────────────────────────────────
-function StaffRoutes({ profile, styles, theme }: {
+function StaffRoutes({
+  profile,
+  styles,
+  theme,
+}: {
   profile: UserProfile;
   styles: ReturnType<typeof createStyles>;
   theme: ReturnType<typeof getThemePalette>;
@@ -139,13 +143,11 @@ function StaffRoutes({ profile, styles, theme }: {
           </div>
         }
       />
-      {/* Fallback */}
       <Route path="*" element={<Dashboard />} />
     </Routes>
   );
 }
 
-// ─── Main app shell (inside BrowserRouter) ────────────────────────────────────
 function AppShell() {
   const auth = useAuthState();
   const navigate = useNavigate();
@@ -187,7 +189,6 @@ function AppShell() {
       : profile.agent_name;
   }, [profile]);
 
-  // ── Auth states ──────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div style={styles.loadingShell}>
@@ -226,14 +227,12 @@ function AppShell() {
     );
   }
 
-  // ── Role routing ─────────────────────────────────────────────────────────
   const isAdmin = profile.role === 'admin';
   const isQA = profile.role === 'qa';
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
   const navItems = buildNavItems(profile);
 
-  // ── Render ───────────────────────────────────────────────────────────────
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
       <div style={styles.appShell}>
@@ -244,7 +243,14 @@ function AppShell() {
           <div style={styles.headerLeft}>
             <div style={styles.brandWrap}>
               <div style={styles.brandLogoWrap}>
-                <div style={{ fontWeight: 900, fontSize: '18px', color: theme.brandTitle, letterSpacing: '0.08em' }}>
+                <div
+                  style={{
+                    fontWeight: 900,
+                    fontSize: '18px',
+                    color: theme.brandTitle,
+                    letterSpacing: '0.08em',
+                  }}
+                >
                   DA
                 </div>
               </div>
@@ -346,7 +352,6 @@ function AppShell() {
   );
 }
 
-// ─── Root export — wraps everything in BrowserRouter + ErrorBoundary ──────────
 function App() {
   return (
     <ErrorBoundary>
