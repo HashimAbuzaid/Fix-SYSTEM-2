@@ -38,7 +38,22 @@ type AgentProfile = {
   display_name: string | null;
   team: 'Calls' | 'Tickets' | 'Sales' | null;
 };
-type CurrentProfile = { id: string; role: 'admin' | 'qa' | 'agent' | null };
+type CurrentProfile = {
+  id: string;
+  role: 'admin' | 'qa' | 'agent' | null;
+  agent_name?: string | null;
+};
+
+type AgentDailyStatus = {
+  id?: string;
+  agent_id: string;
+  team: 'Calls' | 'Tickets' | 'Sales';
+  status_date: string;
+  status: 'OFF';
+  created_by_user_id?: string | null;
+  created_by_name?: string | null;
+  created_at?: string | null;
+};
 type Metric = {
   name: string;
   pass: number;
@@ -72,6 +87,10 @@ function shouldShowMetricComment(result: string) {
 function openNativeDatePicker(target: HTMLInputElement) {
   const input = target as HTMLInputElement & { showPicker?: () => void };
   input.showPicker?.();
+}
+
+function getTodayDateValue() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 const ISSUE_WAS_RESOLVED_METRIC = 'Issue was resolved';
@@ -224,9 +243,13 @@ function AuditsListSupabase() {
   const [editMetricComments, setEditMetricComments] = useState<
     Record<string, string>
   >({});
+  const [showEvaluationProgress, setShowEvaluationProgress] = useState(false);
+  const [offTodayByAgent, setOffTodayByAgent] = useState<Record<string, boolean>>({});
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const isAdmin = currentProfile?.role === 'admin';
+  const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
+  const todayStatusDate = getTodayDateValue();
   useEffect(() => {
     void loadAuditsAndProfiles();
   }, []);
@@ -253,7 +276,7 @@ function AuditsListSupabase() {
       return;
     }
     const userId = authData.user?.id;
-    const [auditsResult, profilesResult, currentProfileResult] =
+    const [auditsResult, profilesResult, currentProfileResult, offTodayResult] =
       await Promise.all([
         supabase
           .from('audits')
@@ -267,10 +290,15 @@ function AuditsListSupabase() {
         userId
           ? supabase
               .from('profiles')
-              .select('id, role')
+              .select('id, role, agent_name')
               .eq('id', userId)
               .maybeSingle()
           : Promise.resolve({ data: null, error: null }),
+        supabase
+          .from('agent_daily_status')
+          .select('agent_id, team, status_date, status')
+          .eq('status_date', todayStatusDate)
+          .eq('status', 'OFF'),
       ]);
     setLoading(false);
     if (auditsResult.error) {
@@ -285,9 +313,19 @@ function AuditsListSupabase() {
       setErrorMessage(currentProfileResult.error.message);
       return;
     }
+    if (offTodayResult.error) {
+      setErrorMessage(offTodayResult.error.message);
+      return;
+    }
     setAudits((auditsResult.data as AuditItem[]) || []);
     setProfiles((profilesResult.data as AgentProfile[]) || []);
     setCurrentProfile((currentProfileResult.data as CurrentProfile) || null);
+
+    const nextOffTodayMap: Record<string, boolean> = {};
+    ((offTodayResult.data as AgentDailyStatus[]) || []).forEach((item) => {
+      nextOffTodayMap[getAgentProgressKey(item.agent_id, item.team)] = true;
+    });
+    setOffTodayByAgent(nextOffTodayMap);
   }
   function getMetricsForTeam(team: EditFormState['team']) {
     if (team === 'Calls') return callsMetrics;
@@ -422,6 +460,81 @@ function AuditsListSupabase() {
   function getCreatedByLabel(audit: AuditItem) {
     return audit.created_by_name || audit.created_by_email || '-';
   }
+  function getAgentProgressKey(agentId?: string | null, team?: string | null) {
+    return `${agentId || ''}||${team || ''}`;
+  }
+  function matchesProfileSearch(profile: AgentProfile, search: string) {
+    if (!search) return true;
+    const label = getAgentLabel(profile).toLowerCase();
+    return (
+      profile.agent_name.toLowerCase().includes(search) ||
+      (profile.agent_id || '').toLowerCase().includes(search) ||
+      (profile.display_name || '').toLowerCase().includes(search) ||
+      label.includes(search)
+    );
+  }
+  async function toggleAgentOffToday(agentId?: string | null, team?: string | null) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!canManageOffToday) {
+      setErrorMessage('Only admin or QA can update OFF today status.');
+      return;
+    }
+
+    if (!agentId || !team) {
+      setErrorMessage('Agent ID or team is missing for OFF today.');
+      return;
+    }
+
+    const key = getAgentProgressKey(agentId, team);
+    const nextValue = !offTodayByAgent[key];
+
+    if (nextValue) {
+      const { error } = await supabase
+        .from('agent_daily_status')
+        .upsert(
+          {
+            agent_id: agentId,
+            team,
+            status_date: todayStatusDate,
+            status: 'OFF',
+            created_by_user_id: currentProfile?.id || null,
+            created_by_name: currentProfile?.agent_name || null,
+          },
+          { onConflict: 'agent_id,team,status_date' }
+        );
+
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
+
+      setOffTodayByAgent((prev) => ({ ...prev, [key]: true }));
+      setSuccessMessage('Agent marked as OFF today.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('agent_daily_status')
+      .delete()
+      .eq('agent_id', agentId)
+      .eq('team', team)
+      .eq('status_date', todayStatusDate)
+      .eq('status', 'OFF');
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setOffTodayByAgent((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+    setSuccessMessage('OFF today cleared for agent.');
+  }
   function formatDate(dateValue?: string | null) {
     if (!dateValue) return '-';
     const date = new Date(dateValue);
@@ -517,6 +630,98 @@ function AuditsListSupabase() {
   const hiddenFilteredCount = filteredAudits.length - sharedFilteredCount;
   const sharedAllCount = audits.filter((item) => item.shared_with_agent).length;
   const hiddenAllCount = audits.length - sharedAllCount;
+  const evaluationProgressData = useMemo(() => {
+    const normalizedSearch = searchText.trim().toLowerCase();
+    const scopedProfiles = profiles.filter((profile) => {
+      const matchesTeam = teamFilter ? profile.team === teamFilter : true;
+      return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
+    });
+
+    const groupedAudits = new Map<
+      string,
+      {
+        agent_id: string;
+        agent_name: string;
+        display_name: string | null;
+        team: 'Calls' | 'Tickets' | 'Sales';
+        evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
+      }
+    >();
+
+    filteredAudits.forEach((audit) => {
+      const key = getAgentProgressKey(audit.agent_id, audit.team);
+      const existing = groupedAudits.get(key) || {
+        agent_id: audit.agent_id,
+        agent_name: audit.agent_name,
+        display_name: getDisplayName(audit),
+        team: audit.team,
+        evaluations: [],
+      };
+
+      existing.evaluations.push({
+        id: audit.id,
+        audit_date: audit.audit_date,
+        quality_score: Number(audit.quality_score),
+        case_type: audit.case_type,
+      });
+
+      if (!existing.display_name) {
+        existing.display_name = getDisplayName(audit);
+      }
+
+      groupedAudits.set(key, existing);
+    });
+
+    scopedProfiles.forEach((profile) => {
+      if (!profile.agent_id || !profile.team) return;
+      const key = getAgentProgressKey(profile.agent_id, profile.team);
+      if (!groupedAudits.has(key)) {
+        groupedAudits.set(key, {
+          agent_id: profile.agent_id,
+          agent_name: profile.agent_name,
+          display_name: profile.display_name,
+          team: profile.team,
+          evaluations: [],
+        });
+      }
+    });
+
+    const rows = Array.from(groupedAudits.values())
+      .map((row) => {
+        const evaluations = [...row.evaluations]
+          .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+          .slice(-12);
+        const averageScore =
+          evaluations.length > 0
+            ? evaluations.reduce((sum, item) => sum + item.quality_score, 0) / evaluations.length
+            : null;
+        const latestEvaluation = evaluations.length > 0 ? evaluations[evaluations.length - 1] : null;
+
+        return {
+          ...row,
+          evaluations,
+          averageScore,
+          latestEvaluation,
+          offToday: !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
+        };
+      })
+      .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
+
+    const maxEvaluations = Math.max(1, ...rows.map((row) => row.evaluations.length));
+    const evaluationColumns = Array.from({ length: Math.min(maxEvaluations, 12) }, (_, index) => `Eval ${index + 1}`);
+
+    return {
+      rows,
+      evaluationColumns,
+    };
+  }, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent]);
+
+  function getProgressCellTone(score: number | null) {
+    if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
+    if (score >= 90) return progressStrongCellStyle;
+    if (score >= 75) return progressMediumCellStyle;
+    return progressWeakCellStyle;
+  }
   function startEditAudit(audit: AuditItem) {
     if (!isAdmin) {
       setErrorMessage('Only admin can edit audits.');
@@ -895,14 +1100,23 @@ function AuditsListSupabase() {
             or release audits.{' '}
           </p>{' '}
         </div>{' '}
-        <button
-          type="button"
-          onClick={() => void loadAuditsAndProfiles()}
-          style={secondaryButton}
-        >
-          {' '}
-          Refresh{' '}
-        </button>{' '}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowEvaluationProgress((prev) => !prev)}
+            style={secondaryButton}
+          >
+            {showEvaluationProgress ? 'Hide Evaluation Progress' : 'Show Evaluation Progress'}
+          </button>
+          <button
+            type="button"
+            onClick={() => void loadAuditsAndProfiles()}
+            style={secondaryButton}
+          >
+            {' '}
+            Refresh{' '}
+          </button>{' '}
+        </div>
       </div>{' '}
       {errorMessage ? <div style={errorBanner}>{errorMessage}</div> : null}{' '}
       {successMessage ? (
@@ -1055,6 +1269,164 @@ function AuditsListSupabase() {
           release audits.{' '}
         </div>
       )}{' '}
+      {showEvaluationProgress ? (
+        <div style={progressPanelStyle}>
+          <div style={progressPanelHeaderStyle}>
+            <div>
+              <div style={sectionEyebrow}>Evaluation Progress</div>
+              <h3 style={{ margin: 0, color: 'var(--screen-heading)' }}>
+                Team Progress Board
+              </h3>
+              <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
+                This board uses the currently filtered audits. OFF today now saves in Supabase for the current day once the new table is created.
+              </p>
+            </div>
+            <div style={progressMetaRowStyle}>
+              <span style={progressMetaPillStyle}>
+                Today: {todayStatusDate}
+              </span>
+              <span style={progressMetaPillStyle}>
+                Rows: {evaluationProgressData.rows.length}
+              </span>
+              <span style={progressMetaPillStyle}>
+                Columns: {evaluationProgressData.evaluationColumns.length}
+              </span>
+            </div>
+          </div>
+
+          {evaluationProgressData.rows.length === 0 ? (
+            <div style={progressEmptyStateStyle}>
+              No evaluation progress data matches the current filters yet.
+            </div>
+          ) : (
+            <div style={progressTableWrapStyle}>
+              <div style={progressTableStyle}>
+                <div style={{ ...progressRowStyle, ...progressHeaderRowStyle }}>
+                  <div style={progressAgentCellStyle}>Agent</div>
+                  <div style={progressMetaCellStyle}>Team</div>
+                  <div style={progressMetaCellStyle}>Today</div>
+                  {evaluationProgressData.evaluationColumns.map((column) => (
+                    <div key={column} style={progressEvalCellStyle}>
+                      {column}
+                    </div>
+                  ))}
+                  <div style={progressMetaCellStyle}>Latest</div>
+                  <div style={progressMetaCellStyle}>Average</div>
+                </div>
+
+                {evaluationProgressData.rows.map((row) => {
+                  const paddedEvaluations = [...row.evaluations];
+                  while (paddedEvaluations.length < evaluationProgressData.evaluationColumns.length) {
+                    paddedEvaluations.push({
+                      id: `empty-${row.agent_id}-${row.team}-${paddedEvaluations.length}`,
+                      audit_date: '',
+                      quality_score: Number.NaN,
+                      case_type: '',
+                    });
+                  }
+
+                  return (
+                    <div
+                      key={getAgentProgressKey(row.agent_id, row.team)}
+                      style={progressEntryStyle}
+                    >
+                      <div style={progressRowStyle}>
+                        <div style={progressAgentCellStyle}>
+                          <div style={primaryCellTextStyle}>{row.agent_name}</div>
+                          <div style={secondaryCellTextStyle}>
+                            {row.display_name || '-'} • {row.agent_id}
+                          </div>
+                        </div>
+
+                        <div style={progressMetaCellStyle}>
+                          <span style={teamMiniPillStyle}>{row.team}</span>
+                        </div>
+
+                        <div style={progressMetaCellStyle}>
+                          <button
+                            type="button"
+                            onClick={() => void toggleAgentOffToday(row.agent_id, row.team)}
+                            disabled={!canManageOffToday}
+                            title={
+                              canManageOffToday
+                                ? row.offToday
+                                  ? 'Clear OFF today'
+                                  : 'Mark agent as OFF today'
+                                : 'Only admin or QA can update OFF today'
+                            }
+                            style={
+                              row.offToday
+                                ? {
+                                    ...progressOffButtonActiveStyle,
+                                    opacity: canManageOffToday ? 1 : 0.7,
+                                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                                  }
+                                : {
+                                    ...progressOffButtonStyle,
+                                    opacity: canManageOffToday ? 1 : 0.7,
+                                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                                  }
+                            }
+                          >
+                            {row.offToday ? 'OFF' : 'Mark OFF'}
+                          </button>
+                        </div>
+
+                        {paddedEvaluations.map((evaluation, index) => {
+                          const hasValue = evaluation.audit_date && Number.isFinite(evaluation.quality_score);
+                          const cellTone = hasValue
+                            ? getProgressCellTone(evaluation.quality_score)
+                            : progressEmptyCellStyle;
+
+                          return (
+                            <div
+                              key={`${row.agent_id}-${row.team}-${evaluation.id}-${index}`}
+                              style={{
+                                ...progressEvalCellStyle,
+                                ...cellTone,
+                              }}
+                              title={
+                                hasValue
+                                  ? `${formatDateOnly(evaluation.audit_date)} • ${evaluation.case_type} • ${Number(evaluation.quality_score).toFixed(2)}%`
+                                  : 'No evaluation'
+                              }
+                            >
+                              {hasValue ? `${Number(evaluation.quality_score).toFixed(0)}%` : '-'}
+                            </div>
+                          );
+                        })}
+
+                        <div style={progressMetaCellStyle}>
+                          {row.offToday ? (
+                            <span style={progressOffPillStyle}>OFF</span>
+                          ) : row.latestEvaluation ? (
+                            <div>
+                              <div style={primaryCellTextStyle}>
+                                {Number(row.latestEvaluation.quality_score).toFixed(0)}%
+                              </div>
+                              <div style={secondaryCellTextStyle}>
+                                {formatDateOnly(row.latestEvaluation.audit_date)}
+                              </div>
+                            </div>
+                          ) : (
+                            <span style={secondaryCellTextStyle}>-</span>
+                          )}
+                        </div>
+
+                        <div style={progressMetaCellStyle}>
+                          <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
+                            {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
       {filteredAudits.length === 0 ? (
         <p style={{ color: 'var(--screen-muted)', marginTop: '18px' }}>No audits found.</p>
       ) : (
@@ -1874,6 +2246,158 @@ const infoBanner = {
   marginBottom: '24px',
   color: '#bfdbfe',
   marginTop: '18px',
+};
+const progressPanelStyle = {
+  ...panelStyle,
+  marginTop: '18px',
+};
+const progressPanelHeaderStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  alignItems: 'flex-start',
+  flexWrap: 'wrap' as const,
+  marginBottom: '16px',
+};
+const progressMetaRowStyle = {
+  display: 'flex',
+  gap: '8px',
+  flexWrap: 'wrap' as const,
+};
+const progressMetaPillStyle = {
+  padding: '8px 10px',
+  borderRadius: '999px',
+  border: '1px solid var(--screen-border)',
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-text)',
+  fontSize: '12px',
+  fontWeight: 700,
+};
+const progressEmptyStateStyle = {
+  padding: '18px',
+  borderRadius: '16px',
+  border: '1px dashed var(--screen-border)',
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-muted)',
+};
+const progressTableWrapStyle = {
+  overflowX: 'auto' as const,
+  borderRadius: '18px',
+  border: '1px solid var(--screen-border)',
+  background: 'var(--screen-panel-bg)',
+};
+const progressTableStyle = {
+  minWidth: '1400px',
+};
+const progressEntryStyle = {
+  borderBottom: '1px solid rgba(148,163,184,0.08)',
+};
+const progressRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '240px 100px 110px repeat(12, 78px) 110px 110px',
+  gap: '10px',
+  alignItems: 'stretch',
+  padding: '12px 14px',
+};
+const progressHeaderRowStyle = {
+  position: 'sticky' as const,
+  top: 0,
+  zIndex: 1,
+  background: 'var(--screen-table-head-bg)',
+  color: '#93c5fd',
+  fontSize: '12px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.12em',
+};
+const progressAgentCellStyle = {
+  display: 'grid',
+  alignContent: 'center',
+};
+const progressMetaCellStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textAlign: 'center' as const,
+};
+const progressEvalCellStyle = {
+  minHeight: '54px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  textAlign: 'center' as const,
+  borderRadius: '12px',
+  border: '1px solid var(--screen-border)',
+  fontWeight: 800,
+  fontSize: '13px',
+};
+const progressStrongCellStyle = {
+  background: 'rgba(22,163,74,0.18)',
+  color: '#bbf7d0',
+  border: '1px solid rgba(134,239,172,0.26)',
+};
+const progressMediumCellStyle = {
+  background: 'rgba(245,158,11,0.18)',
+  color: '#fde68a',
+  border: '1px solid rgba(252,211,77,0.26)',
+};
+const progressWeakCellStyle = {
+  background: 'rgba(220,38,38,0.18)',
+  color: '#fecaca',
+  border: '1px solid rgba(252,165,165,0.26)',
+};
+const progressEmptyCellStyle = {
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-muted)',
+};
+const progressOffButtonStyle = {
+  padding: '8px 10px',
+  borderRadius: '10px',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-secondary-btn-text)',
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: '12px',
+};
+const progressOffButtonActiveStyle = {
+  ...progressOffButtonStyle,
+  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+  color: '#ffffff',
+  border: '1px solid rgba(196,181,253,0.28)',
+};
+const progressOffPillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '8px 10px',
+  borderRadius: '999px',
+  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+  color: '#ffffff',
+  fontWeight: 800,
+  fontSize: '12px',
+};
+const progressAveragePillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: '78px',
+  padding: '8px 10px',
+  borderRadius: '999px',
+  fontWeight: 800,
+  fontSize: '13px',
+};
+const teamMiniPillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '7px 10px',
+  borderRadius: '999px',
+  background: 'var(--screen-card-soft-bg)',
+  border: '1px solid var(--screen-border)',
+  color: 'var(--screen-text)',
+  fontSize: '12px',
+  fontWeight: 700,
 };
 const auditTableWrapStyle = {
   marginTop: '18px',
