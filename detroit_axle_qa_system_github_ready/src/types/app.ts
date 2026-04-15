@@ -1,3 +1,5 @@
+export type TeamName = 'Calls' | 'Tickets' | 'Sales';
+export type AppRole = 'admin' | 'qa' | 'agent' | 'supervisor';
 export type AuditDetail = {
   metric: string;
   result: string;
