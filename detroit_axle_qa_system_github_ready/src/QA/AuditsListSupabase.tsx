@@ -87,6 +87,15 @@ type ImportedProgressRow = {
   latestScore?: number | null;
   averageScore?: number | null;
 };
+
+const MAX_PROGRESS_EVALS = 24;
+const PROGRESS_GROUPS = [
+  { key: 'g1', label: 'Eval 1-8', start: 0, end: 8 },
+  { key: 'g2', label: 'Eval 9-16', start: 8, end: 16 },
+  { key: 'g3', label: 'Eval 17-24', start: 16, end: 24 },
+] as const;
+
+type ProgressGroupKey = (typeof PROGRESS_GROUPS)[number]['key'];
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 
@@ -187,9 +196,6 @@ const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
   options: ['', 'Yes', 'No'],
   defaultValue: '',
 };
-
-const MAX_PROGRESS_EVAL_COLUMNS = 24;
-const PROGRESS_GROUP_SIZE = 6;
 
 const callsMetrics: Metric[] = [
   { name: 'Greeting', pass: 2, borderline: 1 },
@@ -349,6 +355,12 @@ function AuditsListSupabase() {
   const [importedProgressByAgent, setImportedProgressByAgent] = useState<Record<string, ImportedProgressRow>>({});
   const [importedFileName, setImportedFileName] = useState('');
   const [importingBoard, setImportingBoard] = useState(false);
+  const [focusedEvalGroup, setFocusedEvalGroup] = useState<'all' | ProgressGroupKey>('all');
+  const [collapsedEvalGroups, setCollapsedEvalGroups] = useState<Record<ProgressGroupKey, boolean>>({
+    g1: false,
+    g2: false,
+    g3: false,
+  });
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -676,7 +688,7 @@ function AuditsListSupabase() {
         .map((header, index) => ({ header, index }))
         .filter((item) => /^eval\d+$/.test(item.header) || /^evaluation\d+$/.test(item.header) || /^qc\d+$/.test(item.header))
         .sort((a, b) => a.index - b.index)
-        .slice(0, MAX_PROGRESS_EVAL_COLUMNS);
+        .slice(0, MAX_PROGRESS_EVALS);
 
       const latestIndex = findIndex('latest', 'latestscore');
       const averageIndex = findIndex('average', 'avg', 'averagescore');
@@ -842,158 +854,207 @@ function AuditsListSupabase() {
   const hiddenFilteredCount = filteredAudits.length - sharedFilteredCount;
   const sharedAllCount = audits.filter((item) => item.shared_with_agent).length;
   const hiddenAllCount = audits.length - sharedAllCount;
-  const evaluationProgressData = useMemo(() => {
-    const normalizedSearch = searchText.trim().toLowerCase();
-    const scopedProfiles = profiles.filter((profile) => {
-      const matchesTeam = teamFilter ? profile.team === teamFilter : true;
-      return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
+  
+const evaluationProgressData = useMemo(() => {
+  const normalizedSearch = searchText.trim().toLowerCase();
+  const scopedProfiles = profiles.filter((profile) => {
+    const matchesTeam = teamFilter ? profile.team === teamFilter : true;
+    return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
+  });
+
+  const groupedRows = new Map<
+    string,
+    {
+      agent_id: string;
+      agent_name: string;
+      display_name: string | null;
+      team: 'Calls' | 'Tickets' | 'Sales';
+      evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
+    }
+  >();
+
+  filteredAudits.forEach((audit) => {
+    const key = getAgentProgressKey(audit.agent_id, audit.team);
+    const existing = groupedRows.get(key) || {
+      agent_id: audit.agent_id,
+      agent_name: audit.agent_name,
+      display_name: getDisplayName(audit),
+      team: audit.team,
+      evaluations: [],
+    };
+
+    existing.evaluations.push({
+      id: audit.id,
+      audit_date: audit.audit_date,
+      quality_score: Number(audit.quality_score),
+      case_type: audit.case_type,
     });
 
-    const groupedRows = new Map<
-      string,
-      {
-        agent_id: string;
-        agent_name: string;
-        display_name: string | null;
-        team: 'Calls' | 'Tickets' | 'Sales';
-        evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
-      }
-    >();
+    if (!existing.display_name) {
+      existing.display_name = getDisplayName(audit);
+    }
 
-    filteredAudits.forEach((audit) => {
-      const key = getAgentProgressKey(audit.agent_id, audit.team);
-      const existing = groupedRows.get(key) || {
-        agent_id: audit.agent_id,
-        agent_name: audit.agent_name,
-        display_name: getDisplayName(audit),
-        team: audit.team,
+    groupedRows.set(key, existing);
+  });
+
+  scopedProfiles.forEach((profile) => {
+    if (!profile.agent_id || !profile.team) return;
+    const key = getAgentProgressKey(profile.agent_id, profile.team);
+    if (!groupedRows.has(key)) {
+      groupedRows.set(key, {
+        agent_id: profile.agent_id,
+        agent_name: profile.agent_name,
+        display_name: profile.display_name,
+        team: profile.team,
         evaluations: [],
-      };
-
-      existing.evaluations.push({
-        id: audit.id,
-        audit_date: audit.audit_date,
-        quality_score: Number(audit.quality_score),
-        case_type: audit.case_type,
       });
+    }
+  });
 
-      if (!existing.display_name) {
-        existing.display_name = getDisplayName(audit);
-      }
+  Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
+    if (teamFilter && importedRow.team !== teamFilter) return;
+    if (normalizedSearch) {
+      const haystack = [
+        importedRow.agent_name,
+        importedRow.display_name || '',
+        importedRow.agent_id,
+      ]
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(normalizedSearch)) return;
+    }
 
-      groupedRows.set(key, existing);
-    });
+    const existing = groupedRows.get(key) || {
+      agent_id: importedRow.agent_id,
+      agent_name: importedRow.agent_name,
+      display_name: importedRow.display_name,
+      team: importedRow.team,
+      evaluations: [],
+    };
 
-    scopedProfiles.forEach((profile) => {
-      if (!profile.agent_id || !profile.team) return;
-      const key = getAgentProgressKey(profile.agent_id, profile.team);
-      if (!groupedRows.has(key)) {
-        groupedRows.set(key, {
-          agent_id: profile.agent_id,
-          agent_name: profile.agent_name,
-          display_name: profile.display_name,
-          team: profile.team,
-          evaluations: [],
-        });
-      }
-    });
+    groupedRows.set(key, existing);
+  });
 
-    Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
-      if (teamFilter && importedRow.team !== teamFilter) return;
-      if (normalizedSearch) {
-        const haystack = [
-          importedRow.agent_name,
-          importedRow.display_name || '',
-          importedRow.agent_id,
-        ]
-          .join(' ')
-          .toLowerCase();
-        if (!haystack.includes(normalizedSearch)) return;
-      }
+  const rows = Array.from(groupedRows.values())
+    .map((row) => {
+      const key = getAgentProgressKey(row.agent_id, row.team);
+      const imported = importedProgressByAgent[key] || null;
 
-      const existing = groupedRows.get(key) || {
-        agent_id: importedRow.agent_id,
-        agent_name: importedRow.agent_name,
-        display_name: importedRow.display_name,
-        team: importedRow.team,
-        evaluations: [],
+      const dbEvaluations = [...row.evaluations]
+        .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+        .slice(-MAX_PROGRESS_EVALS)
+        .map((item) => ({
+          score: Number.isFinite(item.quality_score) ? item.quality_score : null,
+          label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
+        }));
+
+      const evaluations = imported?.evaluations?.length
+        ? imported.evaluations.slice(0, MAX_PROGRESS_EVALS)
+        : dbEvaluations;
+
+      const scoredItems = evaluations.filter((item) => item.score !== null);
+      const averageScore =
+        imported?.averageScore ??
+        (scoredItems.length > 0
+          ? scoredItems.reduce((sum, item) => sum + (item.score ?? 0), 0) / scoredItems.length
+          : null);
+
+      const latestScore =
+        imported?.latestScore ??
+        (scoredItems.length > 0 ? scoredItems.slice(-1)[0]?.score ?? null : null);
+
+      const latestAuditDate =
+        row.evaluations.length > 0
+          ? [...row.evaluations]
+              .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+              .slice(-1)[0]?.audit_date ?? null
+          : null;
+
+      return {
+        agent_id: row.agent_id,
+        agent_name: imported?.agent_name || row.agent_name,
+        display_name: imported?.display_name ?? row.display_name,
+        team: row.team,
+        evaluations,
+        averageScore:
+          averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
+        latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
+        latestAuditDate,
+        offToday:
+          imported?.offToday === true ||
+          !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
       };
+    })
+    .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-      groupedRows.set(key, existing);
-    });
+  const maxEvaluations = Math.max(
+    1,
+    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
+  );
 
-    const rows = Array.from(groupedRows.values())
-      .map((row) => {
-        const key = getAgentProgressKey(row.agent_id, row.team);
-        const imported = importedProgressByAgent[key] || null;
+  const evaluationColumns = Array.from(
+    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    (_, index) => {
+      const group = PROGRESS_GROUPS.find(
+        (item) => index >= item.start && index < item.end
+      ) || PROGRESS_GROUPS[0];
 
-        const dbEvaluations = [...row.evaluations]
-          .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-          .slice(-MAX_PROGRESS_EVAL_COLUMNS)
-          .map((item) => ({
-            score: Number.isFinite(item.quality_score) ? item.quality_score : null,
-            label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
-          }));
+      return {
+        index,
+        label: `Eval ${index + 1}`,
+        groupKey: group.key,
+        groupLabel: group.label,
+      };
+    }
+  );
 
-        const evaluations = imported?.evaluations?.length ? imported.evaluations.slice(0, MAX_PROGRESS_EVAL_COLUMNS) : dbEvaluations;
-        const averageScore =
-          imported?.averageScore ?? (evaluations.length > 0
-            ? evaluations.reduce((sum, item) => sum + (item.score ?? 0), 0) /
-              evaluations.filter((item) => item.score !== null).length
-            : null);
+  return { rows, evaluationColumns };
+}, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent, importedProgressByAgent]);
 
-        const latestScore =
-          imported?.latestScore ??
-          (evaluations.length > 0
-            ? evaluations.filter((item) => item.score !== null).slice(-1)[0]?.score ?? null
-            : null);
+const visibleProgressColumns = useMemo(() => {
+  return evaluationProgressData.evaluationColumns.filter((column) => {
+    const matchesFocus =
+      focusedEvalGroup === 'all' || column.groupKey === focusedEvalGroup;
+    return matchesFocus && !collapsedEvalGroups[column.groupKey];
+  });
+}, [evaluationProgressData.evaluationColumns, focusedEvalGroup, collapsedEvalGroups]);
 
-        const latestAuditDate =
-          row.evaluations.length > 0
-            ? [...row.evaluations]
-                .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-                .slice(-1)[0]?.audit_date ?? null
-            : null;
+const visibleProgressGroupSpans = useMemo(() => {
+  return PROGRESS_GROUPS.map((group) => {
+    const count = visibleProgressColumns.filter(
+      (column) => column.groupKey === group.key
+    ).length;
+    return {
+      ...group,
+      count,
+    };
+  }).filter((group) => group.count > 0);
+}, [visibleProgressColumns]);
 
-        return {
-          agent_id: row.agent_id,
-          agent_name: imported?.agent_name || row.agent_name,
-          display_name: imported?.display_name ?? row.display_name,
-          team: row.team,
-          evaluations,
-          averageScore:
-            averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
-          latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
-          latestAuditDate,
-          offToday:
-            imported?.offToday === true ||
-            !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
-        };
-      })
-      .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
+const progressGridTemplate = useMemo(() => {
+  return `260px 110px 116px repeat(${visibleProgressColumns.length}, 82px) 140px 120px`;
+}, [visibleProgressColumns.length]);
 
-    const evaluationColumns = Array.from(
-      { length: MAX_PROGRESS_EVAL_COLUMNS },
-      (_, index) => `Eval ${index + 1}`
-    );
+function toggleProgressGroupCollapse(groupKey: ProgressGroupKey) {
+  setCollapsedEvalGroups((prev) => {
+    const next = {
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    };
 
-    const evaluationGroups = Array.from(
-      { length: Math.ceil(MAX_PROGRESS_EVAL_COLUMNS / PROGRESS_GROUP_SIZE) },
-      (_, groupIndex) => {
-        const startIndex = groupIndex * PROGRESS_GROUP_SIZE;
-        const endIndex = Math.min(startIndex + PROGRESS_GROUP_SIZE, MAX_PROGRESS_EVAL_COLUMNS);
+    return next;
+  });
 
-        return {
-          key: `group-${groupIndex + 1}`,
-          label: `Eval ${startIndex + 1}-${endIndex}`,
-          startIndex,
-          span: endIndex - startIndex,
-        };
-      }
-    );
+  setFocusedEvalGroup((prev) => {
+    if (prev !== groupKey) return prev;
+    return 'all';
+  });
+}
 
-    return { rows, evaluationColumns, evaluationGroups };
-  }, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent, importedProgressByAgent]);
+function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
+  setFocusedEvalGroup(groupKey);
+}
+
 
   function getProgressCellTone(score: number | null) {
     if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
@@ -1567,181 +1628,251 @@ function AuditsListSupabase() {
           release audits.{' '}
         </div>
       )}{' '}
-      {showEvaluationProgress ? (
-        <div style={progressPanelStyle}>
-          <div style={progressPanelHeaderStyle}>
-            <div>
-              <div style={sectionEyebrow}>Evaluation Progress</div>
-              <h3 style={{ margin: 0, color: 'var(--screen-heading)' }}>
-                Team Progress Board
-              </h3>
-              <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
-                This board now supports 24 evaluation columns. It uses the currently filtered audits and can overlay a CSV progress table for Eval columns, Average, and OFF today.
-              </p>
+      
+{showEvaluationProgress ? (
+  <div style={progressPanelStyle}>
+    <div style={progressPanelHeaderStyle}>
+      <div>
+        <div style={sectionEyebrow}>Evaluation Progress</div>
+        <h3 style={{ margin: 0, color: 'var(--screen-heading)' }}>
+          Team Progress Board
+        </h3>
+        <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
+          This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
+        </p>
+      </div>
+      <div style={progressMetaRowStyle}>
+        <span style={progressMetaPillStyle}>
+          Today: {todayStatusDate}
+        </span>
+        <span style={progressMetaPillStyle}>
+          Rows: {evaluationProgressData.rows.length}
+        </span>
+        <span style={progressMetaPillStyle}>
+          Visible Evals: {visibleProgressColumns.length}
+        </span>
+        <span style={progressMetaPillStyle}>
+          Max Evals: {evaluationProgressData.evaluationColumns.length}
+        </span>
+        {importedFileName ? (
+          <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
+        ) : null}
+      </div>
+    </div>
+
+    <div style={progressControlsShellStyle}>
+      <div style={progressControlsBlockStyle}>
+        <div style={progressControlsLabelStyle}>Quick View</div>
+        <div style={progressControlsRowStyle}>
+          <button
+            type="button"
+            onClick={() => focusProgressGroup('all')}
+            style={{
+              ...(focusedEvalGroup === 'all'
+                ? progressControlButtonActiveStyle
+                : progressControlButtonStyle),
+            }}
+          >
+            All 24
+          </button>
+          {PROGRESS_GROUPS.map((group) => (
+            <button
+              key={group.key}
+              type="button"
+              onClick={() => focusProgressGroup(group.key)}
+              style={{
+                ...(focusedEvalGroup === group.key
+                  ? progressControlButtonActiveStyle
+                  : progressControlButtonStyle),
+              }}
+            >
+              {group.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={progressControlsBlockStyle}>
+        <div style={progressControlsLabelStyle}>Collapse Groups</div>
+        <div style={progressControlsRowStyle}>
+          {PROGRESS_GROUPS.map((group) => (
+            <button
+              key={group.key}
+              type="button"
+              onClick={() => toggleProgressGroupCollapse(group.key)}
+              style={{
+                ...(collapsedEvalGroups[group.key]
+                  ? progressControlButtonMutedStyle
+                  : progressControlButtonStyle),
+              }}
+            >
+              {collapsedEvalGroups[group.key] ? `Show ${group.label}` : `Hide ${group.label}`}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    {evaluationProgressData.rows.length === 0 ? (
+      <div style={progressEmptyStateStyle}>
+        No evaluation progress data matches the current filters yet.
+      </div>
+    ) : visibleProgressColumns.length === 0 ? (
+      <div style={progressEmptyStateStyle}>
+        All eval groups are hidden right now. Use the group buttons above to show a section again.
+      </div>
+    ) : (
+      <div style={progressTableWrapStyle}>
+        <div style={progressTableStyle}>
+          <div
+            style={{
+              ...progressGroupHeaderRowStyle,
+              gridTemplateColumns: progressGridTemplate,
+            }}
+          >
+            <div style={{ ...progressGroupHeaderBlockStyle, gridColumn: 'span 3' }}>
+              Agent Snapshot
             </div>
-            <div style={progressMetaRowStyle}>
-              <span style={progressMetaPillStyle}>
-                Today: {todayStatusDate}
-              </span>
-              <span style={progressMetaPillStyle}>
-                Rows: {evaluationProgressData.rows.length}
-              </span>
-              <span style={progressMetaPillStyle}>
-                Eval Columns: {evaluationProgressData.evaluationColumns.length}
-              </span>
-              {importedFileName ? (
-                <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
-              ) : null}
+            {visibleProgressGroupSpans.map((group) => (
+              <div
+                key={group.key}
+                style={{
+                  ...progressGroupHeaderBlockStyle,
+                  gridColumn: `span ${group.count}`,
+                }}
+              >
+                {group.label}
+              </div>
+            ))}
+            <div style={{ ...progressGroupHeaderBlockStyle, gridColumn: 'span 2' }}>
+              Summary
             </div>
           </div>
 
-          {evaluationProgressData.rows.length === 0 ? (
-            <div style={progressEmptyStateStyle}>
-              No evaluation progress data matches the current filters yet.
-            </div>
-          ) : (
-            <div style={progressTableWrapStyle}>
-              <div style={progressTableStyle}>
-                <div style={{ ...progressRowStyle, ...progressGroupRowStyle }}>
-                  <div style={{ ...progressGroupLabelStyle, gridColumn: '1 / span 3' }}>
-                    Agent Snapshot
-                  </div>
-                  {evaluationProgressData.evaluationGroups.map((group) => (
-                    <div
-                      key={group.key}
-                      style={{
-                        ...progressGroupLabelStyle,
-                        gridColumn: `${4 + group.startIndex} / span ${group.span}`,
-                      }}
-                    >
-                      {group.label}
-                    </div>
-                  ))}
-                  <div
-                    style={{
-                      ...progressGroupLabelStyle,
-                      gridColumn: `${4 + evaluationProgressData.evaluationColumns.length} / span 2`,
-                    }}
-                  >
-                    Summary
-                  </div>
-                </div>
-                <div style={{ ...progressRowStyle, ...progressHeaderRowStyle }}>
-                  <div style={progressAgentCellStyle}>Agent</div>
-                  <div style={progressMetaCellStyle}>Team</div>
-                  <div style={progressMetaCellStyle}>Today</div>
-                  {evaluationProgressData.evaluationColumns.map((column) => (
-                    <div key={column} style={progressEvalCellStyle}>
-                      {column}
-                    </div>
-                  ))}
-                  <div style={progressMetaCellStyle}>Latest Date</div>
-                  <div style={progressMetaCellStyle}>Average</div>
-                </div>
+          <div
+            style={{
+              ...progressRowStyle,
+              ...progressHeaderRowStyle,
+              gridTemplateColumns: progressGridTemplate,
+            }}
+          >
+            <div style={{ ...progressAgentCellStyle, ...progressStickyAgentHeaderCellStyle }}>Agent</div>
+            <div style={{ ...progressMetaCellStyle, ...progressStickyTeamHeaderCellStyle }}>Team</div>
+            <div style={{ ...progressMetaCellStyle, ...progressStickyTodayHeaderCellStyle }}>Today</div>
+            {visibleProgressColumns.map((column) => (
+              <div key={column.label} style={progressEvalCellStyle}>
+                {column.label}
+              </div>
+            ))}
+            <div style={progressMetaCellStyle}>Latest Date</div>
+            <div style={progressMetaCellStyle}>Average</div>
+          </div>
 
-                {evaluationProgressData.rows.map((row) => {
-                  const paddedEvaluations = [...row.evaluations];
-                  while (paddedEvaluations.length < evaluationProgressData.evaluationColumns.length) {
-                    paddedEvaluations.push({
+          {evaluationProgressData.rows.map((row) => {
+            return (
+              <div
+                key={getAgentProgressKey(row.agent_id, row.team)}
+                style={progressEntryStyle}
+              >
+                <div
+                  style={{
+                    ...progressRowStyle,
+                    gridTemplateColumns: progressGridTemplate,
+                  }}
+                >
+                  <div style={{ ...progressAgentCellStyle, ...progressStickyAgentCellStyle }}>
+                    <div style={primaryCellTextStyle}>{row.agent_name}</div>
+                    <div style={secondaryCellTextStyle}>
+                      {row.display_name || '-'} • {row.agent_id}
+                    </div>
+                  </div>
+
+                  <div style={{ ...progressMetaCellStyle, ...progressStickyTeamCellStyle }}>
+                    <span style={teamMiniPillStyle}>{row.team}</span>
+                  </div>
+
+                  <div style={{ ...progressMetaCellStyle, ...progressStickyTodayCellStyle }}>
+                    <button
+                      type="button"
+                      onClick={() => void toggleAgentOffToday(row.agent_id, row.team)}
+                      disabled={!canManageOffToday}
+                      title={
+                        canManageOffToday
+                          ? row.offToday
+                            ? 'Clear OFF today'
+                            : 'Mark agent as OFF today'
+                          : 'Only admin or QA can update OFF today'
+                      }
+                      style={
+                        row.offToday
+                          ? {
+                              ...progressOffButtonActiveStyle,
+                              opacity: canManageOffToday ? 1 : 0.7,
+                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                            }
+                          : {
+                              ...progressOffButtonStyle,
+                              opacity: canManageOffToday ? 1 : 0.7,
+                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
+                            }
+                      }
+                    >
+                      {row.offToday ? 'OFF' : 'Mark OFF'}
+                    </button>
+                  </div>
+
+                  {visibleProgressColumns.map((column) => {
+                    const evaluation = row.evaluations[column.index] || {
                       score: null,
                       label: '',
-                    });
-                  }
+                    };
+                    const hasValue =
+                      evaluation.score !== null && Number.isFinite(evaluation.score);
+                    const cellTone = hasValue
+                      ? getProgressCellTone(evaluation.score)
+                      : progressEmptyCellStyle;
 
-                  return (
-                    <div
-                      key={getAgentProgressKey(row.agent_id, row.team)}
-                      style={progressEntryStyle}
-                    >
-                      <div style={progressRowStyle}>
-                        <div style={progressAgentCellStyle}>
-                          <div style={primaryCellTextStyle}>{row.agent_name}</div>
-                          <div style={secondaryCellTextStyle}>
-                            {row.display_name || '-'} • {row.agent_id}
-                          </div>
-                        </div>
-
-                        <div style={progressMetaCellStyle}>
-                          <span style={teamMiniPillStyle}>{row.team}</span>
-                        </div>
-
-                        <div style={progressMetaCellStyle}>
-                          <button
-                            type="button"
-                            onClick={() => void toggleAgentOffToday(row.agent_id, row.team)}
-                            disabled={!canManageOffToday}
-                            title={
-                              canManageOffToday
-                                ? row.offToday
-                                  ? 'Clear OFF today'
-                                  : 'Mark agent as OFF today'
-                                : 'Only admin or QA can update OFF today'
-                            }
-                            style={
-                              row.offToday
-                                ? {
-                                    ...progressOffButtonActiveStyle,
-                                    opacity: canManageOffToday ? 1 : 0.7,
-                                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                                  }
-                                : {
-                                    ...progressOffButtonStyle,
-                                    opacity: canManageOffToday ? 1 : 0.7,
-                                    cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                                  }
-                            }
-                          >
-                            {row.offToday ? 'OFF' : 'Mark OFF'}
-                          </button>
-                        </div>
-
-                        {paddedEvaluations.map((evaluation, index) => {
-                          const hasValue = evaluation.score !== null && Number.isFinite(evaluation.score);
-                          const cellTone = hasValue
-                            ? getProgressCellTone(evaluation.score)
-                            : progressEmptyCellStyle;
-
-                          return (
-                            <div
-                              key={`${row.agent_id}-${row.team}-${index}`}
-                              style={{
-                                ...progressEvalCellStyle,
-                                ...cellTone,
-                              }}
-                              title={hasValue ? evaluation.label || `${evaluation.score}%` : 'No evaluation'}
-                            >
-                              {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
-                            </div>
-                          );
-                        })}
-
-                        <div style={progressMetaCellStyle}>
-                          {row.offToday ? (
-                            <span style={progressOffPillStyle}>OFF</span>
-                          ) : row.latestAuditDate ? (
-                            <div>
-                              <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
-                              <div style={secondaryCellTextStyle}>Latest evaluated audit</div>
-                            </div>
-                          ) : (
-                            <span style={secondaryCellTextStyle}>-</span>
-                          )}
-                        </div>
-
-                        <div style={progressMetaCellStyle}>
-                          <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
-                            {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
-                          </span>
-                        </div>
+                    return (
+                      <div
+                        key={`${row.agent_id}-${row.team}-${column.index}`}
+                        style={{
+                          ...progressEvalCellStyle,
+                          ...cellTone,
+                        }}
+                        title={hasValue ? evaluation.label || `${evaluation.score}%` : 'No evaluation'}
+                      >
+                        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+
+                  <div style={progressMetaCellStyle}>
+                    {row.offToday ? (
+                      <span style={progressOffPillStyle}>OFF</span>
+                    ) : row.latestAuditDate ? (
+                      <div>
+                        <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
+                        <div style={secondaryCellTextStyle}>Latest evaluated audit</div>
+                      </div>
+                    ) : (
+                      <span style={secondaryCellTextStyle}>-</span>
+                    )}
+                  </div>
+
+                  <div style={progressMetaCellStyle}>
+                    <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
+                      {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })}
         </div>
-      ) : null}
+      </div>
+    )}
+  </div>
+) : null}
       {filteredAudits.length === 0 ? (
         <p style={{ color: 'var(--screen-muted)', marginTop: '18px' }}>No audits found.</p>
       ) : (
@@ -2562,6 +2693,7 @@ const infoBanner = {
   color: '#bfdbfe',
   marginTop: '18px',
 };
+
 const progressPanelStyle = {
   ...panelStyle,
   marginTop: '18px',
@@ -2588,6 +2720,52 @@ const progressMetaPillStyle = {
   fontSize: '12px',
   fontWeight: 700,
 };
+const progressControlsShellStyle = {
+  display: 'grid',
+  gap: '12px',
+  marginBottom: '16px',
+};
+const progressControlsBlockStyle = {
+  display: 'grid',
+  gap: '8px',
+};
+const progressControlsLabelStyle = {
+  color: 'var(--screen-muted)',
+  fontSize: '12px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.12em',
+};
+const progressControlsRowStyle = {
+  display: 'flex',
+  gap: '8px',
+  flexWrap: 'wrap' as const,
+  overflowX: 'auto' as const,
+  paddingBottom: '2px',
+};
+const progressControlButtonStyle = {
+  padding: '9px 12px',
+  borderRadius: '999px',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-secondary-btn-text)',
+  cursor: 'pointer',
+  fontWeight: 700,
+  fontSize: '12px',
+  whiteSpace: 'nowrap' as const,
+};
+const progressControlButtonActiveStyle = {
+  ...progressControlButtonStyle,
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#ffffff',
+  border: '1px solid rgba(96,165,250,0.26)',
+  boxShadow: '0 12px 24px rgba(37,99,235,0.22)',
+};
+const progressControlButtonMutedStyle = {
+  ...progressControlButtonStyle,
+  opacity: 0.82,
+  background: 'var(--screen-soft-fill)',
+};
 const progressEmptyStateStyle = {
   padding: '18px',
   borderRadius: '16px',
@@ -2602,22 +2780,45 @@ const progressTableWrapStyle = {
   background: 'var(--screen-panel-bg)',
 };
 const progressTableStyle = {
-  minWidth: '2550px',
+  minWidth: '2560px',
+};
+const progressGroupHeaderRowStyle = {
+  display: 'grid',
+  gap: '10px',
+  alignItems: 'stretch',
+  padding: '12px 14px 0 14px',
+  position: 'sticky' as const,
+  top: 0,
+  zIndex: 3,
+  background: 'var(--screen-table-head-bg)',
+};
+const progressGroupHeaderBlockStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '38px',
+  borderRadius: '12px',
+  border: '1px solid rgba(147,197,253,0.16)',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#bfdbfe',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.12em',
 };
 const progressEntryStyle = {
   borderBottom: '1px solid rgba(148,163,184,0.08)',
 };
 const progressRowStyle = {
   display: 'grid',
-  gridTemplateColumns: `250px 92px 108px repeat(${MAX_PROGRESS_EVAL_COLUMNS}, 72px) 120px 110px`,
   gap: '10px',
   alignItems: 'stretch',
   padding: '12px 14px',
 };
 const progressHeaderRowStyle = {
   position: 'sticky' as const,
-  top: 0,
-  zIndex: 1,
+  top: '50px',
+  zIndex: 2,
   background: 'var(--screen-table-head-bg)',
   color: '#93c5fd',
   fontSize: '12px',
@@ -2625,28 +2826,56 @@ const progressHeaderRowStyle = {
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
 };
-const progressGroupRowStyle = {
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-muted)',
-  fontSize: '11px',
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase' as const,
-  borderBottom: '1px solid rgba(148,163,184,0.08)',
-};
-const progressGroupLabelStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '38px',
-  borderRadius: '10px',
-  background: 'var(--screen-soft-fill)',
-  border: '1px solid var(--screen-border)',
-  color: 'var(--screen-muted)',
-};
+const progressStickyCellShadow = '6px 0 14px rgba(2,6,23,0.12)';
+const progressStickyHeaderBackground = 'var(--screen-table-head-bg)';
+const progressStickyBodyBackground = 'var(--screen-panel-bg)';
 const progressAgentCellStyle = {
   display: 'grid',
   alignContent: 'center',
+};
+const progressStickyAgentHeaderCellStyle = {
+  ...progressAgentCellStyle,
+  position: 'sticky' as const,
+  left: 0,
+  zIndex: 4,
+  background: progressStickyHeaderBackground,
+  boxShadow: progressStickyCellShadow,
+};
+const progressStickyTeamHeaderCellStyle = {
+  position: 'sticky' as const,
+  left: '270px',
+  zIndex: 4,
+  background: progressStickyHeaderBackground,
+  boxShadow: progressStickyCellShadow,
+};
+const progressStickyTodayHeaderCellStyle = {
+  position: 'sticky' as const,
+  left: '390px',
+  zIndex: 4,
+  background: progressStickyHeaderBackground,
+  boxShadow: progressStickyCellShadow,
+};
+const progressStickyAgentCellStyle = {
+  ...progressAgentCellStyle,
+  position: 'sticky' as const,
+  left: 0,
+  zIndex: 1,
+  background: progressStickyBodyBackground,
+  boxShadow: progressStickyCellShadow,
+};
+const progressStickyTeamCellStyle = {
+  position: 'sticky' as const,
+  left: '270px',
+  zIndex: 1,
+  background: progressStickyBodyBackground,
+  boxShadow: progressStickyCellShadow,
+};
+const progressStickyTodayCellStyle = {
+  position: 'sticky' as const,
+  left: '390px',
+  zIndex: 1,
+  background: progressStickyBodyBackground,
+  boxShadow: progressStickyCellShadow,
 };
 const progressMetaCellStyle = {
   display: 'flex',
@@ -2716,7 +2945,7 @@ const progressAveragePillStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  minWidth: '78px',
+  minWidth: '82px',
   padding: '8px 10px',
   borderRadius: '999px',
   fontWeight: 800,
@@ -2734,6 +2963,7 @@ const teamMiniPillStyle = {
   fontSize: '12px',
   fontWeight: 700,
 };
+
 const auditTableWrapStyle = {
   marginTop: '18px',
   overflowX: 'auto' as const,
