@@ -1,0 +1,104 @@
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+
+type Props = {
+  children: ReactNode;
+  fallback?: ReactNode;
+};
+
+type State = {
+  hasError: boolean;
+  error: Error | null;
+};
+
+export class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    // In production you would send this to an error reporting service
+    console.error('[ErrorBoundary]', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      if (this.props.fallback) return this.props.fallback;
+
+      return (
+        <div style={shellStyle}>
+          <div style={cardStyle}>
+            <div style={eyebrowStyle}>Something went wrong</div>
+            <h2 style={titleStyle}>An unexpected error occurred</h2>
+            <p style={bodyStyle}>
+              {this.state.error?.message ?? 'An unknown error occurred.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              style={buttonStyle}
+            >
+              Reload page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+const shellStyle = {
+  minHeight: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: '24px',
+  background: 'linear-gradient(180deg, #07111f 0%, #0b1324 100%)',
+};
+
+const cardStyle = {
+  width: '100%',
+  maxWidth: '560px',
+  borderRadius: '24px',
+  border: '1px solid rgba(248,113,113,0.22)',
+  background: 'rgba(15,23,42,0.82)',
+  padding: '32px',
+  textAlign: 'center' as const,
+};
+
+const eyebrowStyle = {
+  color: '#f87171',
+  fontSize: '12px',
+  fontWeight: 800,
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase' as const,
+  marginBottom: '12px',
+};
+
+const titleStyle = {
+  color: '#f8fafc',
+  margin: '0 0 12px 0',
+};
+
+const bodyStyle = {
+  color: '#94a3b8',
+  marginBottom: '24px',
+  fontFamily: 'monospace',
+  fontSize: '14px',
+};
+
+const buttonStyle = {
+  padding: '12px 20px',
+  borderRadius: '12px',
+  border: '1px solid rgba(96,165,250,0.24)',
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#fff',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
