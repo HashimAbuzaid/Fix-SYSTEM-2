@@ -71,6 +71,22 @@ type EditFormState = {
   ticketId: string;
   comments: string;
 };
+
+type ImportedEvaluation = {
+  score: number | null;
+  label: string;
+};
+
+type ImportedProgressRow = {
+  agent_id: string;
+  agent_name: string;
+  display_name: string | null;
+  team: 'Calls' | 'Tickets' | 'Sales';
+  evaluations: ImportedEvaluation[];
+  offToday?: boolean;
+  latestScore?: number | null;
+  averageScore?: number | null;
+};
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 
@@ -91,6 +107,78 @@ function openNativeDatePicker(target: HTMLInputElement) {
 
 function getTodayDateValue() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function normalizeText(value?: string | null) {
+  return String(value || '').replace(/\u00a0/g, ' ').trim();
+}
+
+function normalizeHeader(value?: string | null) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function normalizeAgentId(value?: string | null) {
+  return normalizeText(value).replace(/\.0+$/, '');
+}
+
+function normalizeAgentName(value?: string | null) {
+  return normalizeText(value).toLowerCase().replace(/\s+/g, ' ');
+}
+
+function parsePercentLike(value?: string | null) {
+  const raw = normalizeText(value).replace('%', '').replace(/,/g, '');
+  if (!raw || raw === '-' || raw.toLowerCase() === '#div/0!' || raw.toLowerCase() === 'off') {
+    return null;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseCsv(textValue: string) {
+  const rows: string[][] = [];
+  let current = '';
+  let row: string[] = [];
+  let inQuotes = false;
+  const input = textValue.replace(/^\ufeff/, '');
+
+  for (let i = 0; i < input.length; i += 1) {
+    const char = input[i];
+    const next = input[i + 1];
+
+    if (char === '"') {
+      if (inQuotes && next === '"') {
+        current += '"';
+        i += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === ',' && !inQuotes) {
+      row.push(current);
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i += 1;
+      row.push(current);
+      if (row.some((cell) => normalizeText(cell) !== '')) rows.push(row);
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length > 0 || row.length > 0) {
+    row.push(current);
+    if (row.some((cell) => normalizeText(cell) !== '')) rows.push(row);
+  }
+
+  return rows;
 }
 
 const ISSUE_WAS_RESOLVED_METRIC = 'Issue was resolved';
@@ -205,6 +293,20 @@ function getThemeVars(): Record<string, string> {
     '--screen-highlight-bg': isLight
       ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.98) 100%)'
       : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.5) 100%)',
+    '--progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.16)',
+    '--progress-strong-border': isLight ? 'rgba(34,197,94,0.24)' : 'rgba(134,239,172,0.20)',
+    '--progress-strong-text': isLight ? '#166534' : '#bbf7d0',
+    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.16)',
+    '--progress-medium-border': isLight ? 'rgba(245,158,11,0.24)' : 'rgba(252,211,77,0.20)',
+    '--progress-medium-text': isLight ? '#92400e' : '#fde68a',
+    '--progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.16)',
+    '--progress-weak-border': isLight ? 'rgba(239,68,68,0.24)' : 'rgba(252,165,165,0.20)',
+    '--progress-weak-text': isLight ? '#991b1b' : '#fecaca',
+    '--progress-empty-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.42)',
+    '--progress-empty-text': isLight ? '#64748b' : '#94a3b8',
+    '--progress-off-bg': isLight ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.18)',
+    '--progress-off-border': isLight ? 'rgba(124,58,237,0.24)' : 'rgba(196,181,253,0.22)',
+    '--progress-off-text': isLight ? '#6d28d9' : '#ddd6fe',
   };
 }
 
@@ -245,8 +347,12 @@ function AuditsListSupabase() {
   >({});
   const [showEvaluationProgress, setShowEvaluationProgress] = useState(false);
   const [offTodayByAgent, setOffTodayByAgent] = useState<Record<string, boolean>>({});
+  const [importedProgressByAgent, setImportedProgressByAgent] = useState<Record<string, ImportedProgressRow>>({});
+  const [importedFileName, setImportedFileName] = useState('');
+  const [importingBoard, setImportingBoard] = useState(false);
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const isAdmin = currentProfile?.role === 'admin';
   const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
   const todayStatusDate = getTodayDateValue();
@@ -535,6 +641,113 @@ function AuditsListSupabase() {
     });
     setSuccessMessage('OFF today cleared for agent.');
   }
+  async function handleProgressImport(file?: File | null) {
+    if (!file) return;
+
+    setImportingBoard(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      if (!file.name.toLowerCase().endsWith('.csv')) {
+        setErrorMessage('Please upload a CSV file for the progress board import.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const csvText = await file.text();
+      const rows = parseCsv(csvText);
+
+      if (rows.length === 0) {
+        setErrorMessage('The uploaded CSV is empty.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const headers = rows[0].map((item) => normalizeHeader(item));
+      const findIndex = (...names: string[]) => headers.findIndex((header) => names.includes(header));
+
+      const agentNameIndex = findIndex('agentname', 'agent');
+      const displayNameIndex = findIndex('displayname', 'display');
+      const agentIdIndex = findIndex('agentid', 'agent');
+      const teamIndex = findIndex('team');
+      const todayIndex = findIndex('today', 'offtoday', 'status');
+
+      const evalIndices = headers
+        .map((header, index) => ({ header, index }))
+        .filter((item) => /^eval\d+$/.test(item.header) || /^evaluation\d+$/.test(item.header) || /^qc\d+$/.test(item.header))
+        .sort((a, b) => a.index - b.index)
+        .slice(0, 12);
+
+      const latestIndex = findIndex('latest', 'latestscore');
+      const averageIndex = findIndex('average', 'avg', 'averagescore');
+
+      if (agentNameIndex === -1 && agentIdIndex === -1) {
+        setErrorMessage('The CSV must include at least Agent Name or Agent ID columns.');
+        setImportingBoard(false);
+        return;
+      }
+
+      const nextImported: Record<string, ImportedProgressRow> = {};
+
+      rows.slice(1).forEach((cells) => {
+        const agentName = normalizeText(cells[agentNameIndex] || '');
+        const displayName = displayNameIndex >= 0 ? normalizeText(cells[displayNameIndex] || '') : '';
+        const agentId = normalizeAgentId(cells[agentIdIndex] || '');
+        const rawTeam = normalizeText(cells[teamIndex] || '');
+        const team = (rawTeam === 'Calls' || rawTeam === 'Tickets' || rawTeam === 'Sales'
+          ? rawTeam
+          : teamFilter === 'Calls' || teamFilter === 'Tickets' || teamFilter === 'Sales'
+          ? teamFilter
+          : '') as '' | 'Calls' | 'Tickets' | 'Sales';
+
+        if (!team) return;
+        if (!agentName && !agentId) return;
+
+        const key = getAgentProgressKey(agentId || agentName, team);
+        const evaluations: ImportedEvaluation[] = evalIndices.map(({ index }) => {
+          const raw = cells[index] || '';
+          return {
+            score: parsePercentLike(raw),
+            label: normalizeText(raw),
+          };
+        });
+
+        const todayValue = todayIndex >= 0 ? normalizeText(cells[todayIndex] || '').toLowerCase() : '';
+        const latestScore = latestIndex >= 0 ? parsePercentLike(cells[latestIndex] || '') : null;
+        const averageScore = averageIndex >= 0 ? parsePercentLike(cells[averageIndex] || '') : null;
+
+        nextImported[key] = {
+          agent_id: agentId,
+          agent_name: agentName || agentId,
+          display_name: displayName || null,
+          team,
+          evaluations,
+          offToday: todayValue === 'off',
+          latestScore,
+          averageScore,
+        };
+      });
+
+      setImportedProgressByAgent(nextImported);
+      setImportedFileName(file.name);
+      setSuccessMessage(`Imported ${Object.keys(nextImported).length} progress row(s) from ${file.name}.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Could not import evaluation table.');
+    } finally {
+      setImportingBoard(false);
+      if (importInputRef.current) {
+        importInputRef.current.value = '';
+      }
+    }
+  }
+
+  function clearImportedProgress() {
+    setImportedProgressByAgent({});
+    setImportedFileName('');
+    setSuccessMessage('Imported progress table cleared.');
+  }
+
   function formatDate(dateValue?: string | null) {
     if (!dateValue) return '-';
     const date = new Date(dateValue);
@@ -637,7 +850,7 @@ function AuditsListSupabase() {
       return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
     });
 
-    const groupedAudits = new Map<
+    const groupedRows = new Map<
       string,
       {
         agent_id: string;
@@ -650,7 +863,7 @@ function AuditsListSupabase() {
 
     filteredAudits.forEach((audit) => {
       const key = getAgentProgressKey(audit.agent_id, audit.team);
-      const existing = groupedAudits.get(key) || {
+      const existing = groupedRows.get(key) || {
         agent_id: audit.agent_id,
         agent_name: audit.agent_name,
         display_name: getDisplayName(audit),
@@ -669,14 +882,14 @@ function AuditsListSupabase() {
         existing.display_name = getDisplayName(audit);
       }
 
-      groupedAudits.set(key, existing);
+      groupedRows.set(key, existing);
     });
 
     scopedProfiles.forEach((profile) => {
       if (!profile.agent_id || !profile.team) return;
       const key = getAgentProgressKey(profile.agent_id, profile.team);
-      if (!groupedAudits.has(key)) {
-        groupedAudits.set(key, {
+      if (!groupedRows.has(key)) {
+        groupedRows.set(key, {
           agent_id: profile.agent_id,
           agent_name: profile.agent_name,
           display_name: profile.display_name,
@@ -686,35 +899,84 @@ function AuditsListSupabase() {
       }
     });
 
-    const rows = Array.from(groupedAudits.values())
+    Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
+      if (teamFilter && importedRow.team !== teamFilter) return;
+      if (normalizedSearch) {
+        const haystack = [
+          importedRow.agent_name,
+          importedRow.display_name || '',
+          importedRow.agent_id,
+        ]
+          .join(' ')
+          .toLowerCase();
+        if (!haystack.includes(normalizedSearch)) return;
+      }
+
+      const existing = groupedRows.get(key) || {
+        agent_id: importedRow.agent_id,
+        agent_name: importedRow.agent_name,
+        display_name: importedRow.display_name,
+        team: importedRow.team,
+        evaluations: [],
+      };
+
+      groupedRows.set(key, existing);
+    });
+
+    const rows = Array.from(groupedRows.values())
       .map((row) => {
-        const evaluations = [...row.evaluations]
+        const key = getAgentProgressKey(row.agent_id, row.team);
+        const imported = importedProgressByAgent[key] || null;
+
+        const dbEvaluations = [...row.evaluations]
           .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-          .slice(-12);
+          .slice(-12)
+          .map((item) => ({
+            score: Number.isFinite(item.quality_score) ? item.quality_score : null,
+            label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
+          }));
+
+        const evaluations = imported?.evaluations?.length ? imported.evaluations.slice(0, 12) : dbEvaluations;
         const averageScore =
-          evaluations.length > 0
-            ? evaluations.reduce((sum, item) => sum + item.quality_score, 0) / evaluations.length
-            : null;
-        const latestEvaluation = evaluations.length > 0 ? evaluations[evaluations.length - 1] : null;
+          imported?.averageScore ?? (evaluations.length > 0
+            ? evaluations.reduce((sum, item) => sum + (item.score ?? 0), 0) /
+              evaluations.filter((item) => item.score !== null).length
+            : null);
+
+        const latestScore =
+          imported?.latestScore ??
+          (evaluations.length > 0
+            ? evaluations.filter((item) => item.score !== null).slice(-1)[0]?.score ?? null
+            : null);
 
         return {
-          ...row,
+          agent_id: row.agent_id,
+          agent_name: imported?.agent_name || row.agent_name,
+          display_name: imported?.display_name ?? row.display_name,
+          team: row.team,
           evaluations,
-          averageScore,
-          latestEvaluation,
-          offToday: !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
+          averageScore:
+            averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
+          latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
+          offToday:
+            imported?.offToday === true ||
+            !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
         };
       })
       .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-    const maxEvaluations = Math.max(1, ...rows.map((row) => row.evaluations.length));
-    const evaluationColumns = Array.from({ length: Math.min(maxEvaluations, 12) }, (_, index) => `Eval ${index + 1}`);
+    const maxEvaluations = Math.max(
+      1,
+      ...rows.map((row) => Math.min(12, row.evaluations.length || 0))
+    );
 
-    return {
-      rows,
-      evaluationColumns,
-    };
-  }, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent]);
+    const evaluationColumns = Array.from(
+      { length: Math.min(maxEvaluations, 12) },
+      (_, index) => `Eval ${index + 1}`
+    );
+
+    return { rows, evaluationColumns };
+  }, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent, importedProgressByAgent]);
 
   function getProgressCellTone(score: number | null) {
     if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
@@ -1110,12 +1372,31 @@ function AuditsListSupabase() {
           </button>
           <button
             type="button"
+            onClick={() => importInputRef.current?.click()}
+            disabled={importingBoard}
+            style={secondaryButton}
+          >
+            {importingBoard ? 'Importing...' : 'Import Progress CSV'}
+          </button>
+          {importedFileName ? (
+            <button type="button" onClick={clearImportedProgress} style={secondaryButton}>
+              Clear Imported Board
+            </button>
+          ) : null}
+          <button
+            type="button"
             onClick={() => void loadAuditsAndProfiles()}
             style={secondaryButton}
           >
-            {' '}
-            Refresh{' '}
-          </button>{' '}
+            Refresh
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".csv"
+            onChange={(e) => void handleProgressImport(e.target.files?.[0] || null)}
+            style={{ display: 'none' }}
+          />
         </div>
       </div>{' '}
       {errorMessage ? <div style={errorBanner}>{errorMessage}</div> : null}{' '}
@@ -1278,7 +1559,7 @@ function AuditsListSupabase() {
                 Team Progress Board
               </h3>
               <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
-                This board uses the currently filtered audits. OFF today now saves in Supabase for the current day once the new table is created.
+                This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
               </p>
             </div>
             <div style={progressMetaRowStyle}>
@@ -1291,6 +1572,9 @@ function AuditsListSupabase() {
               <span style={progressMetaPillStyle}>
                 Columns: {evaluationProgressData.evaluationColumns.length}
               </span>
+              {importedFileName ? (
+                <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
+              ) : null}
             </div>
           </div>
 
@@ -1373,25 +1657,21 @@ function AuditsListSupabase() {
                         </div>
 
                         {paddedEvaluations.map((evaluation, index) => {
-                          const hasValue = evaluation.audit_date && Number.isFinite(evaluation.quality_score);
+                          const hasValue = evaluation.score !== null && Number.isFinite(evaluation.score);
                           const cellTone = hasValue
-                            ? getProgressCellTone(evaluation.quality_score)
+                            ? getProgressCellTone(evaluation.score)
                             : progressEmptyCellStyle;
 
                           return (
                             <div
-                              key={`${row.agent_id}-${row.team}-${evaluation.id}-${index}`}
+                              key={`${row.agent_id}-${row.team}-${index}`}
                               style={{
                                 ...progressEvalCellStyle,
                                 ...cellTone,
                               }}
-                              title={
-                                hasValue
-                                  ? `${formatDateOnly(evaluation.audit_date)} • ${evaluation.case_type} • ${Number(evaluation.quality_score).toFixed(2)}%`
-                                  : 'No evaluation'
-                              }
+                              title={hasValue ? evaluation.label || `${evaluation.score}%` : 'No evaluation'}
                             >
-                              {hasValue ? `${Number(evaluation.quality_score).toFixed(0)}%` : '-'}
+                              {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
                             </div>
                           );
                         })}
@@ -1399,14 +1679,10 @@ function AuditsListSupabase() {
                         <div style={progressMetaCellStyle}>
                           {row.offToday ? (
                             <span style={progressOffPillStyle}>OFF</span>
-                          ) : row.latestEvaluation ? (
+                          ) : row.latestScore !== null ? (
                             <div>
-                              <div style={primaryCellTextStyle}>
-                                {Number(row.latestEvaluation.quality_score).toFixed(0)}%
-                              </div>
-                              <div style={secondaryCellTextStyle}>
-                                {formatDateOnly(row.latestEvaluation.audit_date)}
-                              </div>
+                              <div style={primaryCellTextStyle}>{Number(row.latestScore).toFixed(0)}%</div>
+                              <div style={secondaryCellTextStyle}>{importedFileName ? 'Imported board' : 'Latest score'}</div>
                             </div>
                           ) : (
                             <span style={secondaryCellTextStyle}>-</span>
@@ -2332,23 +2608,23 @@ const progressEvalCellStyle = {
   fontSize: '13px',
 };
 const progressStrongCellStyle = {
-  background: 'rgba(22,163,74,0.18)',
-  color: '#bbf7d0',
-  border: '1px solid rgba(134,239,172,0.26)',
+  background: 'var(--progress-strong-bg)',
+  color: 'var(--progress-strong-text)',
+  border: '1px solid var(--progress-strong-border)',
 };
 const progressMediumCellStyle = {
-  background: 'rgba(245,158,11,0.18)',
-  color: '#fde68a',
-  border: '1px solid rgba(252,211,77,0.26)',
+  background: 'var(--progress-medium-bg)',
+  color: 'var(--progress-medium-text)',
+  border: '1px solid var(--progress-medium-border)',
 };
 const progressWeakCellStyle = {
-  background: 'rgba(220,38,38,0.18)',
-  color: '#fecaca',
-  border: '1px solid rgba(252,165,165,0.26)',
+  background: 'var(--progress-weak-bg)',
+  color: 'var(--progress-weak-text)',
+  border: '1px solid var(--progress-weak-border)',
 };
 const progressEmptyCellStyle = {
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-muted)',
+  background: 'var(--progress-empty-bg)',
+  color: 'var(--progress-empty-text)',
 };
 const progressOffButtonStyle = {
   padding: '8px 10px',
@@ -2362,9 +2638,9 @@ const progressOffButtonStyle = {
 };
 const progressOffButtonActiveStyle = {
   ...progressOffButtonStyle,
-  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(196,181,253,0.28)',
+  background: 'var(--progress-off-bg)',
+  color: 'var(--progress-off-text)',
+  border: '1px solid var(--progress-off-border)',
 };
 const progressOffPillStyle = {
   display: 'inline-flex',
@@ -2372,8 +2648,9 @@ const progressOffPillStyle = {
   justifyContent: 'center',
   padding: '8px 10px',
   borderRadius: '999px',
-  background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
-  color: '#ffffff',
+  background: 'var(--progress-off-bg)',
+  color: 'var(--progress-off-text)',
+  border: '1px solid var(--progress-off-border)',
   fontWeight: 800,
   fontSize: '12px',
 };
