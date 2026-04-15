@@ -158,21 +158,77 @@ function formatDateOnly(dateValue?: string | null) {
   return date.toLocaleDateString();
 }
 
-function parseUsDateToIso(value?: string | null) {
-  const raw = normalizeText(value);
-  if (!raw) return '';
-  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (!match) return '';
-  const [, month, day, year] = match;
-  return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+function padDatePart(value: number) {
+  return String(value).padStart(2, '0');
 }
 
-function parsePercent(value?: string | null) {
-  const raw = normalizeText(value).replace('%', '');
+function formatDateToIso(date: Date) {
+  return `${date.getFullYear()}-${padDatePart(date.getMonth() + 1)}-${padDatePart(date.getDate())}`;
+}
+
+function formatDateToUs(date: Date) {
+  return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
+}
+
+function excelSerialDateToIso(serial: number) {
+  if (!Number.isFinite(serial) || serial <= 0) return '';
+  const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+  const wholeDays = Math.floor(serial);
+  const fractionalDay = serial - wholeDays;
+  const date = new Date(excelEpoch.getTime() + wholeDays * 86400000 + Math.round(fractionalDay * 86400000));
+  if (Number.isNaN(date.getTime())) return '';
+  return formatDateToIso(date);
+}
+
+function parseUsDateToIso(value?: string | number | Date | null) {
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? '' : formatDateToIso(value);
+  }
+
+  if (typeof value === 'number') {
+    return excelSerialDateToIso(value);
+  }
+
+  const raw = normalizeText(typeof value === 'string' ? value : String(value ?? ''));
+  if (!raw) return '';
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const usMatch = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/);
+  if (usMatch) {
+    let [, month, day, year] = usMatch;
+    if (year.length === 2) {
+      const yearNumber = Number(year);
+      year = String(yearNumber >= 70 ? 1900 + yearNumber : 2000 + yearNumber);
+    }
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  }
+
+  if (/^\d{5}(\.\d+)?$/.test(raw)) {
+    const fromSerial = excelSerialDateToIso(Number(raw));
+    if (fromSerial) return fromSerial;
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatDateToIso(parsed);
+  }
+
+  return '';
+}
+
+function parsePercent(value?: string | number | null) {
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return null;
+    return value <= 1 ? value * 100 : value;
+  }
+  const raw = normalizeText(typeof value === 'string' ? value : String(value ?? '')).replace('%', '');
   if (!raw) return null;
   const parsed = Number(raw);
   if (Number.isNaN(parsed)) return null;
-  return parsed;
+  return parsed <= 1 ? parsed * 100 : parsed;
 }
 
 function parseCsv(text: string) {
@@ -244,7 +300,19 @@ function parseCsv(text: string) {
 }
 
 
-function buildParsedRecordsFromRows(rows: Array<Array<string | number | boolean | null | undefined>>) {
+function normalizeSpreadsheetCell(
+  cell: string | number | boolean | Date | null | undefined
+) {
+  if (cell === null || cell === undefined) return '';
+
+  if (cell instanceof Date) {
+    return formatDateToUs(cell);
+  }
+
+  return normalizeText(String(cell));
+}
+
+function buildParsedRecordsFromRows(rows: Array<Array<string | number | boolean | Date | null | undefined>>) {
   if (rows.length === 0) {
     return {
       headers: [] as string[],
@@ -254,7 +322,7 @@ function buildParsedRecordsFromRows(rows: Array<Array<string | number | boolean 
   }
 
   const normalizedRows = rows.map((row) =>
-    row.map((cell) => normalizeText(cell === null || cell === undefined ? '' : String(cell)))
+    row.map((cell) => normalizeSpreadsheetCell(cell))
   );
 
   const nonEmptyRows = normalizedRows.filter((row) =>
@@ -301,64 +369,28 @@ async function parseUploadFile(file: File) {
     const buffer = await file.arrayBuffer();
     const workbook = XLSX.read(buffer, {
       type: 'array',
-      cellDates: false,
+      cellDates: true,
+      raw: true,
+    });
+
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      return {
+        headers: [] as string[],
+        normalizedHeaders: [] as string[],
+        records: [] as Array<Record<string, string>>,
+      };
+    }
+
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
+      header: 1,
       raw: false,
+      defval: '',
+      blankrows: false,
     });
 
-    if (!workbook.SheetNames.length) {
-      return {
-        headers: [] as string[],
-        normalizedHeaders: [] as string[],
-        records: [] as Array<Record<string, string>>,
-      };
-    }
-
-    const sheetCandidates = workbook.SheetNames.map((sheetName) => {
-      const sheet = workbook.Sheets[sheetName];
-      const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
-        header: 1,
-        raw: false,
-        defval: '',
-        blankrows: false,
-      });
-      const parsed = buildParsedRecordsFromRows(rows);
-      const team = detectTeam(parsed.normalizedHeaders);
-      const preferredNameScore =
-        normalizeHeader(sheetName) === 'main'
-          ? 1000
-          : normalizeHeader(sheetName).includes('forqa')
-          ? 200
-          : normalizeHeader(sheetName).includes('rawdata')
-          ? -100
-          : 0;
-
-      return {
-        sheetName,
-        parsed,
-        team,
-        score:
-          preferredNameScore +
-          parsed.records.length +
-          (team ? 500 : 0),
-      };
-    });
-
-    const matchedSheet =
-      sheetCandidates
-        .filter((item) => item.team)
-        .sort((a, b) => b.score - a.score)[0] ||
-      null;
-
-    if (matchedSheet) {
-      return matchedSheet.parsed;
-    }
-
-    return sheetCandidates
-      .sort((a, b) => b.score - a.score)[0]?.parsed || {
-        headers: [] as string[],
-        normalizedHeaders: [] as string[],
-        records: [] as Array<Record<string, string>>,
-      };
+    return buildParsedRecordsFromRows(rows);
   }
 
   throw new Error('Unsupported file type. Please upload a CSV or Excel file (.xlsx, .xls, .xlsm).');
@@ -1013,14 +1045,14 @@ function AuditsImportSupabase() {
       setSkippedRows(finalSkippedRows);
 
       if (dedupeResult.uniqueAudits.length === 0) {
-        setErrorMessage('No importable audits were found in this CSV after duplicate detection.');
+        setErrorMessage('No importable audits were found after parsing and duplicate detection.');
       } else {
         setSuccessMessage(
           `${dedupeResult.uniqueAudits.length} ${team} audit row(s) are ready to import. ${finalSkippedRows.length} row(s) will be skipped, including ${dedupeResult.duplicateRows.length} duplicate row(s).`
         );
       }
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not parse CSV.');
+      setErrorMessage(error instanceof Error ? error.message : 'Could not parse the uploaded Excel or CSV file.');
     } finally {
       setParsing(false);
     }
@@ -1028,7 +1060,7 @@ function AuditsImportSupabase() {
 
   async function handleImport() {
     if (preparedAudits.length === 0 || !detectedTeam) {
-      setErrorMessage('Load a valid CSV file before importing.');
+      setErrorMessage('Load a valid Excel or CSV file before importing.');
       return;
     }
 
@@ -1133,7 +1165,7 @@ function AuditsImportSupabase() {
           <div style={sectionEyebrow}>Audit Import</div>
           <h2 style={pageTitleStyle}>Import Calls and Tickets Audits</h2>
           <p style={pageSubtextStyle}>
-            Upload one Calls or Tickets audit Excel or CSV file at a time. For Excel workbooks with many tabs, the importer automatically looks for the sheet that matches the Calls or Tickets audit layout.
+            Upload one Calls or Tickets audit CSV at a time. The importer matches only agents that already exist in profiles and skips the rest.
           </p>
         </div>
 
@@ -1234,7 +1266,7 @@ function AuditsImportSupabase() {
       <div style={panelStyle}>
         <div style={sectionEyebrow}>Preview</div>
         {previewRows.length === 0 ? (
-          <p style={pageSubtextStyle}>Load an Excel or CSV file to preview the audits that will be imported.</p>
+          <p style={pageSubtextStyle}>Load a CSV file to preview the audits that will be imported.</p>
         ) : (
           <div style={tableWrapStyle}>
             <div style={tableStyle}>
