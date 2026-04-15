@@ -1,5 +1,6 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import * as XLSX from 'xlsx';
 import { supabase } from '../lib/supabase';
 
 type TeamName = 'Calls' | 'Tickets';
@@ -240,6 +241,91 @@ function parseCsv(text: string) {
   });
 
   return { headers, normalizedHeaders, records };
+}
+
+
+function buildParsedRecordsFromRows(rows: Array<Array<string | number | boolean | null | undefined>>) {
+  if (rows.length === 0) {
+    return {
+      headers: [] as string[],
+      normalizedHeaders: [] as string[],
+      records: [] as Array<Record<string, string>>,
+    };
+  }
+
+  const normalizedRows = rows.map((row) =>
+    row.map((cell) => normalizeText(cell === null || cell === undefined ? '' : String(cell)))
+  );
+
+  const nonEmptyRows = normalizedRows.filter((row) =>
+    row.some((cell) => normalizeText(cell) !== '')
+  );
+
+  if (nonEmptyRows.length === 0) {
+    return {
+      headers: [] as string[],
+      normalizedHeaders: [] as string[],
+      records: [] as Array<Record<string, string>>,
+    };
+  }
+
+  const headers = nonEmptyRows[0].map((item) => normalizeText(item));
+  const normalizedHeaders = headers.map((item) => normalizeHeader(item));
+
+  const records = nonEmptyRows.slice(1).map((cells) => {
+    const record: Record<string, string> = {};
+    normalizedHeaders.forEach((header, index) => {
+      if (!header || header.startsWith('unnamed')) return;
+      record[header] = normalizeText(cells[index]);
+    });
+    return record;
+  });
+
+  return { headers, normalizedHeaders, records };
+}
+
+async function parseUploadFile(file: File) {
+  const fileName = file.name.toLowerCase();
+
+  if (fileName.endsWith('.csv')) {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const csvText = new TextDecoder('windows-1252').decode(bytes);
+    return parseCsv(csvText);
+  }
+
+  if (
+    fileName.endsWith('.xlsx') ||
+    fileName.endsWith('.xls') ||
+    fileName.endsWith('.xlsm')
+  ) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, {
+      type: 'array',
+      cellDates: false,
+      raw: false,
+    });
+
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      return {
+        headers: [] as string[],
+        normalizedHeaders: [] as string[],
+        records: [] as Array<Record<string, string>>,
+      };
+    }
+
+    const sheet = workbook.Sheets[firstSheetName];
+    const rows = XLSX.utils.sheet_to_json<Array<string | number | boolean | null>>(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: false,
+    });
+
+    return buildParsedRecordsFromRows(rows);
+  }
+
+  throw new Error('Unsupported file type. Please upload a CSV or Excel file (.xlsx, .xls, .xlsm).');
 }
 
 function detectTeam(normalizedHeaders: string[]): TeamName | '' {
@@ -853,15 +939,13 @@ function AuditsImportSupabase() {
     setFileName(file.name);
 
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const csvText = new TextDecoder('windows-1252').decode(bytes);
-      const parsed = parseCsv(csvText);
+      const parsed = await parseUploadFile(file);
       const team = detectTeam(parsed.normalizedHeaders);
 
       if (!team) {
         setDetectedTeam('');
         setErrorMessage(
-          'Could not detect whether this file is Calls or Tickets. Please use the CSV format you uploaded here.'
+          'Could not detect whether this file is Calls or Tickets. Please use the same Calls or Tickets layout from your upload sheet.'
         );
         setParsing(false);
         return;
@@ -1028,10 +1112,10 @@ function AuditsImportSupabase() {
       <div style={panelStyle}>
         <div style={formGridStyle}>
           <div style={{ gridColumn: '1 / -1' }}>
-            <label style={labelStyle}>Audit CSV File</label>
+            <label style={labelStyle}>Audit Excel or CSV File</label>
             <input
               type="file"
-              accept=".csv,text/csv"
+              accept=".csv,text/csv,.xlsx,.xls,.xlsm,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               onChange={(event) => void handleFileChange(event.target.files?.[0] || null)}
               style={fieldStyle}
             />
