@@ -945,6 +945,13 @@ function AuditsListSupabase() {
             ? evaluations.filter((item) => item.score !== null).slice(-1)[0]?.score ?? null
             : null);
 
+        const latestAuditDate =
+          row.evaluations.length > 0
+            ? [...row.evaluations]
+                .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
+                .slice(-1)[0]?.audit_date ?? null
+            : null;
+
         return {
           agent_id: row.agent_id,
           agent_name: imported?.agent_name || row.agent_name,
@@ -954,6 +961,7 @@ function AuditsListSupabase() {
           averageScore:
             averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
           latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
+          latestAuditDate,
           offToday:
             imported?.offToday === true ||
             !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
@@ -1590,7 +1598,7 @@ function AuditsListSupabase() {
                       {column}
                     </div>
                   ))}
-                  <div style={progressMetaCellStyle}>Latest</div>
+                  <div style={progressMetaCellStyle}>Latest Date</div>
                   <div style={progressMetaCellStyle}>Average</div>
                 </div>
 
@@ -1673,10 +1681,10 @@ function AuditsListSupabase() {
                         <div style={progressMetaCellStyle}>
                           {row.offToday ? (
                             <span style={progressOffPillStyle}>OFF</span>
-                          ) : row.latestScore !== null ? (
+                          ) : row.latestAuditDate ? (
                             <div>
-                              <div style={primaryCellTextStyle}>{Number(row.latestScore).toFixed(0)}%</div>
-                              <div style={secondaryCellTextStyle}>{importedFileName ? 'Imported board' : 'Latest score'}</div>
+                              <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
+                              <div style={secondaryCellTextStyle}>Latest evaluated audit</div>
                             </div>
                           ) : (
                             <span style={secondaryCellTextStyle}>-</span>
