@@ -387,22 +387,23 @@ function getAuditReferenceKey(audit: {
 }
 
 function normalizeScoreDetailSignature(
-  scoreDetails?: Array<Record<string, unknown>> | ScoreDetail[] | null
+  scoreDetails?: Array<Record<string, unknown> | ScoreDetail> | ScoreDetail[] | null
 ) {
   return JSON.stringify(
-    (scoreDetails || []).map((detail) => ({
-      metric: normalizeText(String(detail.metric ?? '')).toLowerCase(),
-      result: normalizeText(String(detail.result ?? '')).toLowerCase(),
-      pass: Number(detail.pass ?? 0),
-      borderline: Number(detail.borderline ?? 0),
-      adjustedWeight: Number(detail.adjustedWeight ?? detail.adjusted_weight ?? 0),
-      earned: Number(detail.earned ?? 0),
-      countsTowardScore:
-        detail.counts_toward_score ?? detail.countsTowardScore ?? true,
-      metricComment: normalizeText(
-        String(detail.metric_comment ?? detail.metricComment ?? '')
-      ),
-    }))
+    (scoreDetails || []).map((detail) => {
+      const raw = detail as Record<string, unknown>;
+
+      return {
+        metric: normalizeText(String(raw.metric ?? '')).toLowerCase(),
+        result: normalizeText(String(raw.result ?? '')).toLowerCase(),
+        pass: Number(raw.pass ?? 0),
+        borderline: Number(raw.borderline ?? 0),
+        adjustedWeight: Number(raw.adjustedWeight ?? raw.adjusted_weight ?? 0),
+        earned: Number(raw.earned ?? 0),
+        countsTowardScore: raw.counts_toward_score ?? raw.countsTowardScore ?? true,
+        metricComment: normalizeText(String(raw.metric_comment ?? raw.metricComment ?? '')),
+      };
+    })
   );
 }
 
