@@ -173,6 +173,49 @@ function getImportAgentId(record: Record<string, string>) {
   );
 }
 
+function createLegacyAgentId(team: TeamName, rawAgentName: string, rawAgentId: string) {
+  const candidateId = normalizeAgentId(rawAgentId);
+  if (
+    candidateId &&
+    !['#n/a', 'n/a', 'na', '#value!'].includes(candidateId.toLowerCase())
+  ) {
+    return candidateId;
+  }
+
+  const slugBase = normalizeAgentName(rawAgentName)
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return `${team.toLowerCase()}-${slugBase || 'unknown-agent'}`;
+}
+
+function resolveImportedAgent(
+  team: TeamName,
+  rawAgentName: string,
+  rawAgentId: string,
+  profiles: AgentProfile[]
+) {
+  const matchedProfile = matchProfile(team, rawAgentName, rawAgentId, profiles);
+  if (matchedProfile?.agent_id) {
+    return {
+      agent_id: matchedProfile.agent_id,
+      agent_name: matchedProfile.agent_name,
+      display_name: matchedProfile.display_name,
+      matchedProfile,
+      matched: true,
+    };
+  }
+
+  const parts = splitAgentLabel(rawAgentName);
+  return {
+    agent_id: createLegacyAgentId(team, rawAgentName, rawAgentId),
+    agent_name: parts.agentName || normalizeText(rawAgentName) || 'Unknown Agent',
+    display_name: parts.displayName || null,
+    matchedProfile: null,
+    matched: false,
+  };
+}
+
 function formatDateOnly(dateValue?: string | null) {
   if (!dateValue) return '-';
   const date = new Date(`${dateValue}T00:00:00`);
@@ -675,7 +718,6 @@ function getAuditDuplicateKey(audit: {
 }) {
   return [
     audit.team,
-    normalizeAgentId(audit.agent_id),
     normalizeAgentName(audit.agent_name),
     audit.audit_date,
     normalizeCaseType(audit.case_type),
@@ -773,7 +815,7 @@ function buildCallsAudit(
 ): { audit?: ImportableAudit; skipped?: SkippedRow } {
   const rawAgentName = record.agentname || '';
   const rawAgentId = getImportAgentId(record);
-  const profile = matchProfile('Calls', rawAgentName, rawAgentId, profiles);
+  const resolvedAgent = resolveImportedAgent('Calls', rawAgentName, rawAgentId, profiles);
   const auditDate = parseUsDateToIso(record.dateofthecall);
   const caseType = normalizeText(record.casetype);
   const orderNumber = normalizeText(record.ordernumber) || null;
@@ -785,16 +827,6 @@ function buildCallsAudit(
         rowNumber,
         agentLabel: rawAgentName || '-',
         reason: 'Missing Agent Name, Date of the call, or Case Type.',
-      },
-    };
-  }
-
-  if (!profile?.agent_id) {
-    return {
-      skipped: {
-        rowNumber,
-        agentLabel: rawAgentName,
-        reason: 'No matching Calls agent profile was found.',
       },
     };
   }
@@ -828,9 +860,9 @@ function buildCallsAudit(
   return {
     audit: {
       team: 'Calls',
-      agent_id: profile.agent_id,
-      agent_name: profile.agent_name,
-      display_name: profile.display_name,
+      agent_id: resolvedAgent.agent_id,
+      agent_name: resolvedAgent.agent_name,
+      display_name: resolvedAgent.display_name,
       case_type: caseType,
       audit_date: auditDate,
       order_number: orderNumber,
@@ -857,7 +889,7 @@ function buildTicketsAudit(
 ): { audit?: ImportableAudit; skipped?: SkippedRow } {
   const rawAgentName = record.agentname || '';
   const rawAgentId = getImportAgentId(record);
-  const profile = matchProfile('Tickets', rawAgentName, rawAgentId, profiles);
+  const resolvedAgent = resolveImportedAgent('Tickets', rawAgentName, rawAgentId, profiles);
   const auditDate = parseUsDateToIso(record.ticketdate);
   const caseType = normalizeText(record.question);
   const ticketId = normalizeText(record.ticketnumber) || null;
@@ -868,16 +900,6 @@ function buildTicketsAudit(
         rowNumber,
         agentLabel: rawAgentName || '-',
         reason: 'Missing Agent Name, Ticket Date, or Question.',
-      },
-    };
-  }
-
-  if (!profile?.agent_id) {
-    return {
-      skipped: {
-        rowNumber,
-        agentLabel: rawAgentName,
-        reason: 'No matching Tickets agent profile was found.',
       },
     };
   }
@@ -905,9 +927,9 @@ function buildTicketsAudit(
   return {
     audit: {
       team: 'Tickets',
-      agent_id: profile.agent_id,
-      agent_name: profile.agent_name,
-      display_name: profile.display_name,
+      agent_id: resolvedAgent.agent_id,
+      agent_name: resolvedAgent.agent_name,
+      display_name: resolvedAgent.display_name,
       case_type: caseType,
       audit_date: auditDate,
       order_number: null,
@@ -1178,7 +1200,7 @@ function AuditsImportSupabase() {
       setSkippedRows(finalSkippedRows);
 
       if (dedupeResult.uniqueAudits.length === 0) {
-        setErrorMessage('No importable audits were found after parsing, matching agents, and duplicate detection.');
+        setErrorMessage('No importable audits were found after parsing and duplicate detection.');
       } else {
         setSuccessMessage(
           `${dedupeResult.uniqueAudits.length} ${team} audit row(s) are ready to import. ${finalSkippedRows.length} row(s) will be skipped, including ${dedupeResult.duplicateRows.length} duplicate row(s).`
@@ -1298,7 +1320,7 @@ function AuditsImportSupabase() {
           <div style={sectionEyebrow}>Audit Import</div>
           <h2 style={pageTitleStyle}>Import Calls and Tickets Audits</h2>
           <p style={pageSubtextStyle}>
-            Upload one Calls or Tickets audit Excel or CSV file at a time. The importer scans workbook tabs, finds the most likely audit sheet, and matches agents using Vonage ID, Agent ID, full label, agent name, and display name fallbacks.
+            Upload one Calls or Tickets audit Excel or CSV file at a time. The importer scans workbook tabs, finds the most likely audit sheet, and now imports valid historical audits even when the row no longer matches an active profile exactly.
           </p>
         </div>
 
@@ -1321,7 +1343,7 @@ function AuditsImportSupabase() {
               style={fieldStyle}
             />
             <div style={helperTextStyle}>
-              Supported formats: the Calls and Tickets CSV files you uploaded in this chat. Duplicate detection now skips an audit only when the full audit payload matches exactly, including score details and comments.
+              Supported formats: the Calls and Tickets files you uploaded in this chat. Duplicate detection skips an audit only when the full audit payload matches exactly, including score details and comments.
             </div>
           </div>
 
@@ -1369,7 +1391,7 @@ function AuditsImportSupabase() {
 
       <div style={statsGridStyle}>
         <div style={statCardStyle}>
-          <div style={statLabelStyle}>Matched Agents</div>
+          <div style={statLabelStyle}>Agents Ready</div>
           <div style={statValueStyle}>
             {new Set(preparedAudits.map((item) => `${item.agent_id}|${item.team}`)).size}
           </div>
