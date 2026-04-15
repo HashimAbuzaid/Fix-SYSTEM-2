@@ -188,6 +188,9 @@ const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
   defaultValue: '',
 };
 
+const MAX_PROGRESS_EVAL_COLUMNS = 24;
+const PROGRESS_GROUP_SIZE = 6;
+
 const callsMetrics: Metric[] = [
   { name: 'Greeting', pass: 2, borderline: 1 },
   { name: 'Friendliness', pass: 5, borderline: 3 },
@@ -673,7 +676,7 @@ function AuditsListSupabase() {
         .map((header, index) => ({ header, index }))
         .filter((item) => /^eval\d+$/.test(item.header) || /^evaluation\d+$/.test(item.header) || /^qc\d+$/.test(item.header))
         .sort((a, b) => a.index - b.index)
-        .slice(0, 12);
+        .slice(0, MAX_PROGRESS_EVAL_COLUMNS);
 
       const latestIndex = findIndex('latest', 'latestscore');
       const averageIndex = findIndex('average', 'avg', 'averagescore');
@@ -926,13 +929,13 @@ function AuditsListSupabase() {
 
         const dbEvaluations = [...row.evaluations]
           .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-          .slice(-12)
+          .slice(-MAX_PROGRESS_EVAL_COLUMNS)
           .map((item) => ({
             score: Number.isFinite(item.quality_score) ? item.quality_score : null,
             label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
           }));
 
-        const evaluations = imported?.evaluations?.length ? imported.evaluations.slice(0, 12) : dbEvaluations;
+        const evaluations = imported?.evaluations?.length ? imported.evaluations.slice(0, MAX_PROGRESS_EVAL_COLUMNS) : dbEvaluations;
         const averageScore =
           imported?.averageScore ?? (evaluations.length > 0
             ? evaluations.reduce((sum, item) => sum + (item.score ?? 0), 0) /
@@ -969,17 +972,27 @@ function AuditsListSupabase() {
       })
       .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-    const maxEvaluations = Math.max(
-      1,
-      ...rows.map((row) => Math.min(12, row.evaluations.length || 0))
-    );
-
     const evaluationColumns = Array.from(
-      { length: Math.min(maxEvaluations, 12) },
+      { length: MAX_PROGRESS_EVAL_COLUMNS },
       (_, index) => `Eval ${index + 1}`
     );
 
-    return { rows, evaluationColumns };
+    const evaluationGroups = Array.from(
+      { length: Math.ceil(MAX_PROGRESS_EVAL_COLUMNS / PROGRESS_GROUP_SIZE) },
+      (_, groupIndex) => {
+        const startIndex = groupIndex * PROGRESS_GROUP_SIZE;
+        const endIndex = Math.min(startIndex + PROGRESS_GROUP_SIZE, MAX_PROGRESS_EVAL_COLUMNS);
+
+        return {
+          key: `group-${groupIndex + 1}`,
+          label: `Eval ${startIndex + 1}-${endIndex}`,
+          startIndex,
+          span: endIndex - startIndex,
+        };
+      }
+    );
+
+    return { rows, evaluationColumns, evaluationGroups };
   }, [filteredAudits, profiles, searchText, teamFilter, offTodayByAgent, importedProgressByAgent]);
 
   function getProgressCellTone(score: number | null) {
@@ -1563,7 +1576,7 @@ function AuditsListSupabase() {
                 Team Progress Board
               </h3>
               <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
-                This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
+                This board now supports 24 evaluation columns. It uses the currently filtered audits and can overlay a CSV progress table for Eval columns, Average, and OFF today.
               </p>
             </div>
             <div style={progressMetaRowStyle}>
@@ -1574,7 +1587,7 @@ function AuditsListSupabase() {
                 Rows: {evaluationProgressData.rows.length}
               </span>
               <span style={progressMetaPillStyle}>
-                Columns: {evaluationProgressData.evaluationColumns.length}
+                Eval Columns: {evaluationProgressData.evaluationColumns.length}
               </span>
               {importedFileName ? (
                 <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
@@ -1589,6 +1602,30 @@ function AuditsListSupabase() {
           ) : (
             <div style={progressTableWrapStyle}>
               <div style={progressTableStyle}>
+                <div style={{ ...progressRowStyle, ...progressGroupRowStyle }}>
+                  <div style={{ ...progressGroupLabelStyle, gridColumn: '1 / span 3' }}>
+                    Agent Snapshot
+                  </div>
+                  {evaluationProgressData.evaluationGroups.map((group) => (
+                    <div
+                      key={group.key}
+                      style={{
+                        ...progressGroupLabelStyle,
+                        gridColumn: `${4 + group.startIndex} / span ${group.span}`,
+                      }}
+                    >
+                      {group.label}
+                    </div>
+                  ))}
+                  <div
+                    style={{
+                      ...progressGroupLabelStyle,
+                      gridColumn: `${4 + evaluationProgressData.evaluationColumns.length} / span 2`,
+                    }}
+                  >
+                    Summary
+                  </div>
+                </div>
                 <div style={{ ...progressRowStyle, ...progressHeaderRowStyle }}>
                   <div style={progressAgentCellStyle}>Agent</div>
                   <div style={progressMetaCellStyle}>Team</div>
@@ -2565,14 +2602,14 @@ const progressTableWrapStyle = {
   background: 'var(--screen-panel-bg)',
 };
 const progressTableStyle = {
-  minWidth: '1400px',
+  minWidth: '2550px',
 };
 const progressEntryStyle = {
   borderBottom: '1px solid rgba(148,163,184,0.08)',
 };
 const progressRowStyle = {
   display: 'grid',
-  gridTemplateColumns: '240px 100px 110px repeat(12, 78px) 110px 110px',
+  gridTemplateColumns: `250px 92px 108px repeat(${MAX_PROGRESS_EVAL_COLUMNS}, 72px) 120px 110px`,
   gap: '10px',
   alignItems: 'stretch',
   padding: '12px 14px',
@@ -2587,6 +2624,25 @@ const progressHeaderRowStyle = {
   fontWeight: 800,
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
+};
+const progressGroupRowStyle = {
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-muted)',
+  fontSize: '11px',
+  fontWeight: 800,
+  letterSpacing: '0.1em',
+  textTransform: 'uppercase' as const,
+  borderBottom: '1px solid rgba(148,163,184,0.08)',
+};
+const progressGroupLabelStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '38px',
+  borderRadius: '10px',
+  background: 'var(--screen-soft-fill)',
+  border: '1px solid var(--screen-border)',
+  color: 'var(--screen-muted)',
 };
 const progressAgentCellStyle = {
   display: 'grid',
