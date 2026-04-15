@@ -32,27 +32,18 @@ type MonitoringDrawerProps = {
   onClose: () => void;
   items: MonitoringItem[];
   mode: 'agent' | 'supervisor';
+  /** Pass the app's current theme mode down as a prop — don't read storage here */
+  themeMode?: 'dark' | 'light';
   selectedAgentId?: string;
   onSelectAgentId?: (value: string) => void;
   agentOptions?: AgentOption[];
   onItemUpdated?: () => Promise<void> | void;
 };
 
-function getDrawerThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
-          window.localStorage.getItem('detroit-axle-theme') ||
-          window.sessionStorage.getItem('detroit-axle-theme') ||
-          ''
-        ).toLowerCase()
-      : '';
-
-  const isLight = themeMode === 'light' || themeMode === 'white';
+function getDrawerThemeVars(
+  themeMode: 'dark' | 'light' = 'dark',
+): Record<string, string> {
+  const isLight = themeMode === 'light';
   const isCompact = typeof window !== 'undefined' ? window.innerWidth < 900 : false;
   const topOffset = isCompact ? 0 : 224;
 
@@ -87,6 +78,7 @@ function MonitoringDrawer({
   onClose,
   items,
   mode,
+  themeMode = 'dark',
   selectedAgentId = '',
   onSelectAgentId,
   agentOptions = [],
@@ -94,7 +86,7 @@ function MonitoringDrawer({
 }: MonitoringDrawerProps) {
   const [workingId, setWorkingId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const themeVars = getDrawerThemeVars();
+  const themeVars = getDrawerThemeVars(themeMode);
 
   const filteredItems = useMemo(() => {
     if (mode !== 'supervisor' || !selectedAgentId) return items;
@@ -144,12 +136,7 @@ function MonitoringDrawer({
               {mode === 'agent' ? 'My Monitoring Items' : 'Team Monitoring'}
             </h3>
           </div>
-          <button
-            type="button"
-            aria-label="Close monitoring"
-            onClick={onClose}
-            style={closeButtonStyle}
-          >
+          <button type="button" aria-label="Close monitoring" onClick={onClose} style={closeButtonStyle}>
             ✕
           </button>
         </div>
@@ -258,14 +245,14 @@ const drawerStyle = {
   maxWidth: '100vw',
   height: 'var(--md-height, calc(100vh - 146px))',
   zIndex: 71,
-  background: 'var(--md-bg, linear-gradient(180deg, rgba(7,17,31,0.98) 0%, rgba(11,19,36,0.96) 100%))',
-  borderLeft: '1px solid var(--md-border, rgba(148,163,184,0.16))',
-  borderTop: '1px solid var(--md-border, rgba(148,163,184,0.16))',
+  background: 'var(--md-bg)',
+  borderLeft: '1px solid var(--md-border)',
+  borderTop: '1px solid var(--md-border)',
   borderTopLeftRadius: 'var(--md-radius, 28px 0 0 28px)',
-  boxShadow: 'var(--md-shadow, -16px 0 40px rgba(2,6,23,0.42))',
+  boxShadow: 'var(--md-shadow)',
   padding: '22px',
   overflowY: 'auto' as const,
-  color: 'var(--md-text, #e5eefb)',
+  color: 'var(--md-text)',
 };
 
 const headerStyle = {
@@ -276,15 +263,10 @@ const headerStyle = {
   marginBottom: '18px',
 };
 
-const titleStyle = {
-  margin: 0,
-  color: 'var(--md-title, #0f172a)',
-  fontSize: '20px',
-  fontWeight: 800,
-};
+const titleStyle = { margin: 0, color: 'var(--md-title)', fontSize: '20px', fontWeight: 800 };
 
 const eyebrowStyle = {
-  color: 'var(--md-muted, #64748b)',
+  color: 'var(--md-muted)',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.16em',
@@ -296,7 +278,7 @@ const closeButtonStyle = {
   width: '48px',
   height: '48px',
   borderRadius: '999px',
-  border: '1px solid var(--md-border, rgba(203,213,225,0.92))',
+  border: '1px solid var(--md-border)',
   background: 'rgba(255,255,255,0.98)',
   color: '#0f172a',
   cursor: 'pointer',
@@ -309,33 +291,24 @@ const closeButtonStyle = {
   boxShadow: '0 12px 28px rgba(15,23,42,0.14)',
 };
 
-const filterWrapStyle = {
-  display: 'grid',
-  gap: '8px',
-  marginBottom: '16px',
-};
-
-const labelStyle = {
-  color: 'var(--md-muted, #64748b)',
-  fontWeight: 700,
-  fontSize: '13px',
-};
+const filterWrapStyle = { display: 'grid', gap: '8px', marginBottom: '16px' };
+const labelStyle = { color: 'var(--md-muted)', fontWeight: 700, fontSize: '13px' };
 
 const fieldStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid var(--md-field-border, rgba(203,213,225,0.92))',
-  background: 'var(--md-field-bg, rgba(255,255,255,0.98))',
-  color: 'var(--md-text, #334155)',
+  border: '1px solid var(--md-field-border)',
+  background: 'var(--md-field-bg)',
+  color: 'var(--md-text)',
 };
 
 const errorBannerStyle = {
   marginBottom: '14px',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid rgba(248, 113, 113, 0.22)',
-  background: 'rgba(127, 29, 29, 0.12)',
+  border: '1px solid rgba(248,113,113,0.22)',
+  background: 'rgba(127,29,29,0.12)',
   color: '#b91c1c',
 };
 
@@ -343,33 +316,30 @@ const countPillStyle = {
   display: 'inline-flex',
   padding: '8px 12px',
   borderRadius: '999px',
-  background: 'var(--md-pill-bg, rgba(37,99,235,0.18))',
-  border: '1px solid var(--md-pill-border, rgba(96,165,250,0.2))',
+  background: 'var(--md-pill-bg)',
+  border: '1px solid var(--md-pill-border)',
   color: '#93c5fd',
   fontSize: '12px',
   fontWeight: 800,
   marginBottom: '16px',
 };
 
-const listStyle = {
-  display: 'grid',
-  gap: '14px',
-};
+const listStyle = { display: 'grid', gap: '14px' };
 
 const emptyStateStyle = {
   padding: '18px',
   borderRadius: '16px',
-  border: '1px dashed var(--md-border, rgba(203,213,225,0.92))',
-  backgroundColor: 'var(--md-empty-bg, rgba(241,245,249,0.98))',
-  color: 'var(--md-muted, #64748b)',
+  border: '1px dashed var(--md-border)',
+  backgroundColor: 'var(--md-empty-bg)',
+  color: 'var(--md-muted)',
   textAlign: 'center' as const,
 };
 
 const itemCardStyle = {
   padding: '18px',
   borderRadius: '18px',
-  border: '1px solid var(--md-border, rgba(203,213,225,0.92))',
-  background: 'var(--md-item-bg, #ffffff)',
+  border: '1px solid var(--md-border)',
+  background: 'var(--md-item-bg)',
   boxShadow: '0 14px 30px rgba(15,23,42,0.08)',
 };
 
@@ -381,37 +351,24 @@ const topRowStyle = {
   marginBottom: '10px',
 };
 
-const orderNumberStyle = {
-  fontWeight: 800,
-  color: 'var(--md-title, #0f172a)',
-  fontSize: '16px',
-};
+const orderNumberStyle = { fontWeight: 800, color: 'var(--md-title)', fontSize: '16px' };
 
 const statusPillStyle = {
   padding: '6px 10px',
   borderRadius: '999px',
-  background: 'var(--md-pill-bg, rgba(37,99,235,0.18))',
+  background: 'var(--md-pill-bg)',
   color: '#2563eb',
   fontSize: '11px',
   fontWeight: 800,
 };
 
-const commentStyle = {
-  color: 'var(--md-text, #334155)',
-  lineHeight: 1.55,
-  marginBottom: '12px',
-};
-
-const metaTextStyle = {
-  color: 'var(--md-muted, #64748b)',
-  fontSize: '13px',
-  marginBottom: '10px',
-};
+const commentStyle = { color: 'var(--md-text)', lineHeight: 1.55, marginBottom: '12px' };
+const metaTextStyle = { color: 'var(--md-muted)', fontSize: '13px', marginBottom: '10px' };
 
 const metaGridStyle = {
   display: 'grid',
   gap: '8px',
-  color: 'var(--md-muted, #64748b)',
+  color: 'var(--md-muted)',
   fontSize: '13px',
   marginBottom: '12px',
 };
