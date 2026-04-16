@@ -100,11 +100,6 @@ function getTypeColor(typeValue: FeedbackType) {
   return '#166534';
 }
 
-function getStatusColor(statusValue: FeedbackStatus) {
-  if (statusValue === 'Closed') return '#166534';
-  if (statusValue === 'In Progress') return '#92400e';
-  return '#1d4ed8';
-}
 
 function getDashboardThemeVars(): Record<string, string> {
   const themeMode =
@@ -369,10 +364,6 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     [feedbackItems]
   );
 
-  const coachingPlanCount = useMemo(
-    () => feedbackItems.filter((item) => !!(item.action_plan || '').trim()).length,
-    [feedbackItems]
-  );
 
   function handleSelectAgent(profile: AgentProfile) {
     setSelectedAgentProfileId(profile.id);
