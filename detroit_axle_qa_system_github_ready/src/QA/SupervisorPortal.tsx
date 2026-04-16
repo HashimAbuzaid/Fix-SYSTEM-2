@@ -631,8 +631,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     }
   }
 
-  if (loading) {
-
   const filteredFeedbackItems = useMemo(() => {
     return feedbackItems.filter((item) => {
       const matchesAgent = selectedAgent
@@ -685,6 +683,9 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       )
     );
   }
+
+  if (loading) {
+
 
     return <div style={{ color: 'var(--da-muted-text, #cbd5e1)' }}>Loading supervisor portal...</div>;
   }
