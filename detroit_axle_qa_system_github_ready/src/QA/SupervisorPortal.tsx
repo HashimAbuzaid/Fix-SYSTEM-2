@@ -96,7 +96,6 @@ type SupervisorPortalProps = {
   currentUser: UserProfile;
 };
 
-
 type AgentFeedback = {
   id: string;
   agent_id: string;
@@ -225,7 +224,6 @@ function openNativeDatePicker(target: HTMLInputElement) {
   const input = target as HTMLInputElement & { showPicker?: () => void };
   input.showPicker?.();
 }
-
 
 function getSupervisorThemeVars(): Record<string, string> {
   const themeMode =
@@ -435,14 +433,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       audit.phone_number || '-'
     }`;
   }
-
-  function getCommentsPreview(value?: string | null) {
-    const text = (value || '').trim();
-    if (!text) return '-';
-    if (text.length <= 120) return text;
-    return `${text.slice(0, 117)}...`;
-  }
-
 
   function normalizeAgentId(value?: string | null) {
     return String(value || '').trim().replace(/\.0+$/, '');
@@ -695,7 +685,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   }
 
   if (loading) {
-
 
     return <div style={{ color: 'var(--da-muted-text, #cbd5e1)' }}>Loading supervisor portal...</div>;
   }
@@ -1492,58 +1481,6 @@ const errorBanner = {
   color: 'var(--da-error-text, #fecaca)',
 };
 
-const auditTableWrapStyle = {
-  marginTop: '16px',
-  overflowX: 'auto' as const,
-  borderRadius: '18px',
-  border: '1px solid rgba(148,163,184,0.14)',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: '0 8px 24px rgba(2,6,23,0.2)',
-};
-
-const auditTableStyle = {
-  minWidth: '1320px',
-};
-
-const auditEntryStyle = {
-  borderBottom: '1px solid rgba(148,163,184,0.08)',
-};
-
-const auditRowStyle = {
-  display: 'grid',
-  gridTemplateColumns:
-    '140px 220px minmax(240px, 1.4fr) 120px 180px 220px minmax(260px, 1.6fr) 100px',
-  gap: '14px',
-  alignItems: 'center',
-  padding: '14px 16px',
-};
-
-const auditHeaderRowStyle = {
-  position: 'sticky' as const,
-  top: 0,
-  zIndex: 1,
-  background: 'rgba(2,6,23,0.92)',
-  color: 'var(--da-accent-text, #93c5fd)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-
-const auditCellDateStyle = {};
-const auditCellCaseStyle = {};
-const auditCellReferenceStyle = {};
-const auditCellScoreStyle = {};
-const auditCellReleaseStyle = {};
-const auditCellCreatorStyle = {};
-const auditCellCommentsStyle = {};
-const auditCellActionsStyle = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap' as const,
-};
-
 const primaryCellTextStyle = {
   color: 'var(--da-title, #f8fafc)',
   fontSize: '14px',
@@ -1557,20 +1494,6 @@ const secondaryCellTextStyle = {
   fontSize: '12px',
   fontWeight: 600,
   lineHeight: 1.4,
-};
-
-const scorePillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: '84px',
-  padding: '8px 10px',
-  borderRadius: '999px',
-  background: 'rgba(37, 99, 235, 0.14)',
-  border: '1px solid rgba(96,165,250,0.32)',
-  color: 'var(--da-accent-text, #2563eb)',
-  fontSize: '13px',
-  fontWeight: 800,
 };
 
 const pillStyle = {
@@ -1593,18 +1516,6 @@ const miniSecondaryButton = {
   cursor: 'pointer',
   fontWeight: 700,
   fontSize: '12px',
-};
-
-const auditExpandedRowStyle = {
-  padding: '0 16px 16px 16px',
-};
-
-const expandedPanelStyle = {
-  borderRadius: '18px',
-  border: '1px solid rgba(148,163,184,0.14)',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  padding: '18px',
 };
 
 const detailInfoGridStyle = {
@@ -1635,22 +1546,6 @@ const detailValueStyle = {
   fontSize: '14px',
   fontWeight: 700,
   lineHeight: 1.5,
-};
-
-const fullCommentCardStyle = {
-  borderRadius: '14px',
-  border: '1px solid rgba(148,163,184,0.14)',
-  background: 'var(--da-surface-bg, rgba(15,23,42,0.6))',
-  padding: '14px 16px',
-  marginBottom: '18px',
-};
-
-const fullCommentTextStyle = {
-  color: 'var(--da-page-text, #e5eefb)',
-  fontSize: '14px',
-  lineHeight: 1.7,
-  whiteSpace: 'pre-wrap' as const,
-  wordBreak: 'break-word' as const,
 };
 
 const detailRowStyle = {
@@ -1698,19 +1593,6 @@ const recordsTableWrapStyle = {
   boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.2))',
 };
 
-const coachingTableStyle = {
-  minWidth: '980px',
-};
-
-const coachingRowStyle = {
-  display: 'grid',
-  gridTemplateColumns: '220px minmax(260px, 1.4fr) 180px 150px 140px 120px',
-  gap: '14px',
-  alignItems: 'center',
-  padding: '14px 16px',
-  borderBottom: '1px solid rgba(148,163,184,0.1)',
-};
-
 const recordsTableStyle = {
   minWidth: '1080px',
 };
@@ -1741,7 +1623,6 @@ const recordsCellDateFromStyle = {};
 const recordsCellDateToStyle = {};
 const recordsCellMetricStyle = {};
 const recordsCellNotesStyle = {};
-
 
 const sectionIntroTextStyle = {
   marginTop: '0',
