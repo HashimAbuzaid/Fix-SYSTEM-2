@@ -33,7 +33,6 @@ type AgentFeedback = {
   status: FeedbackStatus;
   created_at: string;
   acknowledged_by_agent?: boolean | null;
-  acknowledged_at?: string | null;
 };
 
 type AgentProfile = {
@@ -596,7 +595,6 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       due_date: followUpDate || null,
       status: statusOnCreate,
       acknowledged_by_agent: false,
-      acknowledged_at: null,
     });
 
     setSaving(false);
@@ -636,13 +634,11 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setSuccessMessage('');
 
     const nextAck = !item.acknowledged_by_agent;
-    const acknowledgedAt = nextAck ? new Date().toISOString() : null;
 
     const { error } = await supabase
       .from('agent_feedback')
       .update({
         acknowledged_by_agent: nextAck,
-        acknowledged_at: acknowledgedAt,
       })
       .eq('id', item.id);
 
@@ -655,7 +651,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setFeedbackItems((prev) =>
       prev.map((entry) =>
         entry.id === item.id
-          ? { ...entry, acknowledged_by_agent: nextAck, acknowledged_at: acknowledgedAt }
+          ? { ...entry, acknowledged_by_agent: nextAck }
           : entry
       )
     );
@@ -1151,7 +1147,10 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                           />
                           <div style={expandedGridStyle}>
                             <DetailMini label="Created" value={formatDateTime(item.created_at)} />
-                            <DetailMini label="Acknowledged At" value={formatDateTime(item.acknowledged_at)} />
+                            <DetailMini
+                              label="Acknowledgment"
+                              value={item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'}
+                            />
                             <DetailMini label="Follow-up Date" value={formatDateOnly(item.due_date)} />
                             <DetailMini label="Status" value={item.status} />
                             <DetailMini label="Priority" value={parseStructuredPlan(item.action_plan).priority} />
