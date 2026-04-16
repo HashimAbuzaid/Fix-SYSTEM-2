@@ -151,17 +151,6 @@ function normalizeReviewStage(value?: string | null): ReviewStage {
   return 'QA Shared';
 }
 
-function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
-  if (
-    value === 'Improved' ||
-    value === 'Partial Improvement' ||
-    value === 'No Improvement' ||
-    value === 'Needs Escalation'
-  ) {
-    return value;
-  }
-  return 'Not Set';
-}
 
 function parseStructuredPlan(value?: string | null) {
   const raw = String(value || '').trim();
