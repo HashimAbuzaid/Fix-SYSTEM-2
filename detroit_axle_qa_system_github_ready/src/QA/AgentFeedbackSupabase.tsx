@@ -1527,6 +1527,13 @@ const contextHelperStyle: React.CSSProperties = {
   fontSize: '12px',
 };
 
+const auditCommentStyle: React.CSSProperties = {
+  marginTop: '14px',
+  borderRadius: '18px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '16px',
+};
 
 const miniLabelStyle: React.CSSProperties = {
   color: 'var(--cc-eyebrow)',
@@ -1536,6 +1543,12 @@ const miniLabelStyle: React.CSSProperties = {
   letterSpacing: '0.12em',
 };
 
+const auditCommentBodyStyle: React.CSSProperties = {
+  color: 'var(--cc-page-text)',
+  lineHeight: 1.6,
+  marginTop: '10px',
+  whiteSpace: 'pre-wrap',
+};
 
 const feedbackTableWrapStyle: React.CSSProperties = {
   overflowX: 'auto',
