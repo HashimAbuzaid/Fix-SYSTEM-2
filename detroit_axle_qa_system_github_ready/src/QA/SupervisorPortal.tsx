@@ -248,18 +248,32 @@ function getSupervisorThemeVars(): Record<string, string> {
     '--da-subtle-text': isLight ? '#64748b' : '#94a3b8',
     '--da-accent-text': isLight ? '#2563eb' : '#60a5fa',
     '--da-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,248,255,0.98) 100%)'
       : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
     '--da-panel-border': isLight
-      ? '1px solid rgba(203,213,225,0.92)'
+      ? '1px solid rgba(191,219,254,0.95)'
       : '1px solid rgba(148,163,184,0.14)',
     '--da-panel-shadow': isLight
-      ? '0 18px 40px rgba(15,23,42,0.10)'
+      ? '0 16px 36px rgba(15,23,42,0.08)'
       : '0 18px 40px rgba(2,6,23,0.35)',
-    '--da-surface-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.62)',
+    '--da-surface-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.62)',
+    '--da-card-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.52)',
     '--da-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,252,0.99) 100%)'
       : 'rgba(15,23,42,0.74)',
+    '--da-field-border': isLight
+      ? '1px solid rgba(191,219,254,0.95)'
+      : '1px solid rgba(148,163,184,0.16)',
+    '--da-field-text': isLight ? '#0f172a' : '#e5eefb',
+    '--da-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.96)',
+    '--da-option-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.60)',
+    '--da-active-option-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
+    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.78)',
+    '--da-secondary-text': isLight ? '#334155' : '#e5eefb',
+    '--da-secondary-border': isLight
+      ? '1px solid rgba(191,219,254,0.95)'
+      : '1px solid rgba(148,163,184,0.18)',
+    '--da-error-text': isLight ? '#b91c1c' : '#fecaca',
   };
 }
 
@@ -284,7 +298,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   const [recordDateTo, setRecordDateTo] = useState('');
 
   const [feedbackItems, setFeedbackItems] = useState<AgentFeedback[]>([]);
-  const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null);
   const [reviewStageDrafts, setReviewStageDrafts] = useState<Record<string, ReviewStage>>({});
   const [supervisorReviewDrafts, setSupervisorReviewDrafts] = useState<Record<string, string>>({});
 
@@ -620,34 +633,64 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     }
   }
 
-  const filteredFeedbackItems = useMemo(() => {
+  const selectedAgentFeedbackItems = useMemo(() => {
     return feedbackItems.filter((item) => {
-      const matchesAgent = selectedAgent
-        ? (
-            (normalizeAgentId(item.agent_id) &&
-              normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id)) ||
-            normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name)
-          )
-        : true;
-      return matchesAgent;
+      if (!selectedAgent) return true;
+      return (
+        ((normalizeAgentId(item.agent_id) &&
+          normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id)) ||
+          normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name)) &&
+        item.team === selectedAgent.team
+      );
     });
   }, [feedbackItems, selectedAgent]);
 
-  const awaitingSupervisorCount = filteredFeedbackItems.filter((item) => {
-    const parsed = parseCoachingPlan(item.action_plan);
-    return item.status !== 'Closed' && parsed.reviewStage === 'Agent Responded';
-  }).length;
+  const teamOpenFeedbackItems = useMemo(
+    () => feedbackItems.filter((item) => item.status !== 'Closed'),
+    [feedbackItems]
+  );
 
-  const supervisorInboxItems = filteredFeedbackItems
-    .filter((item) => item.status !== 'Closed')
-    .sort((a, b) => {
+  const scopedOpenFeedbackItems = useMemo(
+    () => selectedAgentFeedbackItems.filter((item) => item.status !== 'Closed'),
+    [selectedAgentFeedbackItems]
+  );
+
+  const coachingFallbackToTeam =
+    Boolean(selectedAgent) &&
+    scopedOpenFeedbackItems.length === 0 &&
+    teamOpenFeedbackItems.length > 0;
+
+  const supervisorInboxItems = useMemo(() => {
+    const sourceItems =
+      coachingFallbackToTeam || !selectedAgent
+        ? teamOpenFeedbackItems
+        : scopedOpenFeedbackItems;
+
+    return [...sourceItems].sort((a, b) => {
       const aParsed = parseCoachingPlan(a.action_plan);
       const bParsed = parseCoachingPlan(b.action_plan);
       const aNeedsReview = aParsed.reviewStage === 'Agent Responded' ? 1 : 0;
       const bNeedsReview = bParsed.reviewStage === 'Agent Responded' ? 1 : 0;
       if (aNeedsReview !== bNeedsReview) return bNeedsReview - aNeedsReview;
+
+      const aAwaitingComment = aParsed.agentComment.trim() ? 0 : 1;
+      const bAwaitingComment = bParsed.agentComment.trim() ? 0 : 1;
+      if (aAwaitingComment !== bAwaitingComment) return bAwaitingComment - aAwaitingComment;
+
       return String(b.created_at).localeCompare(String(a.created_at));
     });
+  }, [coachingFallbackToTeam, selectedAgent, scopedOpenFeedbackItems, teamOpenFeedbackItems]);
+
+  const awaitingSupervisorCount = supervisorInboxItems.filter((item) => {
+    const parsed = parseCoachingPlan(item.action_plan);
+    return parsed.reviewStage === 'Agent Responded' || (!!parsed.agentComment.trim() && !parsed.supervisorReview.trim());
+  }).length;
+
+  const visibleCoachingCount = supervisorInboxItems.length;
+  const awaitingAgentReplyCount = supervisorInboxItems.filter((item) => {
+    const parsed = parseCoachingPlan(item.action_plan);
+    return !parsed.agentComment.trim();
+  }).length;
 
   async function handleSaveSupervisorReview(item: AgentFeedback) {
     setErrorMessage('');
@@ -917,12 +960,34 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
 
           <Section title="Coaching Review Queue">
             <p style={sectionIntroTextStyle}>
-              Coaching items now stay visible on the supervisor portal. Review the agent reply, leave your supervisor review, and move the coaching cycle forward from here.
+              Coaching now stays visible for supervisors here. Review the agent reply, leave your supervisor review, and move the item forward without leaving the portal.
             </p>
+
+            <div style={coachingMetricsGridStyle}>
+              <div style={coachingMetricCardStyle}>
+                <div style={detailLabelStyle}>Visible Coaching</div>
+                <div style={detailValueStyle}>{String(visibleCoachingCount)}</div>
+              </div>
+              <div style={coachingMetricCardStyle}>
+                <div style={detailLabelStyle}>Awaiting Agent Reply</div>
+                <div style={detailValueStyle}>{String(awaitingAgentReplyCount)}</div>
+              </div>
+              <div style={coachingMetricCardStyle}>
+                <div style={detailLabelStyle}>Awaiting Supervisor</div>
+                <div style={detailValueStyle}>{String(awaitingSupervisorCount)}</div>
+              </div>
+            </div>
+
+            {coachingFallbackToTeam ? (
+              <div style={coachingFallbackNoticeStyle}>
+                No open coaching items were found for the currently selected agent, so the team-wide coaching queue is shown instead.
+              </div>
+            ) : null}
+
             {supervisorInboxItems.length === 0 ? (
               <p>No coaching items found for this team filter.</p>
             ) : (
-              <div style={supervisorInboxGridStyle}>
+              <div style={supervisorInboxListStyle}>
                 {supervisorInboxItems.map((item) => {
                   const parsedPlan = parseCoachingPlan(item.action_plan);
                   const stageColor =
@@ -936,6 +1001,13 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                       ? '#2563eb'
                       : '#475569';
 
+                  const replyPreview = parsedPlan.agentComment.trim()
+                    ? parsedPlan.agentComment.trim()
+                    : 'No agent reply yet.';
+                  const supervisorPreview = parsedPlan.supervisorReview.trim()
+                    ? parsedPlan.supervisorReview.trim()
+                    : 'No supervisor review yet.';
+
                   return (
                     <div key={`inbox-${item.id}`} style={supervisorInboxCardStyle}>
                       <div style={supervisorInboxTopRowStyle}>
@@ -946,19 +1018,24 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                             {getAgentLabel(item.agent_id, item.agent_name)} • {item.team}
                           </div>
                         </div>
-                        <span style={{ ...pillStyle, backgroundColor: stageColor }}>
-                          {parsedPlan.reviewStage}
-                        </span>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ ...pillStyle, backgroundColor: stageColor }}>
+                            {parsedPlan.reviewStage}
+                          </span>
+                          <div style={{ ...secondaryCellTextStyle, marginTop: '8px' }}>
+                            Due {formatDateOnly(item.due_date)}
+                          </div>
+                        </div>
                       </div>
 
-                      <div style={detailInfoGridStyle}>
-                        <div style={detailInfoCardStyle}>
-                          <div style={detailLabelStyle}>Agent Comment</div>
-                          <div style={detailValueStyle}>{parsedPlan.agentComment || 'No agent reply yet.'}</div>
+                      <div style={supervisorInboxBodyGridStyle}>
+                        <div style={supervisorInboxMiniCardStyle}>
+                          <div style={detailLabelStyle}>Agent Reply</div>
+                          <div style={supervisorInboxPreviewStyle}>{replyPreview}</div>
                         </div>
-                        <div style={detailInfoCardStyle}>
-                          <div style={detailLabelStyle}>Action Plan</div>
-                          <div style={detailValueStyle}>{parsedPlan.actionPlan || '-'}</div>
+                        <div style={supervisorInboxMiniCardStyle}>
+                          <div style={detailLabelStyle}>Supervisor Review</div>
+                          <div style={supervisorInboxPreviewStyle}>{supervisorPreview}</div>
                         </div>
                       </div>
 
@@ -993,7 +1070,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                                 [item.id]: e.target.value,
                               }))
                             }
-                            rows={4}
+                            rows={3}
                             style={fieldStyle}
                             placeholder="Leave your supervisor review, decision, or escalation guidance."
                           />
@@ -1007,15 +1084,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                           style={miniSecondaryButton}
                         >
                           Save Supervisor Review
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandedFeedbackId(expandedFeedbackId === item.id ? null : item.id)
-                          }
-                          style={miniSecondaryButton}
-                        >
-                          {expandedFeedbackId === item.id ? 'Hide Full Queue Row' : 'Open Full Queue Row'}
                         </button>
                       </div>
                     </div>
@@ -1064,6 +1132,10 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                 <div style={auditHistoryListWrapStyle}>
                   {filteredAudits.map((audit) => {
                     const isExpanded = expandedAuditId === audit.id;
+                    const auditCommentPreview =
+                      audit.comments?.trim() && audit.comments.trim().length > 180
+                        ? `${audit.comments.trim().slice(0, 180)}…`
+                        : audit.comments?.trim() || 'No audit comment saved for this item.';
 
                     return (
                       <div
@@ -1073,7 +1145,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                           ...(isExpanded ? auditHistoryCardActiveStyle : {}),
                         }}
                       >
-                        <div style={auditHistoryTopRowStyle}>
+                        <div style={auditCompactTopRowStyle}>
                           <div>
                             <div style={primaryCellTextStyle}>{audit.case_type}</div>
                             <div style={secondaryCellTextStyle}>
@@ -1097,26 +1169,18 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                           </div>
                         </div>
 
-                        <div style={auditHistoryMetaGridStyle}>
-                          <div style={auditHistoryMetaCardStyle}>
+                        <div style={auditCompactMetaRowStyle}>
+                          <div style={auditCompactMetaCardStyle}>
                             <div style={detailLabelStyle}>Reference</div>
                             <div style={detailValueStyle}>{getAuditReference(audit)}</div>
                           </div>
-                          <div style={auditHistoryMetaCardStyle}>
-                            <div style={detailLabelStyle}>Created By</div>
-                            <div style={detailValueStyle}>
-                              {audit.created_by_name || audit.created_by_email || '-'}
-                            </div>
-                          </div>
-                          <div style={auditHistoryMetaCardStyle}>
+                          <div style={auditCompactMetaCardStyle}>
                             <div style={detailLabelStyle}>Release Date</div>
                             <div style={detailValueStyle}>{formatDate(audit.shared_at)}</div>
                           </div>
                         </div>
 
-                        <div style={auditHistoryCommentStyle}>
-                          {audit.comments?.trim() || 'No audit comment saved for this item.'}
-                        </div>
+                        <div style={auditHistoryCommentStyle}>{auditCommentPreview}</div>
 
                         <div style={sectionHeaderActionsStyle}>
                           <button
@@ -1132,10 +1196,14 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
 
                         {isExpanded ? (
                           <div style={auditHistoryExpandedWrapStyle}>
-                            <div style={{ ...sectionEyebrow, marginBottom: '10px' }}>
+                            <div style={auditHistoryCommentFullStyle}>
+                              {audit.comments?.trim() || 'No audit comment saved for this item.'}
+                            </div>
+
+                            <div style={{ ...sectionEyebrow, marginBottom: '8px' }}>
                               Score Details
                             </div>
-                            <div style={{ display: 'grid', gap: '10px' }}>
+                            <div style={{ display: 'grid', gap: '8px' }}>
                               {(audit.score_details || []).map((detail) => (
                                 <div
                                   key={`${audit.id}-${detail.metric}`}
@@ -1295,7 +1363,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const sectionHeaderActionsStyle = {
   display: 'flex',
   justifyContent: 'flex-end',
-  marginBottom: '12px',
+  marginBottom: '10px',
 };
 
 const collapsedMessageStyle = {
@@ -1447,9 +1515,9 @@ const pickerOptionActiveStyle = {
 
 const summaryGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '16px',
-  marginTop: '24px',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
+  marginTop: '20px',
   marginBottom: '8px',
 };
 
@@ -1457,8 +1525,8 @@ const cardStyle = {
   background:
     'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  borderRadius: '22px',
-  padding: '22px',
+  borderRadius: '18px',
+  padding: '18px',
   boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
 };
 
@@ -1521,15 +1589,15 @@ const miniSecondaryButton = {
 const detailInfoGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '12px',
-  marginBottom: '18px',
+  gap: '10px',
+  marginBottom: '12px',
 };
 
 const detailInfoCardStyle = {
   borderRadius: '14px',
   border: '1px solid rgba(148,163,184,0.14)',
-  background: 'var(--da-surface-bg, rgba(15,23,42,0.6))',
-  padding: '14px 16px',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  padding: '12px 14px',
 };
 
 const detailLabelStyle = {
@@ -1626,42 +1694,42 @@ const recordsCellNotesStyle = {};
 
 const sectionIntroTextStyle = {
   marginTop: '0',
-  marginBottom: '14px',
-  color: 'var(--da-subtle-text, #94a3b8)',
+  marginBottom: '12px',
+  color: 'var(--da-muted-text, #475569)',
   lineHeight: 1.6,
+  fontSize: '13px',
 };
 
 const auditHistoryStatsGridStyle = {
   display: 'grid',
   gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '12px',
-  marginBottom: '14px',
+  gap: '10px',
+  marginBottom: '12px',
 };
 
 const auditHistoryStatCardStyle = {
-  borderRadius: '16px',
+  borderRadius: '14px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
-  padding: '14px 16px',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  padding: '12px 14px',
 };
 
 const auditHistoryListWrapStyle = {
   display: 'grid',
-  gap: '14px',
-  maxHeight: '900px',
+  gap: '10px',
+  maxHeight: '520px',
   overflowY: 'auto' as const,
   paddingRight: '6px',
 };
 
 const auditHistoryCardStyle = {
-  borderRadius: '22px',
+  borderRadius: '18px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
-  padding: '18px',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.14))',
+  padding: '12px 14px',
   display: 'grid',
-  gap: '12px',
+  gap: '10px',
 };
 
 const auditHistoryCardActiveStyle = {
@@ -1669,52 +1737,116 @@ const auditHistoryCardActiveStyle = {
   outlineOffset: '0',
 };
 
-const auditHistoryTopRowStyle = {
+
+const auditHistoryScoreStyle = {
+  color: 'var(--da-title, #f8fafc)',
+  fontSize: '18px',
+  fontWeight: 900,
+};
+
+
+
+const auditHistoryCommentStyle = {
+  borderRadius: '12px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '10px 12px',
+  color: 'var(--da-page-text, #e5eefb)',
+  lineHeight: 1.55,
+  whiteSpace: 'pre-wrap' as const,
+  fontSize: '13px',
+};
+
+const auditHistoryExpandedWrapStyle = {
+  display: 'grid',
+  gap: '10px',
+  marginTop: '2px',
+};
+
+
+const coachingMetricsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '10px',
+  marginBottom: '12px',
+};
+
+const coachingMetricCardStyle = {
+  borderRadius: '14px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  padding: '12px 14px',
+};
+
+const coachingFallbackNoticeStyle = {
+  marginBottom: '12px',
+  borderRadius: '12px',
+  border: '1px solid rgba(245,158,11,0.24)',
+  background: 'rgba(245,158,11,0.10)',
+  color: 'var(--da-page-text, #e5eefb)',
+  padding: '10px 12px',
+  lineHeight: 1.55,
+  fontSize: '13px',
+};
+
+const supervisorInboxListStyle = {
+  display: 'grid',
+  gap: '12px',
+  maxHeight: '520px',
+  overflowY: 'auto' as const,
+  paddingRight: '6px',
+};
+
+const supervisorInboxBodyGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '10px',
+};
+
+const supervisorInboxMiniCardStyle = {
+  borderRadius: '12px',
+  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  padding: '10px 12px',
+};
+
+const supervisorInboxPreviewStyle = {
+  color: 'var(--da-page-text, #e5eefb)',
+  lineHeight: 1.55,
+  fontSize: '13px',
+  marginTop: '6px',
+  whiteSpace: 'pre-wrap' as const,
+};
+
+const auditCompactTopRowStyle = {
   display: 'flex',
   justifyContent: 'space-between',
   gap: '12px',
   alignItems: 'flex-start',
 };
 
-const auditHistoryScoreStyle = {
-  color: 'var(--da-title, #f8fafc)',
-  fontSize: '22px',
-  fontWeight: 900,
-};
-
-const auditHistoryMetaGridStyle = {
+const auditCompactMetaRowStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '12px',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '10px',
 };
 
-const auditHistoryMetaCardStyle = {
-  borderRadius: '14px',
+const auditCompactMetaCardStyle = {
+  borderRadius: '12px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '10px 12px',
+};
+
+const auditHistoryCommentFullStyle = {
+  borderRadius: '12px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   padding: '12px 14px',
-};
-
-const auditHistoryCommentStyle = {
-  borderRadius: '14px',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
-  padding: '14px 16px',
   color: 'var(--da-page-text, #e5eefb)',
   lineHeight: 1.6,
+  fontSize: '13px',
   whiteSpace: 'pre-wrap' as const,
-};
-
-const auditHistoryExpandedWrapStyle = {
-  display: 'grid',
-  gap: '10px',
-  marginTop: '4px',
-};
-
-const supervisorInboxGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
-  gap: '16px',
 };
 
 const supervisorInboxCardStyle = {
