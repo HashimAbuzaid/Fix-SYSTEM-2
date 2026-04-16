@@ -325,7 +325,6 @@ function getDashboardThemeVars(): Record<string, string> {
       ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,248,253,0.96) 100%)'
       : 'rgba(15,23,42,0.52)',
     '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
-    '--screen-heading-soft': isLight ? '#1e293b' : '#e2e8f0',
     '--screen-text': isLight ? '#334155' : '#e5eefb',
     '--screen-muted': isLight ? '#64748b' : '#94a3b8',
     '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
@@ -338,16 +337,6 @@ function getDashboardThemeVars(): Record<string, string> {
     '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
     '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
     '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.52)',
-    '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.98) 100%)'
-      : 'rgba(15,23,42,0.74)',
-    '--screen-field-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.18)',
-    '--screen-button-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.74)',
-    '--screen-button-text': isLight ? '#475569' : '#e5eefb',
-    '--screen-button-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.18)',
-    '--screen-emphasis-bg': isLight
-      ? 'linear-gradient(180deg, rgba(241,245,255,0.98) 0%, rgba(232,240,255,0.95) 100%)'
-      : 'rgba(30,41,59,0.72)',
   };
 }
 
@@ -1454,7 +1443,7 @@ function Dashboard({
 
       <div style={spotlightPanelStyle}>
         <div style={sectionEyebrowStyle}>Smart Homepage</div>
-        <h3 style={{ ...panelSectionTitleStyle, marginBottom: '14px' }}>{roleSpotlight.title}</h3>
+        <h3 style={{ marginTop: 0, marginBottom: '14px' }}>{roleSpotlight.title}</h3>
         <div style={spotlightGridStyle}>
           {roleSpotlight.cards.map((card) => (
             <div key={card.title} style={spotlightCardStyle}>
@@ -1477,7 +1466,7 @@ function Dashboard({
         <div style={actionCenterHeaderStyle}>
           <div>
             <div style={sectionEyebrowStyle}>Action Center</div>
-            <h3 style={panelSectionTitleStyle}>What needs attention now</h3>
+            <h3 style={{ marginTop: 0, marginBottom: '8px' }}>What needs attention now</h3>
             <p style={panelSubtitleStyle}>
               Focus on live operational work first, then jump straight into the page that needs action.
             </p>
@@ -2060,14 +2049,6 @@ const sectionSubtitleStyle = {
   fontWeight: 500,
 };
 
-const panelSectionTitleStyle = {
-  marginTop: 0,
-  marginBottom: '8px',
-  color: 'var(--screen-heading, #0f172a)',
-  fontSize: '24px',
-  fontWeight: 900,
-};
-
 const fieldStyle = {
   padding: '12px 14px',
   borderRadius: '14px',
@@ -2385,7 +2366,7 @@ const statusPillStyle = {
 const spotlightPanelStyle = {
   marginBottom: '28px',
   borderRadius: '30px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-panel-bg, rgba(15,23,42,0.78))',
   boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
   padding: '20px',
@@ -2401,7 +2382,7 @@ const spotlightGridStyle = {
 
 const spotlightCardStyle = {
   borderRadius: '24px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
   padding: '18px',
   display: 'flex',
@@ -2439,7 +2420,7 @@ const spotlightStatRowStyle = {
   padding: '14px 16px',
   minHeight: '84px',
   borderRadius: '14px',
-  border: '1px solid var(--screen-field-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-field-bg, rgba(255,255,255,0.92))',
   boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.32)',
 };
@@ -2466,7 +2447,7 @@ const spotlightStatValueStyle = {
 const actionCenterPanelStyle = {
   marginBottom: '28px',
   borderRadius: '30px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-panel-bg, rgba(15,23,42,0.78))',
   boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
   padding: '20px',
@@ -2486,19 +2467,19 @@ const actionCenterHeadlineStyle = {
   maxWidth: '420px',
   borderRadius: '18px',
   padding: '16px',
-  background: 'var(--screen-emphasis-bg, rgba(30,41,59,0.72))',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  border: '1px solid rgba(148,163,184,0.14)',
 };
 
 const actionHeadlineTitleStyle = {
   color: 'var(--screen-heading, #f8fafc)',
   fontSize: '18px',
-  fontWeight: 900,
+  fontWeight: 800,
   marginBottom: '6px',
 };
 
 const actionHeadlineDetailStyle = {
-  color: 'var(--screen-heading-soft, #e2e8f0)',
+  color: 'var(--screen-text, #e5eefb)',
   lineHeight: 1.55,
   fontSize: '13px',
 };
@@ -2512,7 +2493,7 @@ const actionCenterGridStyle = {
 
 const actionCardStyle = {
   borderRadius: '22px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
   padding: '18px',
   display: 'grid',
@@ -2531,29 +2512,32 @@ const actionToneBadgeStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   borderRadius: '999px',
-  padding: '7px 10px',
+  padding: '8px 12px',
+  minHeight: '28px',
   fontSize: '11px',
-  fontWeight: 800,
+  fontWeight: 900,
   letterSpacing: '0.08em',
   textTransform: 'uppercase' as const,
+  borderWidth: '1px',
+  borderStyle: 'solid' as const,
 };
 
 const actionToneCriticalStyle = {
-  background: 'rgba(220,38,38,0.16)',
-  color: '#fecaca',
-  border: '1px solid rgba(248,113,113,0.22)',
+  background: 'var(--screen-tone-critical-bg, rgba(220,38,38,0.16))',
+  color: 'var(--screen-tone-critical-text, #fecaca)',
+  borderColor: 'var(--screen-tone-critical-border, rgba(248,113,113,0.22))',
 };
 
 const actionToneWarningStyle = {
-  background: 'rgba(245,158,11,0.16)',
-  color: '#fde68a',
-  border: '1px solid rgba(251,191,36,0.22)',
+  background: 'var(--screen-tone-warning-bg, rgba(245,158,11,0.16))',
+  color: 'var(--screen-tone-warning-text, #fde68a)',
+  borderColor: 'var(--screen-tone-warning-border, rgba(251,191,36,0.22))',
 };
 
 const actionToneInfoStyle = {
-  background: 'rgba(37,99,235,0.14)',
-  color: '#bfdbfe',
-  border: '1px solid rgba(96,165,250,0.22)',
+  background: 'var(--screen-tone-info-bg, rgba(37,99,235,0.14))',
+  color: 'var(--screen-tone-info-text, #bfdbfe)',
+  borderColor: 'var(--screen-tone-info-border, rgba(96,165,250,0.22))',
 };
 
 const actionCountStyle = {
@@ -2578,9 +2562,9 @@ const actionCardDetailStyle = {
 const actionCardButtonStyle = {
   padding: '11px 14px',
   borderRadius: '14px',
-  background: 'var(--screen-button-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--screen-button-text, #e5eefb)',
-  border: '1px solid var(--screen-button-border, rgba(148, 163, 184, 0.18))',
+  background: 'var(--da-secondary-bg, rgba(15, 23, 42, 0.74))',
+  color: 'var(--da-secondary-text, #e5eefb)',
+  border: 'var(--da-secondary-border, 1px solid rgba(148, 163, 184, 0.18))',
   cursor: 'pointer',
   fontWeight: 700,
 };
@@ -2593,7 +2577,7 @@ const actionFooterGridStyle = {
 
 const actionSubpanelStyle = {
   borderRadius: '22px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
   padding: '18px',
 };
@@ -2612,11 +2596,11 @@ const actionListRowStyle = {
   padding: '12px 14px',
   borderRadius: '14px',
   background: 'var(--screen-field-bg, rgba(255,255,255,0.92))',
-  border: '1px solid var(--screen-field-border, rgba(148,163,184,0.14))',
+  border: '1px solid rgba(148,163,184,0.14)',
 };
 
 const actionListLabelStyle = {
-  color: 'var(--screen-heading-soft, #e2e8f0)',
+  color: 'var(--screen-text, #e5eefb)',
   fontSize: '13px',
   fontWeight: 700,
 };
@@ -2625,8 +2609,6 @@ const actionListValueStyle = {
   color: 'var(--screen-heading, #f8fafc)',
   fontSize: '16px',
   fontWeight: 900,
-  minWidth: '26px',
-  textAlign: 'right' as const,
 };
 
 const quickLinkGridStyle = {
@@ -2639,9 +2621,9 @@ const quickLinkGridStyle = {
 const quickLinkButtonStyle = {
   padding: '12px 14px',
   borderRadius: '14px',
-  background: 'var(--screen-button-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--screen-button-text, #e5eefb)',
-  border: '1px solid var(--screen-button-border, rgba(148, 163, 184, 0.18))',
+  background: 'var(--da-secondary-bg, rgba(15, 23, 42, 0.74))',
+  color: 'var(--da-secondary-text, #e5eefb)',
+  border: 'var(--da-secondary-border, 1px solid rgba(148, 163, 184, 0.18))',
   cursor: 'pointer',
   fontWeight: 700,
   textAlign: 'left' as const,
