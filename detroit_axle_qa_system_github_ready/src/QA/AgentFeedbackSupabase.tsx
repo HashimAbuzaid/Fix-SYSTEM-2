@@ -8,6 +8,7 @@ type FeedbackStatus = 'Open' | 'In Progress' | 'Closed';
 type PlanTab = 'All' | 'Open' | 'Overdue' | 'Awaiting Ack' | 'Follow-up';
 type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
+type ReviewStage = 'Pending Agent' | 'Agent Replied' | 'Pending Supervisor' | 'Supervisor Reviewed' | 'Closed';
 
 type CurrentUser = {
   id?: string;
@@ -108,6 +109,10 @@ const STRUCTURED_PLAN_SECTION_LABELS = [
   'Justification',
   'Follow-up Outcome',
   'Resolution Note',
+  'Coaching Audit ID',
+  'Agent Comment',
+  'Supervisor Note',
+  'Review Stage',
 ] as const;
 
 function escapeRegex(value: string) {
@@ -133,6 +138,19 @@ function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
   return 'Not Set';
 }
 
+function normalizeReviewStage(value?: string | null): ReviewStage {
+  if (
+    value === 'Pending Agent' ||
+    value === 'Agent Replied' ||
+    value === 'Pending Supervisor' ||
+    value === 'Supervisor Reviewed' ||
+    value === 'Closed'
+  ) {
+    return value;
+  }
+  return 'Pending Agent';
+}
+
 function parseStructuredPlan(value?: string | null) {
   const raw = String(value || '').trim();
   const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map((label) => escapeRegex(label)).join('|');
@@ -155,6 +173,10 @@ function parseStructuredPlan(value?: string | null) {
     justification: readSection('Justification'),
     followUpOutcome: normalizeFollowUpOutcome(readSection('Follow-up Outcome')),
     resolutionNote: readSection('Resolution Note'),
+    coachingAuditId: readSection('Coaching Audit ID'),
+    agentComment: readSection('Agent Comment'),
+    supervisorNote: readSection('Supervisor Note'),
+    reviewStage: normalizeReviewStage(readSection('Review Stage')),
   };
 }
 
@@ -164,12 +186,20 @@ function composeStructuredPlan({
   justification,
   followUpOutcome,
   resolutionNote,
+  coachingAuditId,
+  agentComment,
+  supervisorNote,
+  reviewStage,
 }: {
   priority: PlanPriority;
   actionPlan: string;
   justification: string;
   followUpOutcome: FollowUpOutcome;
   resolutionNote: string;
+  coachingAuditId: string;
+  agentComment: string;
+  supervisorNote: string;
+  reviewStage: ReviewStage;
 }) {
   const sections = [
     `Priority:\n${priority}`,
@@ -179,6 +209,10 @@ function composeStructuredPlan({
       ? `Follow-up Outcome:\n${followUpOutcome}`
       : '',
     resolutionNote.trim() ? `Resolution Note:\n${resolutionNote.trim()}` : '',
+    coachingAuditId.trim() ? `Coaching Audit ID:\n${coachingAuditId.trim()}` : '',
+    agentComment.trim() ? `Agent Comment:\n${agentComment.trim()}` : '',
+    supervisorNote.trim() ? `Supervisor Note:\n${supervisorNote.trim()}` : '',
+    `Review Stage:\n${reviewStage}`,
   ].filter(Boolean);
 
   return sections.join('\n\n').trim();
@@ -197,6 +231,14 @@ function getOutcomeColor(outcome: FollowUpOutcome) {
   if (outcome === 'No Improvement') return '#b91c1c';
   if (outcome === 'Needs Escalation') return '#7c2d12';
   return '#475569';
+}
+
+function getReviewStageColor(stage: ReviewStage) {
+  if (stage === 'Agent Replied') return '#1d4ed8';
+  if (stage === 'Pending Supervisor') return '#7c3aed';
+  if (stage === 'Supervisor Reviewed') return '#166534';
+  if (stage === 'Closed') return '#166534';
+  return '#b45309';
 }
 
 function isFeedbackOverdue(item: Pick<AgentFeedback, 'due_date' | 'status'>) {
@@ -301,6 +343,12 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const [activePlanTab, setActivePlanTab] = useState<PlanTab>('All');
   const [planOutcomeDrafts, setPlanOutcomeDrafts] = useState<Record<string, FollowUpOutcome>>({});
   const [resolutionNoteDrafts, setResolutionNoteDrafts] = useState<Record<string, string>>({});
+  const [agentCommentDrafts, setAgentCommentDrafts] = useState<Record<string, string>>({});
+  const [supervisorNoteDrafts, setSupervisorNoteDrafts] = useState<Record<string, string>>({});
+  const [reviewStageDrafts, setReviewStageDrafts] = useState<Record<string, ReviewStage>>({});
+  const [auditDateFrom, setAuditDateFrom] = useState('');
+  const [auditDateTo, setAuditDateTo] = useState('');
+  const [selectedAuditId, setSelectedAuditId] = useState('');
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const themeVars = getDashboardThemeVars();
@@ -479,10 +527,24 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   }, [audits, selectedAgent]);
 
   const latestAudit = selectedAgentAudits[0] || null;
+  const filteredAgentAudits = useMemo(() => {
+    return selectedAgentAudits.filter((item) => {
+      const auditDate = String(item.audit_date || '').slice(0, 10);
+      if (auditDateFrom && auditDate < auditDateFrom) return false;
+      if (auditDateTo && auditDate > auditDateTo) return false;
+      return true;
+    });
+  }, [selectedAgentAudits, auditDateFrom, auditDateTo]);
+
+  const selectedAudit =
+    filteredAgentAudits.find((item) => item.id === selectedAuditId) ||
+    latestAudit ||
+    null;
+
   const selectedAgentAverage =
-    selectedAgentAudits.length > 0
-      ? selectedAgentAudits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
-        selectedAgentAudits.length
+    filteredAgentAudits.length > 0
+      ? filteredAgentAudits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
+        filteredAgentAudits.length
       : 0;
 
   const selectedAgentOpenItems = useMemo(() => {
@@ -526,11 +588,42 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     [feedbackItems]
   );
 
+  const stageCounts = useMemo(() => {
+    return feedbackItems.reduce<Record<ReviewStage, number>>(
+      (acc, item) => {
+        const stage = parseStructuredPlan(item.action_plan).reviewStage;
+        acc[stage] += 1;
+        return acc;
+      },
+      {
+        'Pending Agent': 0,
+        'Agent Replied': 0,
+        'Pending Supervisor': 0,
+        'Supervisor Reviewed': 0,
+        Closed: 0,
+      }
+    );
+  }, [feedbackItems]);
+
+  function applyAuditToForm(audit: AuditItem) {
+    setSelectedAuditId(audit.id);
+    setSubject(`${audit.team} coaching • ${audit.case_type}`);
+    setJustification(audit.comments || '');
+    setActionPlan(
+      `Review ${audit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
+    );
+    setPriorityOnCreate(
+      audit.quality_score < 75 ? 'Critical' : audit.quality_score < 85 ? 'High' : 'Medium'
+    );
+  }
 
   function handleSelectAgent(profile: AgentProfile) {
     setSelectedAgentProfileId(profile.id);
     setAgentSearch(getAgentLabel(profile));
     setIsAgentPickerOpen(false);
+    setAuditDateFrom('');
+    setAuditDateTo('');
+    setSelectedAuditId('');
 
     const recentAudit = audits.find(
       (item) =>
@@ -540,12 +633,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     );
 
     if (recentAudit) {
-      setSubject(`${recentAudit.team} coaching • ${recentAudit.case_type}`);
-      setJustification(recentAudit.comments || '');
-      setActionPlan(
-        `Review ${recentAudit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
-      );
-      setPriorityOnCreate(recentAudit.quality_score < 75 ? 'Critical' : recentAudit.quality_score < 85 ? 'High' : 'Medium');
+      applyAuditToForm(recentAudit);
     }
   }
 
@@ -562,6 +650,9 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setFollowUpDate('');
     setStatusOnCreate('Open');
     setPriorityOnCreate('Medium');
+    setAuditDateFrom('');
+    setAuditDateTo('');
+    setSelectedAuditId('');
   }
 
   async function handleCreatePlan() {
@@ -581,6 +672,10 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       justification,
       followUpOutcome: 'Not Set',
       resolutionNote: '',
+      coachingAuditId: selectedAudit?.id || '',
+      agentComment: '',
+      supervisorNote: '',
+      reviewStage: 'Pending Agent',
     });
 
     const { error } = await supabase.from('agent_feedback').insert({
@@ -664,6 +759,9 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     const parsed = parseStructuredPlan(item.action_plan);
     const followUpOutcome = planOutcomeDrafts[item.id] || parsed.followUpOutcome;
     const resolutionNote = resolutionNoteDrafts[item.id] ?? parsed.resolutionNote;
+    const agentComment = agentCommentDrafts[item.id] ?? parsed.agentComment;
+    const supervisorNote = supervisorNoteDrafts[item.id] ?? parsed.supervisorNote;
+    const reviewStage = reviewStageDrafts[item.id] || parsed.reviewStage;
 
     const nextActionPlan = composeStructuredPlan({
       priority: parsed.priority,
@@ -671,11 +769,22 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       justification: parsed.justification,
       followUpOutcome,
       resolutionNote,
+      coachingAuditId: parsed.coachingAuditId,
+      agentComment,
+      supervisorNote,
+      reviewStage,
     });
+
+    const nextStatus =
+      reviewStage === 'Closed'
+        ? 'Closed'
+        : item.status === 'Closed'
+        ? 'In Progress'
+        : item.status;
 
     const { error } = await supabase
       .from('agent_feedback')
-      .update({ action_plan: nextActionPlan || null })
+      .update({ action_plan: nextActionPlan || null, status: nextStatus })
       .eq('id', item.id);
 
     if (error) {
@@ -683,10 +792,12 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       return;
     }
 
-    setSuccessMessage('Follow-up outcome saved.');
+    setSuccessMessage('Cycle update saved.');
     setFeedbackItems((prev) =>
       prev.map((entry) =>
-        entry.id === item.id ? { ...entry, action_plan: nextActionPlan || null } : entry
+        entry.id === item.id
+          ? { ...entry, action_plan: nextActionPlan || null, status: nextStatus as FeedbackStatus }
+          : entry
       )
     );
   }
@@ -716,16 +827,6 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   return (
     <div style={{ color: 'var(--cc-page-text, #e5eefb)', ...(themeVars as React.CSSProperties) }}>
       <div style={pageHeaderStyle}>
-        <div>
-          <div style={sectionEyebrow}>Coaching Center</div>
-          <h2 style={{ margin: 0, fontSize: '32px', color: 'var(--cc-title, #f8fafc)' }}>
-            Turn audits into action plans
-          </h2>
-          <p style={{ margin: '10px 0 0 0', color: 'var(--cc-subtitle, #94a3b8)' }}>
-            Build coaching tasks, capture justification, track acknowledgment, and close the loop with follow-up dates.
-          </p>
-        </div>
-
         <button type="button" onClick={() => void loadAll()} style={secondaryButton}>
           Refresh
         </button>
@@ -931,28 +1032,126 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
         <div style={stackPanelStyle}>
           <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Audit Context</div>
-            <h3 style={panelTitleStyle}>Selected Agent Snapshot</h3>
+            <div style={panelEyebrowStyle}>Audit Review</div>
+            <h3 style={panelTitleStyle}>Agent Audit History</h3>
+            <p style={panelSubtitleStyle}>
+              Filter this agent&apos;s audits by date, scroll through all matching audits, and choose one to become the coaching subject.
+            </p>
+
             {!selectedAgent ? (
-              <EmptyState text="Pick an agent to pull in audit context and active coaching items." />
+              <EmptyState text="Pick an agent to load audit history and choose the exact audit for coaching." />
             ) : (
-              <div style={contextGridStyle}>
-                <ContextCard title="Latest Audit" value={latestAudit ? `${latestAudit.team} • ${latestAudit.case_type}` : '-'} helper={latestAudit ? `${formatDateOnly(latestAudit.audit_date)} • ${latestAudit.quality_score.toFixed(2)}%` : 'No recent audits found'} />
-                <ContextCard title="Average Quality" value={selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'} helper={`${selectedAgentAudits.length} audit(s) loaded`} />
-                <ContextCard title="Open Coaching" value={String(selectedAgentOpenItems.length)} helper="Open and in-progress plans" />
-              </div>
+              <>
+                <div style={auditFilterGridStyle}>
+                  <div>
+                    <label style={labelStyle}>Audit Date From</label>
+                    <input
+                      type="date"
+                      value={auditDateFrom}
+                      onChange={(e) => setAuditDateFrom(e.target.value)}
+                      style={fieldStyle}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={labelStyle}>Audit Date To</label>
+                    <input
+                      type="date"
+                      value={auditDateTo}
+                      onChange={(e) => setAuditDateTo(e.target.value)}
+                      style={fieldStyle}
+                    />
+                  </div>
+                </div>
+
+                <div style={contextGridStyle}>
+                  <ContextCard
+                    title="Visible Audits"
+                    value={String(filteredAgentAudits.length)}
+                    helper="Audits in the selected date range"
+                  />
+                  <ContextCard
+                    title="Average Quality"
+                    value={filteredAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'}
+                    helper={`${filteredAgentAudits.length} audit(s) visible`}
+                  />
+                  <ContextCard
+                    title="Coaching Subject"
+                    value={selectedAudit ? `${selectedAudit.team} • ${selectedAudit.case_type}` : '-'}
+                    helper={selectedAudit ? formatDateOnly(selectedAudit.audit_date) : 'Choose an audit below'}
+                  />
+                </div>
+
+                <div style={auditListWrapStyle}>
+                  {filteredAgentAudits.length === 0 ? (
+                    <EmptyState text="No audits found for the selected date range." />
+                  ) : (
+                    filteredAgentAudits.map((audit) => (
+                      <div
+                        key={audit.id}
+                        style={{
+                          ...auditListItemStyle,
+                          ...(selectedAuditId === audit.id ? auditListItemActiveStyle : {}),
+                        }}
+                      >
+                        <div>
+                          <div style={primaryCellTextStyle}>
+                            {audit.team} • {audit.case_type}
+                          </div>
+                          <div style={secondaryCellTextStyle}>
+                            {formatDateOnly(audit.audit_date)} • {Number(audit.quality_score).toFixed(2)}%
+                          </div>
+                          <div style={auditListCommentStyle}>
+                            {audit.comments || 'No audit comment saved.'}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => applyAuditToForm(audit)}
+                          style={secondaryMiniButton}
+                        >
+                          Use for Coaching
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
             )}
-            {latestAudit ? (
-              <div style={auditCommentStyle}>
-                <div style={miniLabelStyle}>Latest Audit Comment</div>
-                <div style={auditCommentBodyStyle}>{latestAudit.comments || 'No comment on the latest audit.'}</div>
-              </div>
-            ) : null}
           </div>
 
           <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Plan Filters</div>
-            <h3 style={panelTitleStyle}>Coaching Pipeline</h3>
+            <div style={panelEyebrowStyle}>Cycle Controls</div>
+            <h3 style={panelTitleStyle}>Review Queue & Routing</h3>
+            <p style={panelSubtitleStyle}>
+              This area controls which plans you are reviewing. The agent can reply, QA can follow up, and the supervisor can review the cycle before closure.
+            </p>
+
+            <div style={planTabRowStyle}>
+              {(['All', 'Open', 'Overdue', 'Awaiting Ack', 'Follow-up'] as PlanTab[]).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActivePlanTab(tab)}
+                  style={{
+                    ...planTabButtonStyle,
+                    ...(activePlanTab === tab ? planTabButtonActiveStyle : {}),
+                  }}
+                >
+                  {tab} ({planTabCounts[tab]})
+                </button>
+              ))}
+            </div>
+
+            <div style={stageSummaryGridStyle}>
+              {(['Pending Agent', 'Agent Replied', 'Pending Supervisor', 'Supervisor Reviewed', 'Closed'] as ReviewStage[]).map((stage) => (
+                <div key={stage} style={stageSummaryCardStyle}>
+                  <div style={miniLabelStyle}>{stage}</div>
+                  <div style={summaryMiniValueStyle}>{stageCounts[stage]}</div>
+                </div>
+              ))}
+            </div>
 
             <div style={filterGridStyle}>
               <div>
@@ -1011,21 +1210,6 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
           Use tabs to focus the queue, and open details to capture follow-up outcome and resolution notes.
         </p>
 
-        <div style={planTabRowStyle}>
-          {(['All', 'Open', 'Overdue', 'Awaiting Ack', 'Follow-up'] as PlanTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActivePlanTab(tab)}
-              style={{
-                ...planTabButtonStyle,
-                ...(activePlanTab === tab ? planTabButtonActiveStyle : {}),
-              }}
-            >
-              {tab} ({planTabCounts[tab]})
-            </button>
-          ))}
-        </div>
 
         {loading ? (
           <p style={emptyTextStyle}>Loading coaching items...</p>
@@ -1073,6 +1257,12 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                       <div style={feedbackCellSubjectStyle}>
                         <div style={primaryCellTextStyle}>{item.subject}</div>
                         <div style={secondaryCellTextStyle}>By {item.qa_name}</div>
+                        <div style={{ ...secondaryCellTextStyle, marginTop: '8px' }}>
+                          Stage:{' '}
+                          <span style={{ ...statusPill(getReviewStageColor(parseStructuredPlan(item.action_plan).reviewStage)), fontSize: '11px', padding: '4px 8px' }}>
+                            {parseStructuredPlan(item.action_plan).reviewStage}
+                          </span>
+                        </div>
                         {parseStructuredPlan(item.action_plan).followUpOutcome !== 'Not Set' ? (
                           <div style={{ ...secondaryCellTextStyle, marginTop: '8px' }}>
                             Outcome:{' '}
@@ -1145,6 +1335,10 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                             label="Justification"
                             value={parseStructuredPlan(item.action_plan).justification || 'No justification saved.'}
                           />
+                          <DetailMini
+                            label="Linked Audit"
+                            value={parseStructuredPlan(item.action_plan).coachingAuditId || 'Not linked'}
+                          />
                           <div style={expandedGridStyle}>
                             <DetailMini label="Created" value={formatDateTime(item.created_at)} />
                             <DetailMini
@@ -1158,11 +1352,35 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                               label="Outcome"
                               value={parseStructuredPlan(item.action_plan).followUpOutcome}
                             />
+                            <DetailMini
+                              label="Review Stage"
+                              value={parseStructuredPlan(item.action_plan).reviewStage}
+                            />
                           </div>
 
                           <div style={followUpEditorStyle}>
-                            <div style={miniLabelStyle}>Follow-up Result</div>
+                            <div style={miniLabelStyle}>Coaching Cycle</div>
                             <div style={followUpEditorGridStyle}>
+                              <div>
+                                <label style={labelStyle}>Review Stage</label>
+                                <select
+                                  value={reviewStageDrafts[item.id] || parseStructuredPlan(item.action_plan).reviewStage}
+                                  onChange={(e) =>
+                                    setReviewStageDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value as ReviewStage,
+                                    }))
+                                  }
+                                  style={fieldStyle}
+                                >
+                                  <option value="Pending Agent">Pending Agent</option>
+                                  <option value="Agent Replied">Agent Replied</option>
+                                  <option value="Pending Supervisor">Pending Supervisor</option>
+                                  <option value="Supervisor Reviewed">Supervisor Reviewed</option>
+                                  <option value="Closed">Closed</option>
+                                </select>
+                              </div>
+
                               <div>
                                 <label style={labelStyle}>Outcome</label>
                                 <select
@@ -1181,6 +1399,38 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                                   <option value="No Improvement">No Improvement</option>
                                   <option value="Needs Escalation">Needs Escalation</option>
                                 </select>
+                              </div>
+
+                              <div style={wideFieldStyle}>
+                                <label style={labelStyle}>Agent Comment</label>
+                                <textarea
+                                  value={agentCommentDrafts[item.id] ?? parseStructuredPlan(item.action_plan).agentComment}
+                                  onChange={(e) =>
+                                    setAgentCommentDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  rows={3}
+                                  style={fieldStyle}
+                                  placeholder="Agent can respond here with what happened, blockers, or clarification."
+                                />
+                              </div>
+
+                              <div style={wideFieldStyle}>
+                                <label style={labelStyle}>Supervisor Review</label>
+                                <textarea
+                                  value={supervisorNoteDrafts[item.id] ?? parseStructuredPlan(item.action_plan).supervisorNote}
+                                  onChange={(e) =>
+                                    setSupervisorNoteDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  rows={3}
+                                  style={fieldStyle}
+                                  placeholder="Supervisor reviews the cycle here before closure."
+                                />
                               </div>
 
                               <div style={wideFieldStyle}>
@@ -1206,7 +1456,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                                 onClick={() => void handleSaveFollowUpResult(item)}
                                 style={primaryButton}
                               >
-                                Save Follow-up Result
+                                Save Cycle Update
                               </button>
                             </div>
                           </div>
@@ -1268,21 +1518,13 @@ function EmptyState({ text }: { text: string }) {
 
 const pageHeaderStyle: React.CSSProperties = {
   display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
   gap: '16px',
   flexWrap: 'wrap',
-  marginBottom: '22px',
+  marginBottom: '12px',
 };
 
-const sectionEyebrow: React.CSSProperties = {
-  color: 'var(--cc-eyebrow, #93c5fd)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  letterSpacing: '0.14em',
-  marginBottom: '8px',
-};
 
 const panelEyebrowStyle: React.CSSProperties = {
   color: 'var(--cc-eyebrow, #93c5fd)',
@@ -1506,6 +1748,66 @@ const contextGridStyle: React.CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   gap: '12px',
+};
+
+const auditFilterGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '12px',
+  marginBottom: '12px',
+};
+
+const auditListWrapStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '10px',
+  maxHeight: '360px',
+  overflowY: 'auto',
+  paddingRight: '4px',
+  marginTop: '14px',
+};
+
+const auditListItemStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) auto',
+  gap: '12px',
+  alignItems: 'start',
+  borderRadius: '16px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '14px',
+};
+
+const auditListItemActiveStyle: React.CSSProperties = {
+  background: 'var(--cc-accent-bg)',
+};
+
+const auditListCommentStyle: React.CSSProperties = {
+  color: 'var(--cc-page-text)',
+  fontSize: '12px',
+  lineHeight: 1.6,
+  marginTop: '8px',
+  whiteSpace: 'pre-wrap',
+};
+
+const stageSummaryGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+  gap: '10px',
+  marginBottom: '14px',
+};
+
+const stageSummaryCardStyle: React.CSSProperties = {
+  borderRadius: '16px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '12px',
+};
+
+const summaryMiniValueStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
+  fontSize: '22px',
+  fontWeight: 900,
+  marginTop: '8px',
 };
 
 const contextCardStyle: React.CSSProperties = {
