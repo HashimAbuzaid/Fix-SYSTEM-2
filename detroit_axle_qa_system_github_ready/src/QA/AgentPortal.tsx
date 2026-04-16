@@ -541,8 +541,6 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
     void loadAgentData({ force: true, background: true });
   }
 
-  const filteredAudits = useMemo(() => {
-
   async function handleSaveAgentComment(item: AgentFeedback) {
     setErrorMessage('');
 
@@ -553,7 +551,11 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
       priority: parsed.priority,
       actionPlan: parsed.actionPlan,
       justification: parsed.justification,
-      reviewStage: nextComment ? 'Agent Responded' : item.acknowledged_by_agent ? 'Acknowledged' : parsed.reviewStage,
+      reviewStage: nextComment
+        ? 'Agent Responded'
+        : item.acknowledged_by_agent
+        ? 'Acknowledged'
+        : parsed.reviewStage,
       agentComment: nextComment,
       supervisorReview: parsed.supervisorReview,
       followUpOutcome: parsed.followUpOutcome,
@@ -584,7 +586,11 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
           : entry
       )
     );
+
+    void loadAgentData({ force: true, background: true });
   }
+
+  const filteredAudits = useMemo(() => {
 
     return audits.filter((audit) => {
       const matchesFrom = auditDateFrom
@@ -1583,6 +1589,10 @@ function SummaryCard({
   );
 }
 
+function EmptyState({ text }: { text: string }) {
+  return <div style={emptyStateStyle}>{text}</div>;
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div style={{ marginTop: '35px' }}>
@@ -1962,6 +1972,15 @@ const detailInfoCardStyle = {
   padding: '14px 16px',
 };
 
+const miniLabelStyle = {
+  color: '#60a5fa',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.12em',
+  marginBottom: '8px',
+};
+
 const detailLabelStyle = {
   color: 'var(--screen-muted)',
   fontSize: '12px',
@@ -1976,6 +1995,17 @@ const detailValueStyle = {
   fontSize: '14px',
   fontWeight: 700,
   lineHeight: 1.5,
+};
+
+const emptyStateStyle = {
+  marginTop: '8px',
+  padding: '18px',
+  borderRadius: '16px',
+  border: '1px solid var(--screen-border)',
+  backgroundColor: 'var(--screen-card-bg)',
+  color: 'var(--screen-muted)',
+  textAlign: 'center' as const,
+  fontWeight: 600,
 };
 
 const pageHeaderActionsStyle = {
