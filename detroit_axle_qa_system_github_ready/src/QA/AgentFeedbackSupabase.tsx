@@ -5,6 +5,9 @@ import { supabase } from '../lib/supabase';
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 type FeedbackType = 'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up';
 type FeedbackStatus = 'Open' | 'In Progress' | 'Closed';
+type PlanTab = 'All' | 'Open' | 'Overdue' | 'Awaiting Ack' | 'Follow-up';
+type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
 
 type CurrentUser = {
   id?: string;
@@ -100,6 +103,116 @@ function getTypeColor(typeValue: FeedbackType) {
   return '#166534';
 }
 
+const STRUCTURED_PLAN_SECTION_LABELS = [
+  'Priority',
+  'Action Plan',
+  'Justification',
+  'Follow-up Outcome',
+  'Resolution Note',
+] as const;
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizePriority(value?: string | null): PlanPriority {
+  if (value === 'Low' || value === 'Medium' || value === 'High' || value === 'Critical') {
+    return value;
+  }
+  return 'Medium';
+}
+
+function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
+  if (
+    value === 'Improved' ||
+    value === 'Partial Improvement' ||
+    value === 'No Improvement' ||
+    value === 'Needs Escalation'
+  ) {
+    return value;
+  }
+  return 'Not Set';
+}
+
+function parseStructuredPlan(value?: string | null) {
+  const raw = String(value || '').trim();
+  const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map((label) => escapeRegex(label)).join('|');
+
+  function readSection(label: (typeof STRUCTURED_PLAN_SECTION_LABELS)[number]) {
+    const regex = new RegExp(
+      `${escapeRegex(label)}:\n([\\s\\S]*?)(?=\\n(?:${labelsPattern}):\\n|$)`
+    );
+    const match = raw.match(regex);
+    return match ? match[1].trim() : '';
+  }
+
+  const hasStructuredSections = STRUCTURED_PLAN_SECTION_LABELS.some((label) =>
+    raw.includes(`${label}:`)
+  );
+
+  return {
+    priority: normalizePriority(readSection('Priority')),
+    actionPlan: hasStructuredSections ? readSection('Action Plan') : raw,
+    justification: readSection('Justification'),
+    followUpOutcome: normalizeFollowUpOutcome(readSection('Follow-up Outcome')),
+    resolutionNote: readSection('Resolution Note'),
+  };
+}
+
+function composeStructuredPlan({
+  priority,
+  actionPlan,
+  justification,
+  followUpOutcome,
+  resolutionNote,
+}: {
+  priority: PlanPriority;
+  actionPlan: string;
+  justification: string;
+  followUpOutcome: FollowUpOutcome;
+  resolutionNote: string;
+}) {
+  const sections = [
+    `Priority:\n${priority}`,
+    actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
+    justification.trim() ? `Justification:\n${justification.trim()}` : '',
+    followUpOutcome !== 'Not Set'
+      ? `Follow-up Outcome:\n${followUpOutcome}`
+      : '',
+    resolutionNote.trim() ? `Resolution Note:\n${resolutionNote.trim()}` : '',
+  ].filter(Boolean);
+
+  return sections.join('\n\n').trim();
+}
+
+function getPriorityColor(priority: PlanPriority) {
+  if (priority === 'Critical') return '#b91c1c';
+  if (priority === 'High') return '#b45309';
+  if (priority === 'Low') return '#166534';
+  return '#1d4ed8';
+}
+
+function getOutcomeColor(outcome: FollowUpOutcome) {
+  if (outcome === 'Improved') return '#166534';
+  if (outcome === 'Partial Improvement') return '#b45309';
+  if (outcome === 'No Improvement') return '#b91c1c';
+  if (outcome === 'Needs Escalation') return '#7c2d12';
+  return '#475569';
+}
+
+function isFeedbackOverdue(item: Pick<AgentFeedback, 'due_date' | 'status'>) {
+  const diff = daysUntil(item.due_date);
+  return diff !== null && diff < 0 && item.status !== 'Closed';
+}
+
+function matchesPlanTab(item: AgentFeedback, tab: PlanTab) {
+  if (tab === 'All') return true;
+  if (tab === 'Open') return item.status !== 'Closed';
+  if (tab === 'Overdue') return isFeedbackOverdue(item);
+  if (tab === 'Awaiting Ack') return item.status !== 'Closed' && !item.acknowledged_by_agent;
+  if (tab === 'Follow-up') return item.feedback_type === 'Follow-up' && item.status !== 'Closed';
+  return true;
+}
 
 function getDashboardThemeVars(): Record<string, string> {
   const themeMode =
@@ -185,6 +298,10 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const [actionPlan, setActionPlan] = useState('');
   const [followUpDate, setFollowUpDate] = useState('');
   const [statusOnCreate, setStatusOnCreate] = useState<FeedbackStatus>('Open');
+  const [priorityOnCreate, setPriorityOnCreate] = useState<PlanPriority>('Medium');
+  const [activePlanTab, setActivePlanTab] = useState<PlanTab>('All');
+  const [planOutcomeDrafts, setPlanOutcomeDrafts] = useState<Record<string, FollowUpOutcome>>({});
+  const [resolutionNoteDrafts, setResolutionNoteDrafts] = useState<Record<string, string>>({});
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const themeVars = getDashboardThemeVars();
@@ -294,7 +411,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [feedbackItems, profiles]);
 
-  const filteredFeedbackItems = useMemo(() => {
+  const baseFilteredFeedbackItems = useMemo(() => {
     return feedbackItems.filter((item) => {
       const matchesAgent =
         !savedAgentFilter || getFeedbackAgentKey(item) === savedAgentFilter;
@@ -306,6 +423,49 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       return matchesAgent && matchesStatus && matchesType;
     });
   }, [feedbackItems, savedAgentFilter, savedStatusFilter, savedTypeFilter]);
+
+  const filteredFeedbackItems = useMemo(() => {
+    const priorityRank: Record<PlanPriority, number> = {
+      Critical: 0,
+      High: 1,
+      Medium: 2,
+      Low: 3,
+    };
+
+    return [...baseFilteredFeedbackItems]
+      .filter((item) => matchesPlanTab(item, activePlanTab))
+      .sort((a, b) => {
+        const aOverdue = isFeedbackOverdue(a) ? 1 : 0;
+        const bOverdue = isFeedbackOverdue(b) ? 1 : 0;
+        if (aOverdue !== bOverdue) return bOverdue - aOverdue;
+
+        const aAck = a.status !== 'Closed' && !a.acknowledged_by_agent ? 1 : 0;
+        const bAck = b.status !== 'Closed' && !b.acknowledged_by_agent ? 1 : 0;
+        if (aAck !== bAck) return bAck - aAck;
+
+        const aPriority = parseStructuredPlan(a.action_plan).priority;
+        const bPriority = parseStructuredPlan(b.action_plan).priority;
+        if (priorityRank[aPriority] !== priorityRank[bPriority]) {
+          return priorityRank[aPriority] - priorityRank[bPriority];
+        }
+
+        const aDue = String(a.due_date || '9999-12-31');
+        const bDue = String(b.due_date || '9999-12-31');
+        if (aDue !== bDue) return aDue.localeCompare(bDue);
+
+        return String(b.created_at).localeCompare(String(a.created_at));
+      });
+  }, [baseFilteredFeedbackItems, activePlanTab]);
+
+  const planTabCounts = useMemo(() => {
+    return {
+      All: baseFilteredFeedbackItems.length,
+      Open: baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Open')).length,
+      Overdue: baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Overdue')).length,
+      'Awaiting Ack': baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Awaiting Ack')).length,
+      'Follow-up': baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Follow-up')).length,
+    } as Record<PlanTab, number>;
+  }, [baseFilteredFeedbackItems]);
 
   const selectedAgentAudits = useMemo(() => {
     if (!selectedAgent) return [];
@@ -338,13 +498,16 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   }, [feedbackItems, selectedAgent]);
 
   const overdueCount = useMemo(
+    () => feedbackItems.filter((item) => isFeedbackOverdue(item)).length,
+    [feedbackItems]
+  );
+
+  const highPriorityCount = useMemo(
     () =>
-      feedbackItems.filter(
-        (item) =>
-          !!item.due_date &&
-          item.status !== 'Closed' &&
-          String(item.due_date).slice(0, 10) < getCurrentDateValue()
-      ).length,
+      feedbackItems.filter((item) => {
+        const priority = parseStructuredPlan(item.action_plan).priority;
+        return item.status !== 'Closed' && (priority === 'High' || priority === 'Critical');
+      }).length,
     [feedbackItems]
   );
 
@@ -383,6 +546,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       setActionPlan(
         `Review ${recentAudit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
       );
+      setPriorityOnCreate(recentAudit.quality_score < 75 ? 'Critical' : recentAudit.quality_score < 85 ? 'High' : 'Medium');
     }
   }
 
@@ -398,6 +562,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setActionPlan('');
     setFollowUpDate('');
     setStatusOnCreate('Open');
+    setPriorityOnCreate('Medium');
   }
 
   async function handleCreatePlan() {
@@ -411,13 +576,13 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
     setSaving(true);
 
-    const mergedActionPlan = [
-      actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
-      justification.trim() ? `\nJustification:\n${justification.trim()}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n')
-      .trim();
+    const mergedActionPlan = composeStructuredPlan({
+      priority: priorityOnCreate,
+      actionPlan,
+      justification,
+      followUpOutcome: 'Not Set',
+      resolutionNote: '',
+    });
 
     const { error } = await supabase.from('agent_feedback').insert({
       agent_id: selectedAgent.agent_id,
@@ -496,6 +661,40 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     );
   }
 
+  async function handleSaveFollowUpResult(item: AgentFeedback) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const parsed = parseStructuredPlan(item.action_plan);
+    const followUpOutcome = planOutcomeDrafts[item.id] || parsed.followUpOutcome;
+    const resolutionNote = resolutionNoteDrafts[item.id] ?? parsed.resolutionNote;
+
+    const nextActionPlan = composeStructuredPlan({
+      priority: parsed.priority,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      followUpOutcome,
+      resolutionNote,
+    });
+
+    const { error } = await supabase
+      .from('agent_feedback')
+      .update({ action_plan: nextActionPlan || null })
+      .eq('id', item.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setSuccessMessage('Follow-up outcome saved.');
+    setFeedbackItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id ? { ...entry, action_plan: nextActionPlan || null } : entry
+      )
+    );
+  }
+
   async function handleDelete(feedbackId: string) {
     setErrorMessage('');
     setSuccessMessage('');
@@ -543,6 +742,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
         <SummaryCard title="Open Plans" value={String(feedbackItems.filter((item) => item.status !== 'Closed').length)} subtitle="All coaching items still active" />
         <SummaryCard title="Overdue Follow-up" value={String(overdueCount)} subtitle="Due date passed and not closed" />
         <SummaryCard title="Need Acknowledgment" value={String(unacknowledgedCount)} subtitle="Agent has not acknowledged yet" />
+        <SummaryCard title="High Priority" value={String(highPriorityCount)} subtitle="High and critical plans still open" />
         <SummaryCard title="Follow-up Queue" value={String(followUpCount)} subtitle="Open follow-up tasks" />
       </div>
 
@@ -638,6 +838,20 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                 <option value="Audit Feedback">Audit Feedback</option>
                 <option value="Warning">Warning</option>
                 <option value="Follow-up">Follow-up</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Priority</label>
+              <select
+                value={priorityOnCreate}
+                onChange={(e) => setPriorityOnCreate(e.target.value as PlanPriority)}
+                style={fieldStyle}
+              >
+                <option value="Low">Low</option>
+                <option value="Medium">Medium</option>
+                <option value="High">High</option>
+                <option value="Critical">Critical</option>
               </select>
             </div>
 
@@ -797,6 +1011,25 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       <div style={panelStyle}>
         <div style={panelEyebrowStyle}>Saved Plans</div>
         <h3 style={panelTitleStyle}>Coaching Tasks & Follow-up</h3>
+        <p style={panelSubtitleStyle}>
+          Use tabs to focus the queue, and open details to capture follow-up outcome and resolution notes.
+        </p>
+
+        <div style={planTabRowStyle}>
+          {(['All', 'Open', 'Overdue', 'Awaiting Ack', 'Follow-up'] as PlanTab[]).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActivePlanTab(tab)}
+              style={{
+                ...planTabButtonStyle,
+                ...(activePlanTab === tab ? planTabButtonActiveStyle : {}),
+              }}
+            >
+              {tab} ({planTabCounts[tab]})
+            </button>
+          ))}
+        </div>
 
         {loading ? (
           <p style={emptyTextStyle}>Loading coaching items...</p>
@@ -807,7 +1040,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
             <div style={feedbackTableStyle}>
               <div style={{ ...feedbackRowStyle, ...feedbackHeaderRowStyle }}>
                 <div style={feedbackCellAgentStyle}>Agent</div>
-                <div style={feedbackCellTypeStyle}>Type</div>
+                <div style={feedbackCellTypeStyle}>Type / Priority</div>
                 <div style={feedbackCellSubjectStyle}>Subject</div>
                 <div style={feedbackCellDueDateStyle}>Follow-up</div>
                 <div style={feedbackCellStatusStyle}>Status</div>
@@ -831,14 +1064,27 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                       </div>
 
                       <div style={feedbackCellTypeStyle}>
-                        <span style={statusPill(getTypeColor(item.feedback_type))}>
-                          {item.feedback_type}
-                        </span>
+                        <div style={stackBadgeWrapStyle}>
+                          <span style={statusPill(getTypeColor(item.feedback_type))}>
+                            {item.feedback_type}
+                          </span>
+                          <span style={statusPill(getPriorityColor(parseStructuredPlan(item.action_plan).priority))}>
+                            {parseStructuredPlan(item.action_plan).priority}
+                          </span>
+                        </div>
                       </div>
 
                       <div style={feedbackCellSubjectStyle}>
                         <div style={primaryCellTextStyle}>{item.subject}</div>
                         <div style={secondaryCellTextStyle}>By {item.qa_name}</div>
+                        {parseStructuredPlan(item.action_plan).followUpOutcome !== 'Not Set' ? (
+                          <div style={{ ...secondaryCellTextStyle, marginTop: '8px' }}>
+                            Outcome:{' '}
+                            <span style={{ ...statusPill(getOutcomeColor(parseStructuredPlan(item.action_plan).followUpOutcome)), fontSize: '11px', padding: '4px 8px' }}>
+                              {parseStructuredPlan(item.action_plan).followUpOutcome}
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div style={feedbackCellDueDateStyle}>
@@ -895,12 +1141,75 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                       <div style={expandedFeedbackWrapStyle}>
                         <div style={expandedFeedbackPanelStyle}>
                           <DetailBlock label="Coaching Summary" value={item.feedback_note} />
-                          <DetailBlock label="Action Plan & Justification" value={item.action_plan || 'No action plan saved.'} />
+                          <DetailBlock
+                            label="Action Plan"
+                            value={parseStructuredPlan(item.action_plan).actionPlan || 'No action plan saved.'}
+                          />
+                          <DetailBlock
+                            label="Justification"
+                            value={parseStructuredPlan(item.action_plan).justification || 'No justification saved.'}
+                          />
                           <div style={expandedGridStyle}>
                             <DetailMini label="Created" value={formatDateTime(item.created_at)} />
                             <DetailMini label="Acknowledged At" value={formatDateTime(item.acknowledged_at)} />
                             <DetailMini label="Follow-up Date" value={formatDateOnly(item.due_date)} />
                             <DetailMini label="Status" value={item.status} />
+                            <DetailMini label="Priority" value={parseStructuredPlan(item.action_plan).priority} />
+                            <DetailMini
+                              label="Outcome"
+                              value={parseStructuredPlan(item.action_plan).followUpOutcome}
+                            />
+                          </div>
+
+                          <div style={followUpEditorStyle}>
+                            <div style={miniLabelStyle}>Follow-up Result</div>
+                            <div style={followUpEditorGridStyle}>
+                              <div>
+                                <label style={labelStyle}>Outcome</label>
+                                <select
+                                  value={planOutcomeDrafts[item.id] || parseStructuredPlan(item.action_plan).followUpOutcome}
+                                  onChange={(e) =>
+                                    setPlanOutcomeDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value as FollowUpOutcome,
+                                    }))
+                                  }
+                                  style={fieldStyle}
+                                >
+                                  <option value="Not Set">Not Set</option>
+                                  <option value="Improved">Improved</option>
+                                  <option value="Partial Improvement">Partial Improvement</option>
+                                  <option value="No Improvement">No Improvement</option>
+                                  <option value="Needs Escalation">Needs Escalation</option>
+                                </select>
+                              </div>
+
+                              <div style={wideFieldStyle}>
+                                <label style={labelStyle}>Resolution Note</label>
+                                <textarea
+                                  value={resolutionNoteDrafts[item.id] ?? parseStructuredPlan(item.action_plan).resolutionNote}
+                                  onChange={(e) =>
+                                    setResolutionNoteDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  rows={4}
+                                  style={fieldStyle}
+                                  placeholder="Document what happened after follow-up, what improved, and what still needs attention."
+                                />
+                              </div>
+                            </div>
+
+                            <div style={actionRowStyle}>
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveFollowUpResult(item)}
+                                style={primaryButton}
+                              >
+                                Save Follow-up Result
+                              </button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1391,6 +1700,48 @@ const detailMiniStyle: React.CSSProperties = {
   background: 'var(--cc-card-bg)',
   border: 'var(--cc-row-border)',
   padding: '14px',
+};
+
+const planTabRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '10px',
+  flexWrap: 'wrap',
+  marginBottom: '14px',
+};
+
+const planTabButtonStyle: React.CSSProperties = {
+  padding: '10px 12px',
+  borderRadius: '999px',
+  background: 'var(--cc-button-bg)',
+  color: 'var(--cc-button-text)',
+  border: 'var(--cc-button-border)',
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
+const planTabButtonActiveStyle: React.CSSProperties = {
+  background: 'var(--cc-accent-bg)',
+  color: 'var(--cc-accent-text)',
+};
+
+const stackBadgeWrapStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '8px',
+  flexWrap: 'wrap',
+};
+
+const followUpEditorStyle: React.CSSProperties = {
+  borderRadius: '18px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '16px',
+};
+
+const followUpEditorGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '12px',
+  marginTop: '12px',
 };
 
 const emptyTextStyle: React.CSSProperties = {
