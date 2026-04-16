@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import RecognitionWall from './RecognitionWall';
 import DigitalTrophyCabinet from './DigitalTrophyCabinet';
@@ -43,6 +44,7 @@ type AgentFeedbackSummary = {
   id: string;
   status: 'Open' | 'In Progress' | 'Closed';
   created_at: string;
+  due_date?: string | null;
   team: string;
 };
 
@@ -129,6 +131,15 @@ type DashboardCachePayload = {
   monitoringItems: MonitoringSummary[];
 };
 
+type ActionCenterItem = {
+  id: string;
+  title: string;
+  count: number;
+  detail: string;
+  path: string;
+  tone: 'critical' | 'warning' | 'info';
+};
+
 const DASHBOARD_CACHE_KEY = 'dashboard:datasets:v1';
 const DASHBOARD_CACHE_TTL_MS = 1000 * 60 * 5;
 
@@ -184,6 +195,23 @@ function formatPercentDelta(current: number, previous: number) {
   return `${sign}${delta.toFixed(2)}% vs last month`;
 }
 
+function getDaysOld(value?: string | null) {
+  const raw = String(value || '').slice(0, 10);
+  if (!raw) return 0;
+
+  const baseDate = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(baseDate.getTime())) return 0;
+
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate()
+  );
+
+  const diffMs = todayStart.getTime() - baseDate.getTime();
+  return Math.max(0, Math.floor(diffMs / 86400000));
+}
 function matchesDateRange(
   startDate?: string | null,
   endDate?: string | null,
@@ -341,6 +369,7 @@ function Dashboard({
   const [lastLoadedAt, setLastLoadedAt] = useState('');
   const dateFromInputRef = useRef<HTMLInputElement | null>(null);
   const dateToInputRef = useRef<HTMLInputElement | null>(null);
+  const navigate = useNavigate();
   const themeVars = getDashboardThemeVars();
   const roleSpotlight = useMemo(() => {
     const role = currentUser?.role || 'qa';
@@ -420,7 +449,7 @@ function Dashboard({
         .order('created_at', { ascending: false }),
       supabase
         .from('agent_feedback')
-        .select('id, status, created_at, team')
+        .select('id, status, created_at, due_date, team')
         .order('created_at', { ascending: false }),
       supabase
         .from('monitoring_items')
@@ -592,6 +621,180 @@ function Dashboard({
       matchesSelectedRange(item.created_at.slice(0, 10), item.created_at.slice(0, 10))
     );
   }, [monitoringItems, dateFrom, dateTo]);
+
+  const teamScopedValue =
+    currentUser?.role === 'supervisor' ? currentUser.team || null : null;
+
+  const scopedRequests = useMemo(() => {
+    return filteredRequests.filter(
+      (item) => !teamScopedValue || item.team === teamScopedValue
+    );
+  }, [filteredRequests, teamScopedValue]);
+
+  const scopedFeedback = useMemo(() => {
+    return filteredFeedback.filter(
+      (item) => !teamScopedValue || item.team === teamScopedValue
+    );
+  }, [filteredFeedback, teamScopedValue]);
+
+  const scopedMonitoring = useMemo(() => {
+    return filteredMonitoring.filter(
+      (item) => !teamScopedValue || item.team === teamScopedValue
+    );
+  }, [filteredMonitoring, teamScopedValue]);
+
+  const scopedHiddenAudits = useMemo(() => {
+    return filteredAudits.filter(
+      (item) =>
+        !item.shared_with_agent &&
+        (!teamScopedValue || item.team === teamScopedValue)
+    );
+  }, [filteredAudits, teamScopedValue]);
+
+  const openRequests = useMemo(
+    () => scopedRequests.filter((item) => item.status !== 'Closed'),
+    [scopedRequests]
+  );
+
+  const openFeedbackItems = useMemo(
+    () => scopedFeedback.filter((item) => item.status !== 'Closed'),
+    [scopedFeedback]
+  );
+
+  const activeMonitoringItems = useMemo(
+    () => scopedMonitoring.filter((item) => item.status === 'active'),
+    [scopedMonitoring]
+  );
+
+  const overdueFeedbackItems = useMemo(
+    () =>
+      openFeedbackItems.filter(
+        (item) =>
+          !!item.due_date &&
+          item.due_date.slice(0, 10) < getCurrentDateValue()
+      ),
+    [openFeedbackItems]
+  );
+
+  const agingRequests = useMemo(
+    () => openRequests.filter((item) => getDaysOld(item.created_at) >= 3),
+    [openRequests]
+  );
+
+  const agingMonitoring = useMemo(
+    () => activeMonitoringItems.filter((item) => getDaysOld(item.created_at) >= 2),
+    [activeMonitoringItems]
+  );
+
+  const agingHiddenAudits = useMemo(
+    () => scopedHiddenAudits.filter((item) => getDaysOld(item.audit_date) >= 2),
+    [scopedHiddenAudits]
+  );
+
+  const actionCenterItems = useMemo<ActionCenterItem[]>(() => {
+    const items: ActionCenterItem[] = [
+      {
+        id: 'requests',
+        title: 'Open Supervisor Requests',
+        count: openRequests.length,
+        detail:
+          agingRequests.length > 0
+            ? `${agingRequests.length} request(s) are 3+ days old.`
+            : 'No aging requests right now.',
+        path: '/supervisor-requests',
+        tone: agingRequests.length > 0 ? 'critical' : openRequests.length > 0 ? 'warning' : 'info',
+      },
+      {
+        id: 'feedback',
+        title: 'Open Feedback',
+        count: openFeedbackItems.length,
+        detail:
+          overdueFeedbackItems.length > 0
+            ? `${overdueFeedbackItems.length} feedback item(s) are overdue.`
+            : 'No overdue feedback right now.',
+        path: '/agent-feedback',
+        tone:
+          overdueFeedbackItems.length > 0
+            ? 'critical'
+            : openFeedbackItems.length > 0
+            ? 'warning'
+            : 'info',
+      },
+      {
+        id: 'monitoring',
+        title: 'Active Monitoring',
+        count: activeMonitoringItems.length,
+        detail:
+          agingMonitoring.length > 0
+            ? `${agingMonitoring.length} monitoring item(s) are aging.`
+            : 'Monitoring queue is under control.',
+        path: '/monitoring',
+        tone:
+          agingMonitoring.length > 0
+            ? 'critical'
+            : activeMonitoringItems.length > 0
+            ? 'warning'
+            : 'info',
+      },
+      {
+        id: 'audits',
+        title: 'Unreleased Audits',
+        count: scopedHiddenAudits.length,
+        detail:
+          agingHiddenAudits.length > 0
+            ? `${agingHiddenAudits.length} unreleased audit(s) are 2+ days old.`
+            : 'No aging unreleased audits.',
+        path: '/audits-list',
+        tone:
+          agingHiddenAudits.length > 0
+            ? 'critical'
+            : scopedHiddenAudits.length > 0
+            ? 'warning'
+            : 'info',
+      },
+    ];
+
+    return items;
+  }, [
+    openRequests.length,
+    agingRequests.length,
+    openFeedbackItems.length,
+    overdueFeedbackItems.length,
+    activeMonitoringItems.length,
+    agingMonitoring.length,
+    scopedHiddenAudits.length,
+    agingHiddenAudits.length,
+  ]);
+
+  const actionCenterHeadline = useMemo(() => {
+    const priorityItem =
+      actionCenterItems.find((item) => item.tone === 'critical' && item.count > 0) ||
+      actionCenterItems.find((item) => item.tone === 'warning' && item.count > 0) ||
+      null;
+
+    if (!priorityItem) {
+      return {
+        title: 'Queue is healthy',
+        detail: 'No urgent operational backlog in the selected range.',
+      };
+    }
+
+    return {
+      title: priorityItem.title,
+      detail: priorityItem.detail,
+    };
+  }, [actionCenterItems]);
+
+  const actionQuickLinks = useMemo(
+    () => [
+      { label: 'Open Audits List', path: '/audits-list' },
+      { label: 'Open Feedback', path: '/agent-feedback' },
+      { label: 'Open Monitoring', path: '/monitoring' },
+      { label: 'Open Requests', path: '/supervisor-requests' },
+      { label: 'Open Reports', path: '/reports' },
+    ],
+    []
+  );
 
   const comparisonDateFrom = dateFrom || getMonthStartValue();
   const comparisonDateTo = dateTo || getCurrentDateValue();
@@ -1057,9 +1260,9 @@ function Dashboard({
     0
   );
 
-  const openRequestsCount = filteredRequests.filter((item) => item.status !== 'Closed').length;
-  const openFeedbackCount = filteredFeedback.filter((item) => item.status !== 'Closed').length;
-  const activeMonitoringCount = filteredMonitoring.filter((item) => item.status === 'active').length;
+  const openRequestsCount = openRequests.length;
+  const openFeedbackCount = openFeedbackItems.length;
+  const activeMonitoringCount = activeMonitoringItems.length;
   const releasedRate = totalAudits > 0 ? (releasedAudits / totalAudits) * 100 : 0;
 
   const currentCallsTrend = getTeamAverage(filteredCallsAudits);
@@ -1256,6 +1459,97 @@ function Dashboard({
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div style={actionCenterPanelStyle}>
+        <div style={actionCenterHeaderStyle}>
+          <div>
+            <div style={sectionEyebrowStyle}>Action Center</div>
+            <h3 style={{ marginTop: 0, marginBottom: '8px' }}>What needs attention now</h3>
+            <p style={panelSubtitleStyle}>
+              Focus on live operational work first, then jump straight into the page that needs action.
+            </p>
+          </div>
+          <div style={actionCenterHeadlineStyle}>
+            <div style={actionHeadlineTitleStyle}>{actionCenterHeadline.title}</div>
+            <div style={actionHeadlineDetailStyle}>{actionCenterHeadline.detail}</div>
+          </div>
+        </div>
+
+        <div style={actionCenterGridStyle}>
+          {actionCenterItems.map((item) => (
+            <div key={item.id} style={actionCardStyle}>
+              <div style={actionCardTopRowStyle}>
+                <span
+                  style={{
+                    ...actionToneBadgeStyle,
+                    ...(item.tone === 'critical'
+                      ? actionToneCriticalStyle
+                      : item.tone === 'warning'
+                      ? actionToneWarningStyle
+                      : actionToneInfoStyle),
+                  }}
+                >
+                  {item.tone === 'critical'
+                    ? 'Urgent'
+                    : item.tone === 'warning'
+                    ? 'Watch'
+                    : 'Stable'}
+                </span>
+                <div style={actionCountStyle}>{item.count}</div>
+              </div>
+              <div style={actionCardTitleStyle}>{item.title}</div>
+              <div style={actionCardDetailStyle}>{item.detail}</div>
+              <button
+                type="button"
+                onClick={() => navigate(item.path)}
+                style={actionCardButtonStyle}
+              >
+                Open
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <div style={actionFooterGridStyle}>
+          <div style={actionSubpanelStyle}>
+            <div style={miniSectionEyebrowStyle}>Overdue / Aging</div>
+            <div style={actionListStyle}>
+              <ActionListRow
+                label="Requests aging 3+ days"
+                value={`${agingRequests.length}`}
+              />
+              <ActionListRow
+                label="Feedback overdue"
+                value={`${overdueFeedbackItems.length}`}
+              />
+              <ActionListRow
+                label="Monitoring aging 2+ days"
+                value={`${agingMonitoring.length}`}
+              />
+              <ActionListRow
+                label="Unreleased audits aging 2+ days"
+                value={`${agingHiddenAudits.length}`}
+              />
+            </div>
+          </div>
+
+          <div style={actionSubpanelStyle}>
+            <div style={miniSectionEyebrowStyle}>Quick Links</div>
+            <div style={quickLinkGridStyle}>
+              {actionQuickLinks.map((link) => (
+                <button
+                  key={link.path}
+                  type="button"
+                  onClick={() => navigate(link.path)}
+                  style={quickLinkButtonStyle}
+                >
+                  {link.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1617,6 +1911,21 @@ function InsightCard({
       <div style={insightTitleStyle}>{title}</div>
       <div style={insightHeadlineStyle}>{headline}</div>
       <div style={insightBodyStyle}>{body}</div>
+    </div>
+  );
+}
+
+function ActionListRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div style={actionListRowStyle}>
+      <div style={actionListLabelStyle}>{label}</div>
+      <div style={actionListValueStyle}>{value}</div>
     </div>
   );
 }
@@ -2132,6 +2441,188 @@ const spotlightStatValueStyle = {
   lineHeight: 1.6,
   wordBreak: 'break-word' as const,
   whiteSpace: 'pre-line' as const,
+  textAlign: 'left' as const,
+};
+
+const actionCenterPanelStyle = {
+  marginBottom: '28px',
+  borderRadius: '30px',
+  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-panel-bg, rgba(15,23,42,0.78))',
+  boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
+  padding: '20px',
+};
+
+const actionCenterHeaderStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'flex-start',
+  gap: '16px',
+  flexWrap: 'wrap' as const,
+  marginBottom: '18px',
+};
+
+const actionCenterHeadlineStyle = {
+  minWidth: '280px',
+  maxWidth: '420px',
+  borderRadius: '18px',
+  padding: '16px',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  border: '1px solid rgba(148,163,184,0.14)',
+};
+
+const actionHeadlineTitleStyle = {
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '18px',
+  fontWeight: 800,
+  marginBottom: '6px',
+};
+
+const actionHeadlineDetailStyle = {
+  color: 'var(--screen-text, #e5eefb)',
+  lineHeight: 1.55,
+  fontSize: '13px',
+};
+
+const actionCenterGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '14px',
+  marginBottom: '18px',
+};
+
+const actionCardStyle = {
+  borderRadius: '22px',
+  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  padding: '18px',
+  display: 'grid',
+  gap: '12px',
+};
+
+const actionCardTopRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '10px',
+  alignItems: 'center',
+};
+
+const actionToneBadgeStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  borderRadius: '999px',
+  padding: '7px 10px',
+  fontSize: '11px',
+  fontWeight: 800,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase' as const,
+};
+
+const actionToneCriticalStyle = {
+  background: 'rgba(220,38,38,0.16)',
+  color: '#fecaca',
+  border: '1px solid rgba(248,113,113,0.22)',
+};
+
+const actionToneWarningStyle = {
+  background: 'rgba(245,158,11,0.16)',
+  color: '#fde68a',
+  border: '1px solid rgba(251,191,36,0.22)',
+};
+
+const actionToneInfoStyle = {
+  background: 'rgba(37,99,235,0.14)',
+  color: '#bfdbfe',
+  border: '1px solid rgba(96,165,250,0.22)',
+};
+
+const actionCountStyle = {
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '28px',
+  fontWeight: 900,
+};
+
+const actionCardTitleStyle = {
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '18px',
+  fontWeight: 800,
+};
+
+const actionCardDetailStyle = {
+  color: 'var(--screen-text, #e5eefb)',
+  lineHeight: 1.6,
+  fontSize: '13px',
+  minHeight: '42px',
+};
+
+const actionCardButtonStyle = {
+  padding: '11px 14px',
+  borderRadius: '14px',
+  background: 'var(--da-secondary-bg, rgba(15, 23, 42, 0.74))',
+  color: 'var(--da-secondary-text, #e5eefb)',
+  border: 'var(--da-secondary-border, 1px solid rgba(148, 163, 184, 0.18))',
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
+const actionFooterGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+  gap: '14px',
+};
+
+const actionSubpanelStyle = {
+  borderRadius: '22px',
+  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  padding: '18px',
+};
+
+const actionListStyle = {
+  display: 'grid',
+  gap: '10px',
+  marginTop: '12px',
+};
+
+const actionListRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '10px',
+  padding: '12px 14px',
+  borderRadius: '14px',
+  background: 'var(--screen-field-bg, rgba(255,255,255,0.92))',
+  border: '1px solid rgba(148,163,184,0.14)',
+};
+
+const actionListLabelStyle = {
+  color: 'var(--screen-text, #e5eefb)',
+  fontSize: '13px',
+  fontWeight: 700,
+};
+
+const actionListValueStyle = {
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '16px',
+  fontWeight: 900,
+};
+
+const quickLinkGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+  gap: '10px',
+  marginTop: '12px',
+};
+
+const quickLinkButtonStyle = {
+  padding: '12px 14px',
+  borderRadius: '14px',
+  background: 'var(--da-secondary-bg, rgba(15, 23, 42, 0.74))',
+  color: 'var(--da-secondary-text, #e5eefb)',
+  border: 'var(--da-secondary-border, 1px solid rgba(148, 163, 184, 0.18))',
+  cursor: 'pointer',
+  fontWeight: 700,
   textAlign: 'left' as const,
 };
 
