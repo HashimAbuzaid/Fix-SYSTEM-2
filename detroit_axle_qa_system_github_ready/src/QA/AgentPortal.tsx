@@ -132,6 +132,113 @@ type AgentPortalCachePayload = {
 const AGENT_PORTAL_CACHE_TTL_MS = 1000 * 60 * 3;
 const HIDDEN_AGENT_METRICS = new Set(['Issue was resolved']);
 
+type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
+type ReviewStage = 'QA Shared' | 'Acknowledged' | 'Agent Responded' | 'Supervisor Reviewed' | 'Follow-up' | 'Closed';
+
+const STRUCTURED_PLAN_SECTION_LABELS = [
+  'Priority',
+  'Action Plan',
+  'Justification',
+  'Review Stage',
+  'Agent Comment',
+  'Supervisor Review',
+  'Follow-up Outcome',
+  'Resolution Note',
+] as const;
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizePriority(value?: string | null): PlanPriority {
+  if (value === 'Low' || value === 'Medium' || value === 'High' || value === 'Critical') return value;
+  return 'Medium';
+}
+
+function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
+  if (
+    value === 'Improved' ||
+    value === 'Partial Improvement' ||
+    value === 'No Improvement' ||
+    value === 'Needs Escalation'
+  ) {
+    return value;
+  }
+  return 'Not Set';
+}
+
+function normalizeReviewStage(value?: string | null): ReviewStage {
+  if (
+    value === 'QA Shared' ||
+    value === 'Acknowledged' ||
+    value === 'Agent Responded' ||
+    value === 'Supervisor Reviewed' ||
+    value === 'Follow-up' ||
+    value === 'Closed'
+  ) {
+    return value;
+  }
+  return 'QA Shared';
+}
+
+function parseStructuredPlan(value?: string | null) {
+  const raw = String(value || '').trim();
+  const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map((label) => escapeRegex(label)).join('|');
+
+  function readSection(label: (typeof STRUCTURED_PLAN_SECTION_LABELS)[number]) {
+    const regex = new RegExp(`${escapeRegex(label)}:\n([\\s\\S]*?)(?=\\n(?:${labelsPattern}):\\n|$)`);
+    const match = raw.match(regex);
+    return match ? match[1].trim() : '';
+  }
+
+  const hasStructuredSections = STRUCTURED_PLAN_SECTION_LABELS.some((label) => raw.includes(`${label}:`));
+
+  return {
+    priority: normalizePriority(readSection('Priority')),
+    actionPlan: hasStructuredSections ? readSection('Action Plan') : raw,
+    justification: readSection('Justification'),
+    reviewStage: normalizeReviewStage(readSection('Review Stage')),
+    agentComment: readSection('Agent Comment'),
+    supervisorReview: readSection('Supervisor Review'),
+    followUpOutcome: normalizeFollowUpOutcome(readSection('Follow-up Outcome')),
+    resolutionNote: readSection('Resolution Note'),
+  };
+}
+
+function composeStructuredPlan({
+  priority,
+  actionPlan,
+  justification,
+  reviewStage,
+  agentComment,
+  supervisorReview,
+  followUpOutcome,
+  resolutionNote,
+}: {
+  priority: PlanPriority;
+  actionPlan: string;
+  justification: string;
+  reviewStage: ReviewStage;
+  agentComment: string;
+  supervisorReview: string;
+  followUpOutcome: FollowUpOutcome;
+  resolutionNote: string;
+}) {
+  const sections = [
+    `Priority:\n${priority}`,
+    actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
+    justification.trim() ? `Justification:\n${justification.trim()}` : '',
+    `Review Stage:\n${reviewStage}`,
+    agentComment.trim() ? `Agent Comment:\n${agentComment.trim()}` : '',
+    supervisorReview.trim() ? `Supervisor Review:\n${supervisorReview.trim()}` : '',
+    followUpOutcome !== 'Not Set' ? `Follow-up Outcome:\n${followUpOutcome}` : '',
+    resolutionNote.trim() ? `Resolution Note:\n${resolutionNote.trim()}` : '',
+  ].filter(Boolean);
+
+  return sections.join('\n\n').trim();
+}
+
 function openNativeDatePicker(target: HTMLInputElement) {
   const input = target as HTMLInputElement & { showPicker?: () => void };
   input.showPicker?.();
@@ -208,6 +315,7 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
   const [auditDateTo, setAuditDateTo] = useState('');
   const [lastLoadedAt, setLastLoadedAt] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [agentCommentDrafts, setAgentCommentDrafts] = useState<Record<string, string>>({});
   const [auditsVisible, setAuditsVisible] = useState(true);
 
   const themeVars = getThemeVars();
@@ -383,13 +491,27 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
   async function handleAcknowledgeFeedback(feedbackId: string) {
     setErrorMessage('');
 
+    const currentItem = feedbackItems.find((item) => item.id === feedbackId) || null;
+    const parsed = parseStructuredPlan(currentItem?.action_plan);
+    const nextActionPlan = composeStructuredPlan({
+      priority: parsed.priority,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      reviewStage: parsed.reviewStage === 'QA Shared' ? 'Acknowledged' : parsed.reviewStage,
+      agentComment: parsed.agentComment,
+      supervisorReview: parsed.supervisorReview,
+      followUpOutcome: parsed.followUpOutcome,
+      resolutionNote: parsed.resolutionNote,
+    });
+
     const { data, error } = await supabase
       .from('agent_feedback')
       .update({
         acknowledged_by_agent: true,
+        action_plan: nextActionPlan || null,
       })
       .eq('id', feedbackId)
-      .select('id, acknowledged_by_agent')
+      .select('id, acknowledged_by_agent, action_plan')
       .maybeSingle();
 
     if (error) {
@@ -410,6 +532,7 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
           ? {
               ...item,
               acknowledged_by_agent: true,
+              action_plan: nextActionPlan || null,
             }
           : item
       )
@@ -419,6 +542,50 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
   }
 
   const filteredAudits = useMemo(() => {
+
+  async function handleSaveAgentComment(item: AgentFeedback) {
+    setErrorMessage('');
+
+    const parsed = parseStructuredPlan(item.action_plan);
+    const nextComment = String(agentCommentDrafts[item.id] ?? parsed.agentComment).trim();
+
+    const nextActionPlan = composeStructuredPlan({
+      priority: parsed.priority,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      reviewStage: nextComment ? 'Agent Responded' : item.acknowledged_by_agent ? 'Acknowledged' : parsed.reviewStage,
+      agentComment: nextComment,
+      supervisorReview: parsed.supervisorReview,
+      followUpOutcome: parsed.followUpOutcome,
+      resolutionNote: parsed.resolutionNote,
+    });
+
+    const { error } = await supabase
+      .from('agent_feedback')
+      .update({
+        acknowledged_by_agent: true,
+        action_plan: nextActionPlan || null,
+      })
+      .eq('id', item.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setFeedbackItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id
+          ? {
+              ...entry,
+              acknowledged_by_agent: true,
+              action_plan: nextActionPlan || null,
+            }
+          : entry
+      )
+    );
+  }
+
     return audits.filter((audit) => {
       const matchesFrom = auditDateFrom
         ? audit.audit_date >= auditDateFrom
@@ -629,6 +796,16 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
           value={String(monitoringItems.length)}
           subtitle="Active monitoring only"
         />
+        <SummaryCard
+          title="Awaiting My Response"
+          value={String(
+            feedbackItems.filter((item) => {
+              const parsed = parseStructuredPlan(item.action_plan);
+              return item.status !== 'Closed' && (!item.acknowledged_by_agent || !parsed.agentComment.trim());
+            }).length
+          )}
+          subtitle="Need acknowledgment or comment"
+        />
         {currentUser.team === 'Calls' && (
           <SummaryCard
             title="Total Calls"
@@ -746,58 +923,121 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
                     {isExpanded ? (
                       <div style={auditExpandedRowStyle}>
                         <div style={expandedPanelStyle}>
-                          <div style={detailInfoGridStyle}>
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>Type</div>
-                              <div style={detailValueStyle}>
-                                {item.feedback_type}
-                              </div>
-                            </div>
+                          {(() => {
+                            const parsedPlan = parseStructuredPlan(item.action_plan);
+                            const agentCommentValue = agentCommentDrafts[item.id] ?? parsedPlan.agentComment;
 
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>From QA</div>
-                              <div style={detailValueStyle}>{item.qa_name}</div>
-                            </div>
+                            return (
+                              <>
+                                <div style={detailInfoGridStyle}>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Type</div>
+                                    <div style={detailValueStyle}>{item.feedback_type}</div>
+                                  </div>
 
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>Due Date</div>
-                              <div style={detailValueStyle}>
-                                {item.due_date || '-'}
-                              </div>
-                            </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>From QA</div>
+                                    <div style={detailValueStyle}>{item.qa_name}</div>
+                                  </div>
 
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>Created At</div>
-                              <div style={detailValueStyle}>
-                                {formatDate(item.created_at)}
-                              </div>
-                            </div>
-                          </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Due Date</div>
+                                    <div style={detailValueStyle}>{item.due_date || '-'}</div>
+                                  </div>
 
-                          <div style={fullCommentCardStyle}>
-                            <div style={detailLabelStyle}>Subject</div>
-                            <div style={fullCommentTextStyle}>{item.subject}</div>
-                          </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Created At</div>
+                                    <div style={detailValueStyle}>{formatDate(item.created_at)}</div>
+                                  </div>
 
-                          <div style={fullCommentCardStyle}>
-                            <div style={detailLabelStyle}>Feedback</div>
-                            <div style={fullCommentTextStyle}>
-                              {item.feedback_note || '-'}
-                            </div>
-                          </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Review Stage</div>
+                                    <div style={detailValueStyle}>{parsedPlan.reviewStage}</div>
+                                  </div>
 
-                          <div style={detailInfoGridStyle}>
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>Status</div>
-                              <div style={detailValueStyle}>{item.status}</div>
-                            </div>
-                            <div style={detailInfoCardStyle}>
-                              <div style={detailLabelStyle}>Acknowledged</div>
-                              <div style={detailValueStyle}>
-                                {item.acknowledged_by_agent ? 'Yes' : 'Not yet'}
-                              </div>
-                            </div>
-                          </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Supervisor Review</div>
+                                    <div style={detailValueStyle}>
+                                      {parsedPlan.supervisorReview || 'Waiting for supervisor review.'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div style={fullCommentCardStyle}>
+                                  <div style={detailLabelStyle}>Subject</div>
+                                  <div style={fullCommentTextStyle}>{item.subject}</div>
+                                </div>
+
+                                <div style={fullCommentCardStyle}>
+                                  <div style={detailLabelStyle}>Coaching Summary</div>
+                                  <div style={fullCommentTextStyle}>{item.feedback_note || '-'}</div>
+                                </div>
+
+                                <div style={fullCommentCardStyle}>
+                                  <div style={detailLabelStyle}>Action Plan</div>
+                                  <div style={fullCommentTextStyle}>{parsedPlan.actionPlan || '-'}</div>
+                                </div>
+
+                                <div style={fullCommentCardStyle}>
+                                  <div style={detailLabelStyle}>Justification</div>
+                                  <div style={fullCommentTextStyle}>{parsedPlan.justification || '-'}</div>
+                                </div>
+
+                                <div style={fullCommentCardStyle}>
+                                  <div style={detailLabelStyle}>Agent Comment</div>
+                                  <textarea
+                                    value={agentCommentValue}
+                                    onChange={(e) =>
+                                      setAgentCommentDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value,
+                                      }))
+                                    }
+                                    rows={4}
+                                    style={fieldStyle}
+                                    placeholder="Add your comment, response, or update for the supervisor review."
+                                  />
+                                  <div style={feedbackDetailActionRowStyle}>
+                                    {!item.acknowledged_by_agent ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleAcknowledgeFeedback(item.id)}
+                                        style={feedbackAcknowledgeButtonStyle}
+                                      >
+                                        Acknowledge First
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleSaveAgentComment(item)}
+                                      style={feedbackSaveCommentButtonStyle}
+                                    >
+                                      Save My Comment
+                                    </button>
+                                  </div>
+                                </div>
+
+                                <div style={detailInfoGridStyle}>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Acknowledged</div>
+                                    <div style={detailValueStyle}>
+                                      {item.acknowledged_by_agent ? 'Yes' : 'Not yet'}
+                                    </div>
+                                  </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Outcome</div>
+                                    <div style={detailValueStyle}>{parsedPlan.followUpOutcome}</div>
+                                  </div>
+                                  <div style={detailInfoCardStyle}>
+                                    <div style={detailLabelStyle}>Resolution Note</div>
+                                    <div style={detailValueStyle}>
+                                      {parsedPlan.resolutionNote || '-'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            );
+                          })()}
                         </div>
                       </div>
                     ) : null}
@@ -1568,6 +1808,28 @@ const miniSecondaryButton = {
 };
 
 const detailInfoGridStyle = {
+
+const feedbackDetailActionRowStyle = {
+  display: 'flex',
+  gap: '10px',
+  flexWrap: 'wrap' as const,
+  marginTop: '12px',
+};
+
+const feedbackSaveCommentButtonStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: '148px',
+  padding: '10px 14px',
+  borderRadius: '12px',
+  border: '1px solid rgba(96,165,250,0.24)',
+  background: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-secondary-btn-text)',
+  cursor: 'pointer',
+  fontWeight: 800,
+  fontSize: '13px',
+};
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: '12px',
