@@ -1767,6 +1767,14 @@ const metricNoteTextStyle = {
 };
 
 const recordsTableWrapStyle = {
+  marginTop: '16px',
+  overflowX: 'auto' as const,
+  borderRadius: '18px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background:
+    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.2))',
+};
 
 const coachingTableStyle = {
   minWidth: '980px',
@@ -1779,14 +1787,6 @@ const coachingRowStyle = {
   alignItems: 'center',
   padding: '14px 16px',
   borderBottom: '1px solid rgba(148,163,184,0.1)',
-};
-  marginTop: '16px',
-  overflowX: 'auto' as const,
-  borderRadius: '18px',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.2))',
 };
 
 const recordsTableStyle = {
