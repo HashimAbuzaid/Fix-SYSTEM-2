@@ -541,8 +541,6 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
     void loadAgentData({ force: true, background: true });
   }
 
-  const filteredAudits = useMemo(() => {
-
   async function handleSaveAgentComment(item: AgentFeedback) {
     setErrorMessage('');
 
@@ -585,6 +583,9 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
       )
     );
   }
+
+  const filteredAudits = useMemo(() => {
+
 
     return audits.filter((audit) => {
       const matchesFrom = auditDateFrom
