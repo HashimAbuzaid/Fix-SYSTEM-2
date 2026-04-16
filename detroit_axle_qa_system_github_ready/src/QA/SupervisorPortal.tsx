@@ -97,6 +97,131 @@ type SupervisorPortalProps = {
   currentUser: UserProfile;
 };
 
+
+type AgentFeedback = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  team: TeamName;
+  qa_name: string;
+  feedback_type: 'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up';
+  subject: string;
+  feedback_note: string;
+  action_plan?: string | null;
+  due_date: string | null;
+  status: 'Open' | 'In Progress' | 'Closed';
+  created_at: string;
+  acknowledged_by_agent?: boolean | null;
+};
+
+type ReviewStage = 'QA Shared' | 'Acknowledged' | 'Agent Responded' | 'Supervisor Reviewed' | 'Follow-up' | 'Closed';
+type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
+type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
+
+const COACHING_PLAN_SECTION_LABELS = [
+  'Priority',
+  'Action Plan',
+  'Justification',
+  'Review Stage',
+  'Agent Comment',
+  'Supervisor Review',
+  'Follow-up Outcome',
+  'Resolution Note',
+] as const;
+
+function escapeCoachingRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeReviewStage(value?: string | null): ReviewStage {
+  if (
+    value === 'QA Shared' ||
+    value === 'Acknowledged' ||
+    value === 'Agent Responded' ||
+    value === 'Supervisor Reviewed' ||
+    value === 'Follow-up' ||
+    value === 'Closed'
+  ) {
+    return value;
+  }
+  return 'QA Shared';
+}
+
+function normalizeFeedbackPriority(value?: string | null): PlanPriority {
+  if (value === 'Low' || value === 'Medium' || value === 'High' || value === 'Critical') {
+    return value;
+  }
+  return 'Medium';
+}
+
+function normalizeFeedbackOutcome(value?: string | null): FollowUpOutcome {
+  if (
+    value === 'Improved' ||
+    value === 'Partial Improvement' ||
+    value === 'No Improvement' ||
+    value === 'Needs Escalation'
+  ) {
+    return value;
+  }
+  return 'Not Set';
+}
+
+function parseCoachingPlan(value?: string | null) {
+  const raw = String(value || '').trim();
+  const labelsPattern = COACHING_PLAN_SECTION_LABELS.map((label) => escapeCoachingRegex(label)).join('|');
+
+  function readSection(label: (typeof COACHING_PLAN_SECTION_LABELS)[number]) {
+    const regex = new RegExp(`${escapeCoachingRegex(label)}:\n([\\s\\S]*?)(?=\\n(?:${labelsPattern}):\\n|$)`);
+    const match = raw.match(regex);
+    return match ? match[1].trim() : '';
+  }
+
+  const hasStructuredSections = COACHING_PLAN_SECTION_LABELS.some((label) => raw.includes(`${label}:`));
+
+  return {
+    priority: normalizeFeedbackPriority(readSection('Priority')),
+    actionPlan: hasStructuredSections ? readSection('Action Plan') : raw,
+    justification: readSection('Justification'),
+    reviewStage: normalizeReviewStage(readSection('Review Stage')),
+    agentComment: readSection('Agent Comment'),
+    supervisorReview: readSection('Supervisor Review'),
+    followUpOutcome: normalizeFeedbackOutcome(readSection('Follow-up Outcome')),
+    resolutionNote: readSection('Resolution Note'),
+  };
+}
+
+function composeCoachingPlan({
+  priority,
+  actionPlan,
+  justification,
+  reviewStage,
+  agentComment,
+  supervisorReview,
+  followUpOutcome,
+  resolutionNote,
+}: {
+  priority: PlanPriority;
+  actionPlan: string;
+  justification: string;
+  reviewStage: ReviewStage;
+  agentComment: string;
+  supervisorReview: string;
+  followUpOutcome: FollowUpOutcome;
+  resolutionNote: string;
+}) {
+  const sections = [
+    `Priority:\n${priority}`,
+    actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
+    justification.trim() ? `Justification:\n${justification.trim()}` : '',
+    `Review Stage:\n${reviewStage}`,
+    agentComment.trim() ? `Agent Comment:\n${agentComment.trim()}` : '',
+    supervisorReview.trim() ? `Supervisor Review:\n${supervisorReview.trim()}` : '',
+    followUpOutcome !== 'Not Set' ? `Follow-up Outcome:\n${followUpOutcome}` : '',
+    resolutionNote.trim() ? `Resolution Note:\n${resolutionNote.trim()}` : '',
+  ].filter(Boolean);
+
+  return sections.join('\n\n').trim();
+}
 function openNativeDatePicker(target: HTMLInputElement) {
   const input = target as HTMLInputElement & { showPicker?: () => void };
   input.showPicker?.();
@@ -161,6 +286,11 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   const [recordDateFrom, setRecordDateFrom] = useState('');
   const [recordDateTo, setRecordDateTo] = useState('');
 
+  const [feedbackItems, setFeedbackItems] = useState<AgentFeedback[]>([]);
+  const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null);
+  const [reviewStageDrafts, setReviewStageDrafts] = useState<Record<string, ReviewStage>>({});
+  const [supervisorReviewDrafts, setSupervisorReviewDrafts] = useState<Record<string, string>>({});
+
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLDivElement | null>(null);
   const themeVars = getSupervisorThemeVars();
@@ -217,6 +347,12 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       .eq('status', 'active')
       .order('created_at', { ascending: false });
 
+    const feedbackPromise = supabase
+      .from('agent_feedback')
+      .select('*')
+      .eq('team', currentUser.team)
+      .order('created_at', { ascending: false });
+
     const recordsPromise =
       currentUser.team === 'Calls'
         ? supabase
@@ -233,12 +369,13 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             .select('*')
             .order('sale_date', { ascending: false });
 
-    const [agentsResult, auditsResult, recordsResult, monitoringResult] =
+    const [agentsResult, auditsResult, recordsResult, monitoringResult, feedbackResult] =
       await Promise.all([
         agentsPromise,
         auditsPromise,
         recordsPromise,
         monitoringPromise,
+        feedbackPromise,
       ]);
 
     const errors = [
@@ -246,6 +383,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       auditsResult.error?.message,
       recordsResult.error?.message,
       monitoringResult.error?.message,
+      feedbackResult.error?.message,
     ].filter(Boolean);
 
     if (errors.length > 0) {
@@ -256,6 +394,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     setAudits((auditsResult.data as AuditItem[]) || []);
     setRecords((recordsResult.data as TeamRecord[]) || []);
     setMonitoringItems((monitoringResult.data as MonitoringItem[]) || []);
+    setFeedbackItems((feedbackResult.data as AgentFeedback[]) || []);
     setLoading(false);
     setRefreshing(false);
   }
@@ -493,6 +632,60 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   }
 
   if (loading) {
+
+  const filteredFeedbackItems = useMemo(() => {
+    return feedbackItems.filter((item) => {
+      const matchesAgent = selectedAgent
+        ? (
+            (normalizeAgentId(item.agent_id) &&
+              normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id)) ||
+            normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name)
+          )
+        : true;
+      return matchesAgent;
+    });
+  }, [feedbackItems, selectedAgent]);
+
+  const awaitingSupervisorCount = filteredFeedbackItems.filter((item) => {
+    const parsed = parseCoachingPlan(item.action_plan);
+    return item.status !== 'Closed' && parsed.reviewStage === 'Agent Responded';
+  }).length;
+
+  async function handleSaveSupervisorReview(item: AgentFeedback) {
+    setErrorMessage('');
+
+    const parsed = parseCoachingPlan(item.action_plan);
+    const nextStage = reviewStageDrafts[item.id] || parsed.reviewStage;
+    const nextReview = String(supervisorReviewDrafts[item.id] ?? parsed.supervisorReview).trim();
+
+    const nextActionPlan = composeCoachingPlan({
+      priority: parsed.priority,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      reviewStage: nextStage,
+      agentComment: parsed.agentComment,
+      supervisorReview: nextReview,
+      followUpOutcome: parsed.followUpOutcome,
+      resolutionNote: parsed.resolutionNote,
+    });
+
+    const { error } = await supabase
+      .from('agent_feedback')
+      .update({ action_plan: nextActionPlan || null })
+      .eq('id', item.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setFeedbackItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id ? { ...entry, action_plan: nextActionPlan || null } : entry
+      )
+    );
+  }
+
     return <div style={{ color: 'var(--da-muted-text, #cbd5e1)' }}>Loading supervisor portal...</div>;
   }
 
@@ -715,6 +908,10 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             <SummaryCard
               title="Monitoring Alerts"
               value={String(monitoringItems.length)}
+            />
+            <SummaryCard
+              title="Awaiting Supervisor"
+              value={String(awaitingSupervisorCount)}
             />
           </div>
 
@@ -989,6 +1186,151 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
           </Section>
 
           <DigitalTrophyCabinet scope="team" currentUser={currentUser} />
+
+          <Section title="Coaching Review Queue">
+            {filteredFeedbackItems.length === 0 ? (
+              <p>No coaching items found for this team filter.</p>
+            ) : (
+              <div style={auditTableWrapStyle}>
+                <div style={coachingTableStyle}>
+                  <div style={{ ...coachingRowStyle, ...auditHeaderRowStyle }}>
+                    <div>Agent</div>
+                    <div>Subject</div>
+                    <div>Priority / Stage</div>
+                    <div>Due Date</div>
+                    <div>Acknowledged</div>
+                    <div>Actions</div>
+                  </div>
+
+                  {filteredFeedbackItems.map((item) => {
+                    const parsedPlan = parseCoachingPlan(item.action_plan);
+                    const isExpanded = expandedFeedbackId === item.id;
+
+                    return (
+                      <div key={item.id} style={auditEntryStyle}>
+                        <div style={coachingRowStyle}>
+                          <div>
+                            <div style={primaryCellTextStyle}>{getAgentLabel(item.agent_id, item.agent_name)}</div>
+                            <div style={secondaryCellTextStyle}>{item.team}</div>
+                          </div>
+
+                          <div>
+                            <div style={primaryCellTextStyle}>{item.subject}</div>
+                            <div style={secondaryCellTextStyle}>{item.qa_name}</div>
+                          </div>
+
+                          <div>
+                            <div style={primaryCellTextStyle}>{parsedPlan.priority}</div>
+                            <div style={secondaryCellTextStyle}>{parsedPlan.reviewStage}</div>
+                          </div>
+
+                          <div>
+                            <div style={primaryCellTextStyle}>{formatDateOnly(item.due_date)}</div>
+                            <div style={secondaryCellTextStyle}>{item.status}</div>
+                          </div>
+
+                          <div>
+                            <span style={{
+                              ...pillStyle,
+                              backgroundColor: item.acknowledged_by_agent ? '#166534' : '#475569',
+                            }}>
+                              {item.acknowledged_by_agent ? 'Yes' : 'Not yet'}
+                            </span>
+                          </div>
+
+                          <div style={auditCellActionsStyle}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedFeedbackId(expandedFeedbackId === item.id ? null : item.id)
+                              }
+                              style={miniSecondaryButton}
+                            >
+                              {isExpanded ? 'Hide' : 'Review'}
+                            </button>
+                          </div>
+                        </div>
+
+                        {isExpanded ? (
+                          <div style={auditExpandedRowStyle}>
+                            <div style={expandedPanelStyle}>
+                              <div style={detailInfoGridStyle}>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Coaching Summary</div>
+                                  <div style={detailValueStyle}>{item.feedback_note || '-'}</div>
+                                </div>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Action Plan</div>
+                                  <div style={detailValueStyle}>{parsedPlan.actionPlan || '-'}</div>
+                                </div>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Justification</div>
+                                  <div style={detailValueStyle}>{parsedPlan.justification || '-'}</div>
+                                </div>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Agent Comment</div>
+                                  <div style={detailValueStyle}>{parsedPlan.agentComment || 'No agent comment yet.'}</div>
+                                </div>
+                              </div>
+
+                              <div style={detailInfoGridStyle}>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Review Stage</div>
+                                  <select
+                                    value={reviewStageDrafts[item.id] || parsedPlan.reviewStage}
+                                    onChange={(e) =>
+                                      setReviewStageDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value as ReviewStage,
+                                      }))
+                                    }
+                                    style={fieldStyle}
+                                  >
+                                    <option value="QA Shared">QA Shared</option>
+                                    <option value="Acknowledged">Acknowledged</option>
+                                    <option value="Agent Responded">Agent Responded</option>
+                                    <option value="Supervisor Reviewed">Supervisor Reviewed</option>
+                                    <option value="Follow-up">Follow-up</option>
+                                    <option value="Closed">Closed</option>
+                                  </select>
+                                </div>
+                                <div style={detailInfoCardStyle}>
+                                  <div style={detailLabelStyle}>Supervisor Review</div>
+                                  <textarea
+                                    value={supervisorReviewDrafts[item.id] ?? parsedPlan.supervisorReview}
+                                    onChange={(e) =>
+                                      setSupervisorReviewDrafts((prev) => ({
+                                        ...prev,
+                                        [item.id]: e.target.value,
+                                      }))
+                                    }
+                                    rows={4}
+                                    style={fieldStyle}
+                                    placeholder="Add supervisor direction, coaching recommendation, or escalation note."
+                                  />
+                                </div>
+                              </div>
+
+                              <div style={sectionHeaderActionsStyle}>
+                                <button
+                                  type="button"
+                                  onClick={() => void handleSaveSupervisorReview(item)}
+                                  style={miniSecondaryButton}
+                                >
+                                  Save Supervisor Review
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </Section>
+
           <RecognitionWall compact currentUser={currentUser as any} />
           <VoiceOfEmployeeSupabase currentUser={currentUser} />
 
@@ -1425,6 +1767,19 @@ const metricNoteTextStyle = {
 };
 
 const recordsTableWrapStyle = {
+
+const coachingTableStyle = {
+  minWidth: '980px',
+};
+
+const coachingRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '220px minmax(260px, 1.4fr) 180px 150px 140px 120px',
+  gap: '14px',
+  alignItems: 'center',
+  padding: '14px 16px',
+  borderBottom: '1px solid rgba(148,163,184,0.1)',
+};
   marginTop: '16px',
   overflowX: 'auto' as const,
   borderRadius: '18px',
