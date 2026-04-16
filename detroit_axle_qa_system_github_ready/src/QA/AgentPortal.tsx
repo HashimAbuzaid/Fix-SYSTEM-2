@@ -1808,6 +1808,11 @@ const miniSecondaryButton = {
 };
 
 const detailInfoGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '12px',
+  marginBottom: '18px',
+};
 
 const feedbackDetailActionRowStyle = {
   display: 'flex',
@@ -1829,11 +1834,6 @@ const feedbackSaveCommentButtonStyle = {
   cursor: 'pointer',
   fontWeight: 800,
   fontSize: '13px',
-};
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '12px',
-  marginBottom: '18px',
 };
 
 const detailInfoCardStyle = {
