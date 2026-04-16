@@ -229,10 +229,10 @@ function getOutcomeColor(outcome: FollowUpOutcome) {
 }
 
 function getReviewStageColor(stage: ReviewStage) {
-  if (stage === 'Closed Loop') return '#166534';
-  if (stage === 'Follow-up Scheduled') return '#7c3aed';
-  if (stage === 'Supervisor Review') return '#92400e';
-  if (stage === 'Agent Replied') return '#2563eb';
+  if (stage === 'Closed') return '#166534';
+  if (stage === 'Follow-up') return '#7c3aed';
+  if (stage === 'Supervisor Reviewed') return '#92400e';
+  if (stage === 'Agent Responded' || stage === 'Acknowledged') return '#2563eb';
   return '#475569';
 }
 
@@ -517,6 +517,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const reviewStageCounts = useMemo(() => {
     const counts: Record<ReviewStage, number> = {
       'QA Shared': 0,
+      'Acknowledged': 0,
       'Agent Responded': 0,
       'Supervisor Reviewed': 0,
       'Follow-up': 0,
@@ -668,7 +669,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
     const mergedActionPlan = composeStructuredPlan({
       priority: priorityOnCreate,
-      reviewStage: statusOnCreate === 'Closed' ? 'Closed Loop' : 'Shared with Agent',
+      reviewStage: statusOnCreate === 'Closed' ? 'Closed' : 'QA Shared',
       actionPlan,
       justification,
       agentComment: '',
