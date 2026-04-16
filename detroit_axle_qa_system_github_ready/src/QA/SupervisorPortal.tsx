@@ -649,6 +649,17 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     return item.status !== 'Closed' && parsed.reviewStage === 'Agent Responded';
   }).length;
 
+  const supervisorInboxItems = filteredFeedbackItems
+    .filter((item) => item.status !== 'Closed')
+    .sort((a, b) => {
+      const aParsed = parseCoachingPlan(a.action_plan);
+      const bParsed = parseCoachingPlan(b.action_plan);
+      const aNeedsReview = aParsed.reviewStage === 'Agent Responded' ? 1 : 0;
+      const bNeedsReview = bParsed.reviewStage === 'Agent Responded' ? 1 : 0;
+      if (aNeedsReview !== bNeedsReview) return bNeedsReview - aNeedsReview;
+      return String(b.created_at).localeCompare(String(a.created_at));
+    });
+
   async function handleSaveSupervisorReview(item: AgentFeedback) {
     setErrorMessage('');
 
@@ -915,6 +926,113 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
               value={String(awaitingSupervisorCount)}
             />
           </div>
+
+          <Section title="Supervisor Coaching Inbox">
+            {supervisorInboxItems.length === 0 ? (
+              <p>No coaching items found for this team filter.</p>
+            ) : (
+              <div style={supervisorInboxGridStyle}>
+                {supervisorInboxItems.map((item) => {
+                  const parsedPlan = parseCoachingPlan(item.action_plan);
+                  const stageColor =
+                    parsedPlan.reviewStage === 'Closed'
+                      ? '#166534'
+                      : parsedPlan.reviewStage === 'Follow-up'
+                      ? '#7c3aed'
+                      : parsedPlan.reviewStage === 'Supervisor Reviewed'
+                      ? '#b45309'
+                      : parsedPlan.reviewStage === 'Agent Responded' || parsedPlan.reviewStage === 'Acknowledged'
+                      ? '#2563eb'
+                      : '#475569';
+
+                  return (
+                    <div key={`inbox-${item.id}`} style={supervisorInboxCardStyle}>
+                      <div style={supervisorInboxTopRowStyle}>
+                        <div>
+                          <div style={sectionEyebrow}>Coaching Inbox</div>
+                          <div style={primaryCellTextStyle}>{item.subject}</div>
+                          <div style={secondaryCellTextStyle}>
+                            {getAgentLabel(item.agent_id, item.agent_name)} • {item.team}
+                          </div>
+                        </div>
+                        <span style={{ ...pillStyle, backgroundColor: stageColor }}>
+                          {parsedPlan.reviewStage}
+                        </span>
+                      </div>
+
+                      <div style={detailInfoGridStyle}>
+                        <div style={detailInfoCardStyle}>
+                          <div style={detailLabelStyle}>Agent Comment</div>
+                          <div style={detailValueStyle}>{parsedPlan.agentComment || 'No agent reply yet.'}</div>
+                        </div>
+                        <div style={detailInfoCardStyle}>
+                          <div style={detailLabelStyle}>Action Plan</div>
+                          <div style={detailValueStyle}>{parsedPlan.actionPlan || '-'}</div>
+                        </div>
+                      </div>
+
+                      <div style={detailInfoGridStyle}>
+                        <div style={detailInfoCardStyle}>
+                          <div style={detailLabelStyle}>Review Stage</div>
+                          <select
+                            value={reviewStageDrafts[item.id] || parsedPlan.reviewStage}
+                            onChange={(e) =>
+                              setReviewStageDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: e.target.value as ReviewStage,
+                              }))
+                            }
+                            style={fieldStyle}
+                          >
+                            <option value="QA Shared">QA Shared</option>
+                            <option value="Acknowledged">Acknowledged</option>
+                            <option value="Agent Responded">Agent Responded</option>
+                            <option value="Supervisor Reviewed">Supervisor Reviewed</option>
+                            <option value="Follow-up">Follow-up</option>
+                            <option value="Closed">Closed</option>
+                          </select>
+                        </div>
+                        <div style={detailInfoCardStyle}>
+                          <div style={detailLabelStyle}>Supervisor Review</div>
+                          <textarea
+                            value={supervisorReviewDrafts[item.id] ?? parsedPlan.supervisorReview}
+                            onChange={(e) =>
+                              setSupervisorReviewDrafts((prev) => ({
+                                ...prev,
+                                [item.id]: e.target.value,
+                              }))
+                            }
+                            rows={4}
+                            style={fieldStyle}
+                            placeholder="Leave your supervisor review, decision, or escalation guidance."
+                          />
+                        </div>
+                      </div>
+
+                      <div style={sectionHeaderActionsStyle}>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveSupervisorReview(item)}
+                          style={miniSecondaryButton}
+                        >
+                          Save Supervisor Review
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedFeedbackId(expandedFeedbackId === item.id ? null : item.id)
+                          }
+                          style={miniSecondaryButton}
+                        >
+                          {expandedFeedbackId === item.id ? 'Hide Full Queue Row' : 'Open Full Queue Row'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
 
           <Section
             title={`${
@@ -1820,5 +1938,30 @@ const recordsCellDateFromStyle = {};
 const recordsCellDateToStyle = {};
 const recordsCellMetricStyle = {};
 const recordsCellNotesStyle = {};
+
+
+const supervisorInboxGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))',
+  gap: '16px',
+};
+
+const supervisorInboxCardStyle = {
+  borderRadius: '22px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background:
+    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
+  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
+  padding: '18px',
+  display: 'grid',
+  gap: '12px',
+};
+
+const supervisorInboxTopRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  alignItems: 'flex-start',
+};
 
 export default SupervisorPortal;
