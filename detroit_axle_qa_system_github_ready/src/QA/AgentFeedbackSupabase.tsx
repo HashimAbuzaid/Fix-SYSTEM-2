@@ -8,6 +8,7 @@ type FeedbackStatus = 'Open' | 'In Progress' | 'Closed';
 type PlanTab = 'All' | 'Open' | 'Overdue' | 'Awaiting Ack' | 'Follow-up';
 type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
+type ReviewStage = 'Shared with Agent' | 'Agent Replied' | 'Supervisor Review' | 'Follow-up Scheduled' | 'Closed Loop';
 
 type CurrentUser = {
   id?: string;
@@ -104,8 +105,11 @@ function getTypeColor(typeValue: FeedbackType) {
 
 const STRUCTURED_PLAN_SECTION_LABELS = [
   'Priority',
+  'Review Stage',
   'Action Plan',
   'Justification',
+  'Agent Comment',
+  'Supervisor Review',
   'Follow-up Outcome',
   'Resolution Note',
 ] as const;
@@ -133,6 +137,19 @@ function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
   return 'Not Set';
 }
 
+function normalizeReviewStage(value?: string | null): ReviewStage {
+  if (
+    value === 'Shared with Agent' ||
+    value === 'Agent Replied' ||
+    value === 'Supervisor Review' ||
+    value === 'Follow-up Scheduled' ||
+    value === 'Closed Loop'
+  ) {
+    return value;
+  }
+  return 'Shared with Agent';
+}
+
 function parseStructuredPlan(value?: string | null) {
   const raw = String(value || '').trim();
   const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map((label) => escapeRegex(label)).join('|');
@@ -151,8 +168,11 @@ function parseStructuredPlan(value?: string | null) {
 
   return {
     priority: normalizePriority(readSection('Priority')),
+    reviewStage: normalizeReviewStage(readSection('Review Stage')),
     actionPlan: hasStructuredSections ? readSection('Action Plan') : raw,
     justification: readSection('Justification'),
+    agentComment: readSection('Agent Comment'),
+    supervisorReview: readSection('Supervisor Review'),
     followUpOutcome: normalizeFollowUpOutcome(readSection('Follow-up Outcome')),
     resolutionNote: readSection('Resolution Note'),
   };
@@ -160,21 +180,30 @@ function parseStructuredPlan(value?: string | null) {
 
 function composeStructuredPlan({
   priority,
+  reviewStage,
   actionPlan,
   justification,
+  agentComment,
+  supervisorReview,
   followUpOutcome,
   resolutionNote,
 }: {
   priority: PlanPriority;
+  reviewStage: ReviewStage;
   actionPlan: string;
   justification: string;
+  agentComment: string;
+  supervisorReview: string;
   followUpOutcome: FollowUpOutcome;
   resolutionNote: string;
 }) {
   const sections = [
     `Priority:\n${priority}`,
+    `Review Stage:\n${reviewStage}`,
     actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
     justification.trim() ? `Justification:\n${justification.trim()}` : '',
+    agentComment.trim() ? `Agent Comment:\n${agentComment.trim()}` : '',
+    supervisorReview.trim() ? `Supervisor Review:\n${supervisorReview.trim()}` : '',
     followUpOutcome !== 'Not Set'
       ? `Follow-up Outcome:\n${followUpOutcome}`
       : '',
@@ -199,17 +228,31 @@ function getOutcomeColor(outcome: FollowUpOutcome) {
   return '#475569';
 }
 
+function getReviewStageColor(stage: ReviewStage) {
+  if (stage === 'Closed Loop') return '#166534';
+  if (stage === 'Follow-up Scheduled') return '#7c3aed';
+  if (stage === 'Supervisor Review') return '#92400e';
+  if (stage === 'Agent Replied') return '#2563eb';
+  return '#475569';
+}
+
 function isFeedbackOverdue(item: Pick<AgentFeedback, 'due_date' | 'status'>) {
   const diff = daysUntil(item.due_date);
   return diff !== null && diff < 0 && item.status !== 'Closed';
 }
 
 function matchesPlanTab(item: AgentFeedback, tab: PlanTab) {
+  const parsed = parseStructuredPlan(item.action_plan);
   if (tab === 'All') return true;
   if (tab === 'Open') return item.status !== 'Closed';
   if (tab === 'Overdue') return isFeedbackOverdue(item);
   if (tab === 'Awaiting Ack') return item.status !== 'Closed' && !item.acknowledged_by_agent;
-  if (tab === 'Follow-up') return item.feedback_type === 'Follow-up' && item.status !== 'Closed';
+  if (tab === 'Follow-up') {
+    return (
+      item.status !== 'Closed' &&
+      (item.feedback_type === 'Follow-up' || parsed.reviewStage === 'Follow-up Scheduled')
+    );
+  }
   return true;
 }
 
@@ -301,6 +344,12 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const [activePlanTab, setActivePlanTab] = useState<PlanTab>('All');
   const [planOutcomeDrafts, setPlanOutcomeDrafts] = useState<Record<string, FollowUpOutcome>>({});
   const [resolutionNoteDrafts, setResolutionNoteDrafts] = useState<Record<string, string>>({});
+  const [reviewStageDrafts, setReviewStageDrafts] = useState<Record<string, ReviewStage>>({});
+  const [agentCommentDrafts, setAgentCommentDrafts] = useState<Record<string, string>>({});
+  const [supervisorReviewDrafts, setSupervisorReviewDrafts] = useState<Record<string, string>>({});
+  const [auditDateFrom, setAuditDateFrom] = useState('');
+  const [auditDateTo, setAuditDateTo] = useState('');
+  const [selectedAuditId, setSelectedAuditId] = useState('');
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const themeVars = getDashboardThemeVars();
@@ -334,8 +383,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       supabase
         .from('audits')
         .select('id, agent_id, agent_name, team, case_type, audit_date, quality_score, comments, shared_with_agent')
-        .order('audit_date', { ascending: false })
-        .limit(250),
+        .order('audit_date', { ascending: false }),
     ]);
 
     setLoading(false);
@@ -466,6 +514,23 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     } as Record<PlanTab, number>;
   }, [baseFilteredFeedbackItems]);
 
+  const reviewStageCounts = useMemo(() => {
+    const counts: Record<ReviewStage, number> = {
+      'Shared with Agent': 0,
+      'Agent Replied': 0,
+      'Supervisor Review': 0,
+      'Follow-up Scheduled': 0,
+      'Closed Loop': 0,
+    };
+
+    feedbackItems.forEach((item) => {
+      const stage = parseStructuredPlan(item.action_plan).reviewStage;
+      counts[stage] += 1;
+    });
+
+    return counts;
+  }, [feedbackItems]);
+
   const selectedAgentAudits = useMemo(() => {
     if (!selectedAgent) return [];
     return audits
@@ -484,6 +549,21 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
       ? selectedAgentAudits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
         selectedAgentAudits.length
       : 0;
+
+  const filteredSelectedAgentAudits = useMemo(() => {
+    return selectedAgentAudits.filter((item) => {
+      const auditDate = String(item.audit_date || '').slice(0, 10);
+      if (auditDateFrom && auditDate < auditDateFrom) return false;
+      if (auditDateTo && auditDate > auditDateTo) return false;
+      return true;
+    });
+  }, [selectedAgentAudits, auditDateFrom, auditDateTo]);
+
+  const selectedAudit =
+    filteredSelectedAgentAudits.find((item) => item.id === selectedAuditId) ||
+    filteredSelectedAgentAudits[0] ||
+    latestAudit ||
+    null;
 
   const selectedAgentOpenItems = useMemo(() => {
     if (!selectedAgent) return [];
@@ -526,6 +606,17 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     [feedbackItems]
   );
 
+  function applyAuditToCoaching(audit: AuditItem) {
+    setSelectedAuditId(audit.id);
+    setSubject(`${audit.team} coaching • ${audit.case_type}`);
+    setJustification(audit.comments || '');
+    setActionPlan(
+      `Review ${audit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
+    );
+    setPriorityOnCreate(
+      audit.quality_score < 75 ? 'Critical' : audit.quality_score < 85 ? 'High' : 'Medium'
+    );
+  }
 
   function handleSelectAgent(profile: AgentProfile) {
     setSelectedAgentProfileId(profile.id);
@@ -540,12 +631,9 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     );
 
     if (recentAudit) {
-      setSubject(`${recentAudit.team} coaching • ${recentAudit.case_type}`);
-      setJustification(recentAudit.comments || '');
-      setActionPlan(
-        `Review ${recentAudit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
-      );
-      setPriorityOnCreate(recentAudit.quality_score < 75 ? 'Critical' : recentAudit.quality_score < 85 ? 'High' : 'Medium');
+      applyAuditToCoaching(recentAudit);
+    } else {
+      setSelectedAuditId('');
     }
   }
 
@@ -562,6 +650,9 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setFollowUpDate('');
     setStatusOnCreate('Open');
     setPriorityOnCreate('Medium');
+    setAuditDateFrom('');
+    setAuditDateTo('');
+    setSelectedAuditId('');
   }
 
   async function handleCreatePlan() {
@@ -577,8 +668,11 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
     const mergedActionPlan = composeStructuredPlan({
       priority: priorityOnCreate,
+      reviewStage: statusOnCreate === 'Closed' ? 'Closed Loop' : 'Shared with Agent',
       actionPlan,
       justification,
+      agentComment: '',
+      supervisorReview: '',
       followUpOutcome: 'Not Set',
       resolutionNote: '',
     });
@@ -634,11 +728,28 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setSuccessMessage('');
 
     const nextAck = !item.acknowledged_by_agent;
+    const parsed = parseStructuredPlan(item.action_plan);
+    const nextStage =
+      nextAck && parsed.reviewStage === 'Shared with Agent'
+        ? 'Agent Replied'
+        : parsed.reviewStage;
+
+    const nextActionPlan = composeStructuredPlan({
+      priority: parsed.priority,
+      reviewStage: nextStage,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      agentComment: parsed.agentComment,
+      supervisorReview: parsed.supervisorReview,
+      followUpOutcome: parsed.followUpOutcome,
+      resolutionNote: parsed.resolutionNote,
+    });
 
     const { error } = await supabase
       .from('agent_feedback')
       .update({
         acknowledged_by_agent: nextAck,
+        action_plan: nextActionPlan || null,
       })
       .eq('id', item.id);
 
@@ -651,7 +762,64 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
     setFeedbackItems((prev) =>
       prev.map((entry) =>
         entry.id === item.id
-          ? { ...entry, acknowledged_by_agent: nextAck }
+          ? { ...entry, acknowledged_by_agent: nextAck, action_plan: nextActionPlan || null }
+          : entry
+      )
+    );
+  }
+
+  async function handleSaveCycleUpdate(item: AgentFeedback) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const parsed = parseStructuredPlan(item.action_plan);
+    const chosenStage = reviewStageDrafts[item.id] || parsed.reviewStage;
+    const agentComment = agentCommentDrafts[item.id] ?? parsed.agentComment;
+    const supervisorReview = supervisorReviewDrafts[item.id] ?? parsed.supervisorReview;
+
+    const nextStage =
+      agentComment.trim() && chosenStage === 'Shared with Agent'
+        ? 'Agent Replied'
+        : supervisorReview.trim() && chosenStage === 'Agent Replied'
+        ? 'Supervisor Review'
+        : chosenStage;
+
+    const nextActionPlan = composeStructuredPlan({
+      priority: parsed.priority,
+      reviewStage: nextStage,
+      actionPlan: parsed.actionPlan,
+      justification: parsed.justification,
+      agentComment,
+      supervisorReview,
+      followUpOutcome: parsed.followUpOutcome,
+      resolutionNote: parsed.resolutionNote,
+    });
+
+    const nextStatus =
+      nextStage === 'Closed Loop'
+        ? 'Closed'
+        : item.status === 'Closed'
+        ? 'In Progress'
+        : item.status;
+
+    const { error } = await supabase
+      .from('agent_feedback')
+      .update({
+        action_plan: nextActionPlan || null,
+        status: nextStatus,
+      })
+      .eq('id', item.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setSuccessMessage('Coaching cycle updated.');
+    setFeedbackItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id
+          ? { ...entry, action_plan: nextActionPlan || null, status: nextStatus }
           : entry
       )
     );
@@ -667,8 +835,16 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
     const nextActionPlan = composeStructuredPlan({
       priority: parsed.priority,
+      reviewStage:
+        followUpOutcome !== 'Not Set'
+          ? parsed.reviewStage === 'Closed Loop'
+            ? 'Closed Loop'
+            : 'Follow-up Scheduled'
+          : parsed.reviewStage,
       actionPlan: parsed.actionPlan,
       justification: parsed.justification,
+      agentComment: parsed.agentComment,
+      supervisorReview: parsed.supervisorReview,
       followUpOutcome,
       resolutionNote,
     });
@@ -715,17 +891,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
   return (
     <div style={{ color: 'var(--cc-page-text, #e5eefb)', ...(themeVars as React.CSSProperties) }}>
-      <div style={pageHeaderStyle}>
-        <div>
-          <div style={sectionEyebrow}>Coaching Center</div>
-          <h2 style={{ margin: 0, fontSize: '32px', color: 'var(--cc-title, #f8fafc)' }}>
-            Turn audits into action plans
-          </h2>
-          <p style={{ margin: '10px 0 0 0', color: 'var(--cc-subtitle, #94a3b8)' }}>
-            Build coaching tasks, capture justification, track acknowledgment, and close the loop with follow-up dates.
-          </p>
-        </div>
-
+      <div style={{ ...pageHeaderStyle, justifyContent: 'flex-end', marginBottom: '12px' }}>
         <button type="button" onClick={() => void loadAll()} style={secondaryButton}>
           Refresh
         </button>
@@ -931,28 +1097,131 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
 
         <div style={stackPanelStyle}>
           <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Audit Context</div>
-            <h3 style={panelTitleStyle}>Selected Agent Snapshot</h3>
+            <div style={panelEyebrowStyle}>Audit History</div>
+            <h3 style={panelTitleStyle}>Selected Agent Audits</h3>
+            <p style={panelSubtitleStyle}>
+              Filter the selected agent’s audits by date, scroll the history, and choose the exact audit you want to use as the coaching subject.
+            </p>
+
             {!selectedAgent ? (
-              <EmptyState text="Pick an agent to pull in audit context and active coaching items." />
+              <EmptyState text="Pick an agent to load full audit history." />
             ) : (
-              <div style={contextGridStyle}>
-                <ContextCard title="Latest Audit" value={latestAudit ? `${latestAudit.team} • ${latestAudit.case_type}` : '-'} helper={latestAudit ? `${formatDateOnly(latestAudit.audit_date)} • ${latestAudit.quality_score.toFixed(2)}%` : 'No recent audits found'} />
-                <ContextCard title="Average Quality" value={selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'} helper={`${selectedAgentAudits.length} audit(s) loaded`} />
-                <ContextCard title="Open Coaching" value={String(selectedAgentOpenItems.length)} helper="Open and in-progress plans" />
-              </div>
+              <>
+                <div style={contextGridStyle}>
+                  <ContextCard
+                    title="All Audits"
+                    value={String(selectedAgentAudits.length)}
+                    helper="Loaded for this agent"
+                  />
+                  <ContextCard
+                    title="Visible Audits"
+                    value={String(filteredSelectedAgentAudits.length)}
+                    helper="After date filters"
+                  />
+                  <ContextCard
+                    title="Average Quality"
+                    value={selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'}
+                    helper="Across all loaded audits"
+                  />
+                </div>
+
+                <div style={auditFilterGridStyle}>
+                  <div>
+                    <label style={labelStyle}>Audit Date From</label>
+                    <input
+                      type="date"
+                      value={auditDateFrom}
+                      onChange={(e) => setAuditDateFrom(e.target.value)}
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Audit Date To</label>
+                    <input
+                      type="date"
+                      value={auditDateTo}
+                      onChange={(e) => setAuditDateTo(e.target.value)}
+                      style={fieldStyle}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'end' }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuditDateFrom('');
+                        setAuditDateTo('');
+                      }}
+                      style={secondaryButton}
+                    >
+                      Clear Audit Filters
+                    </button>
+                  </div>
+                </div>
+
+                <div style={auditHistoryListStyle}>
+                  {filteredSelectedAgentAudits.length === 0 ? (
+                    <EmptyState text="No audits match the selected date range." />
+                  ) : (
+                    filteredSelectedAgentAudits.map((audit) => (
+                      <div
+                        key={audit.id}
+                        style={{
+                          ...auditHistoryCardStyle,
+                          ...(selectedAudit?.id === audit.id ? auditHistoryCardActiveStyle : {}),
+                        }}
+                      >
+                        <div style={auditHistoryTopRowStyle}>
+                          <div>
+                            <div style={primaryCellTextStyle}>{audit.case_type}</div>
+                            <div style={secondaryCellTextStyle}>
+                              {formatDateOnly(audit.audit_date)} • {audit.team}
+                            </div>
+                          </div>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={auditScoreStyle}>{Number(audit.quality_score).toFixed(2)}%</div>
+                            <div style={secondaryCellTextStyle}>
+                              {audit.shared_with_agent ? 'Shared' : 'Internal'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div style={auditHistoryCommentStyle}>
+                          {audit.comments || 'No audit comment saved for this item.'}
+                        </div>
+
+                        <div style={auditHistoryActionRowStyle}>
+                          <button
+                            type="button"
+                            onClick={() => applyAuditToCoaching(audit)}
+                            style={primaryButton}
+                          >
+                            Use for Coaching
+                          </button>
+                          {selectedAudit?.id === audit.id ? (
+                            <span style={selectedAuditPillStyle}>Current Coaching Source</span>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
             )}
-            {latestAudit ? (
-              <div style={auditCommentStyle}>
-                <div style={miniLabelStyle}>Latest Audit Comment</div>
-                <div style={auditCommentBodyStyle}>{latestAudit.comments || 'No comment on the latest audit.'}</div>
-              </div>
-            ) : null}
           </div>
 
           <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Plan Filters</div>
-            <h3 style={panelTitleStyle}>Coaching Pipeline</h3>
+            <div style={panelEyebrowStyle}>Review Queue</div>
+            <h3 style={panelTitleStyle}>Routing & Cycle Control</h3>
+            <p style={panelSubtitleStyle}>
+              The old panel only filtered saved plans. This one shows where each plan is in the coaching cycle and lets you narrow the queue before you review details below.
+            </p>
+
+            <div style={routingGridStyle}>
+              <ContextCard title="Shared with Agent" value={String(reviewStageCounts['Shared with Agent'])} helper="Waiting for acknowledgment or comment" />
+              <ContextCard title="Agent Replied" value={String(reviewStageCounts['Agent Replied'])} helper="Ready for supervisor or QA review" />
+              <ContextCard title="Supervisor Review" value={String(reviewStageCounts['Supervisor Review'])} helper="Needs supervisor sign-off" />
+              <ContextCard title="Follow-up Scheduled" value={String(reviewStageCounts['Follow-up Scheduled'])} helper="Ready for outcome tracking" />
+            </div>
 
             <div style={filterGridStyle}>
               <div>
@@ -1008,7 +1277,7 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
         <div style={panelEyebrowStyle}>Saved Plans</div>
         <h3 style={panelTitleStyle}>Coaching Tasks & Follow-up</h3>
         <p style={panelSubtitleStyle}>
-          Use tabs to focus the queue, and open details to capture follow-up outcome and resolution notes.
+          Use tabs to focus the queue, then open details to manage the full cycle: acknowledgment, agent comment, supervisor review, follow-up outcome, and closure.
         </p>
 
         <div style={planTabRowStyle}>
@@ -1039,8 +1308,8 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                 <div style={feedbackCellTypeStyle}>Type / Priority</div>
                 <div style={feedbackCellSubjectStyle}>Subject</div>
                 <div style={feedbackCellDueDateStyle}>Follow-up</div>
-                <div style={feedbackCellStatusStyle}>Status</div>
-                <div style={feedbackCellAckStyle}>Acknowledged</div>
+                <div style={feedbackCellStatusStyle}>Status / Stage</div>
+                <div style={feedbackCellAckStyle}>Agent Cycle</div>
                 <div style={feedbackCellActionsStyle}>Actions</div>
               </div>
 
@@ -1100,6 +1369,11 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                           <option value="In Progress">In Progress</option>
                           <option value="Closed">Closed</option>
                         </select>
+                        <div style={{ marginTop: '8px' }}>
+                          <span style={statusPill(getReviewStageColor(parseStructuredPlan(item.action_plan).reviewStage))}>
+                            {parseStructuredPlan(item.action_plan).reviewStage}
+                          </span>
+                        </div>
                       </div>
 
                       <div style={feedbackCellAckStyle}>
@@ -1110,6 +1384,11 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                         >
                           {item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'}
                         </button>
+                        <div style={secondaryCellTextStyle}>
+                          {parseStructuredPlan(item.action_plan).agentComment
+                            ? 'Agent comment added'
+                            : 'Awaiting agent comment'}
+                        </div>
                       </div>
 
                       <div style={feedbackCellActionsStyle}>
@@ -1153,11 +1432,79 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
                             />
                             <DetailMini label="Follow-up Date" value={formatDateOnly(item.due_date)} />
                             <DetailMini label="Status" value={item.status} />
+                            <DetailMini label="Stage" value={parseStructuredPlan(item.action_plan).reviewStage} />
                             <DetailMini label="Priority" value={parseStructuredPlan(item.action_plan).priority} />
                             <DetailMini
                               label="Outcome"
                               value={parseStructuredPlan(item.action_plan).followUpOutcome}
                             />
+                          </div>
+
+                          <div style={followUpEditorStyle}>
+                            <div style={miniLabelStyle}>Coaching Cycle</div>
+                            <div style={followUpEditorGridStyle}>
+                              <div>
+                                <label style={labelStyle}>Review Stage</label>
+                                <select
+                                  value={reviewStageDrafts[item.id] || parseStructuredPlan(item.action_plan).reviewStage}
+                                  onChange={(e) =>
+                                    setReviewStageDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value as ReviewStage,
+                                    }))
+                                  }
+                                  style={fieldStyle}
+                                >
+                                  <option value="Shared with Agent">Shared with Agent</option>
+                                  <option value="Agent Replied">Agent Replied</option>
+                                  <option value="Supervisor Review">Supervisor Review</option>
+                                  <option value="Follow-up Scheduled">Follow-up Scheduled</option>
+                                  <option value="Closed Loop">Closed Loop</option>
+                                </select>
+                              </div>
+
+                              <div style={wideFieldStyle}>
+                                <label style={labelStyle}>Agent Comment</label>
+                                <textarea
+                                  value={agentCommentDrafts[item.id] ?? parseStructuredPlan(item.action_plan).agentComment}
+                                  onChange={(e) =>
+                                    setAgentCommentDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  rows={3}
+                                  style={fieldStyle}
+                                  placeholder="Agent can respond here with questions, commitment, or explanation."
+                                />
+                              </div>
+
+                              <div style={wideFieldStyle}>
+                                <label style={labelStyle}>Supervisor Review</label>
+                                <textarea
+                                  value={supervisorReviewDrafts[item.id] ?? parseStructuredPlan(item.action_plan).supervisorReview}
+                                  onChange={(e) =>
+                                    setSupervisorReviewDrafts((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  rows={3}
+                                  style={fieldStyle}
+                                  placeholder="Supervisor can review the coaching, confirm next steps, and route it forward."
+                                />
+                              </div>
+                            </div>
+
+                            <div style={actionRowStyle}>
+                              <button
+                                type="button"
+                                onClick={() => void handleSaveCycleUpdate(item)}
+                                style={primaryButton}
+                              >
+                                Save Cycle Update
+                              </button>
+                            </div>
                           </div>
 
                           <div style={followUpEditorStyle}>
@@ -1275,14 +1622,6 @@ const pageHeaderStyle: React.CSSProperties = {
   marginBottom: '22px',
 };
 
-const sectionEyebrow: React.CSSProperties = {
-  color: 'var(--cc-eyebrow, #93c5fd)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  letterSpacing: '0.14em',
-  marginBottom: '8px',
-};
 
 const panelEyebrowStyle: React.CSSProperties = {
   color: 'var(--cc-eyebrow, #93c5fd)',
@@ -1527,13 +1866,79 @@ const contextHelperStyle: React.CSSProperties = {
   fontSize: '12px',
 };
 
-const auditCommentStyle: React.CSSProperties = {
+const auditFilterGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '12px',
   marginTop: '14px',
+  marginBottom: '14px',
+};
+
+const auditHistoryListStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '12px',
+  maxHeight: '460px',
+  overflowY: 'auto',
+  paddingRight: '4px',
+};
+
+const auditHistoryCardStyle: React.CSSProperties = {
   borderRadius: '18px',
   border: 'var(--cc-row-border)',
   background: 'var(--cc-card-bg)',
   padding: '16px',
 };
+
+const auditHistoryCardActiveStyle: React.CSSProperties = {
+  boxShadow: 'inset 0 0 0 2px rgba(37,99,235,0.20)',
+  background: 'var(--cc-soft-bg)',
+};
+
+const auditHistoryTopRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  alignItems: 'flex-start',
+};
+
+const auditHistoryCommentStyle: React.CSSProperties = {
+  marginTop: '12px',
+  color: 'var(--cc-page-text)',
+  lineHeight: 1.6,
+  fontSize: '13px',
+  whiteSpace: 'pre-wrap',
+};
+
+const auditHistoryActionRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '10px',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  marginTop: '14px',
+};
+
+const auditScoreStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
+  fontSize: '18px',
+  fontWeight: 900,
+};
+
+const selectedAuditPillStyle: React.CSSProperties = {
+  padding: '7px 10px',
+  borderRadius: '999px',
+  background: 'var(--cc-accent-bg)',
+  color: 'var(--cc-accent-text)',
+  fontWeight: 800,
+  fontSize: '12px',
+};
+
+const routingGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '12px',
+  marginBottom: '14px',
+};
+
 
 const miniLabelStyle: React.CSSProperties = {
   color: 'var(--cc-eyebrow)',
@@ -1543,12 +1948,6 @@ const miniLabelStyle: React.CSSProperties = {
   letterSpacing: '0.12em',
 };
 
-const auditCommentBodyStyle: React.CSSProperties = {
-  color: 'var(--cc-page-text)',
-  lineHeight: 1.6,
-  marginTop: '10px',
-  whiteSpace: 'pre-wrap',
-};
 
 const feedbackTableWrapStyle: React.CSSProperties = {
   overflowX: 'auto',
