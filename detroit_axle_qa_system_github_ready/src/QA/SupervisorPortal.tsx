@@ -5,7 +5,6 @@ import MonitoringDrawer from './MonitoringDrawer';
 import SupervisorRequestsSupabase from './SupervisorRequestsSupabase';
 import RecognitionWall from './RecognitionWall';
 import DigitalTrophyCabinet from './DigitalTrophyCabinet';
-import VoiceOfEmployeeSupabase from './VoiceOfEmployeeSupabase';
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 
@@ -927,7 +926,10 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             />
           </div>
 
-          <Section title="Supervisor Coaching Inbox">
+          <Section title="Coaching Review Queue">
+            <p style={sectionIntroTextStyle}>
+              Coaching items now stay visible on the supervisor portal. Review the agent reply, leave your supervisor review, and move the coaching cycle forward from here.
+            </p>
             {supervisorInboxItems.length === 0 ? (
               <p>No coaching items found for this team filter.</p>
             ) : (
@@ -1034,11 +1036,11 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             )}
           </Section>
 
-          <Section
-            title={`${
-              selectedAgent ? 'Filtered' : currentUser.team || 'Team'
-            } Audits`}
-          >
+          <Section title={selectedAgent ? 'Audit History • Selected Agent Audits' : `${currentUser.team || 'Team'} Audit History`}>
+            <p style={sectionIntroTextStyle}>
+              This audit history stays fixed in its own panel and scrolls inside the section, so supervisors can keep the selected agent context visible while reviewing details.
+            </p>
+
             <div style={sectionHeaderActionsStyle}>
               <button
                 type="button"
@@ -1048,199 +1050,146 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                 {auditsVisible ? 'Hide Audits' : 'Show Audits'}
               </button>
             </div>
+
             {!auditsVisible ? (
               <div style={collapsedMessageStyle}>Audits are hidden for now.</div>
             ) : filteredAudits.length === 0 ? (
               <p>No audits found for this selection.</p>
             ) : (
-              <div style={auditTableWrapStyle}>
-                <div style={auditTableStyle}>
-                  <div style={{ ...auditRowStyle, ...auditHeaderRowStyle }}>
-                    <div style={auditCellDateStyle}>Audit Date</div>
-                    <div style={auditCellCaseStyle}>Case Type</div>
-                    <div style={auditCellReferenceStyle}>Reference</div>
-                    <div style={auditCellScoreStyle}>Quality</div>
-                    <div style={auditCellReleaseStyle}>Release</div>
-                    <div style={auditCellCreatorStyle}>Created By</div>
-                    <div style={auditCellCommentsStyle}>Comments</div>
-                    <div style={auditCellActionsStyle}>Actions</div>
+              <>
+                <div style={auditHistoryStatsGridStyle}>
+                  <div style={auditHistoryStatCardStyle}>
+                    <div style={detailLabelStyle}>Loaded Audits</div>
+                    <div style={detailValueStyle}>{String(filteredAudits.length)}</div>
                   </div>
+                  <div style={auditHistoryStatCardStyle}>
+                    <div style={detailLabelStyle}>Released</div>
+                    <div style={detailValueStyle}>{String(releasedAuditCount)}</div>
+                  </div>
+                  <div style={auditHistoryStatCardStyle}>
+                    <div style={detailLabelStyle}>Average Quality</div>
+                    <div style={detailValueStyle}>{averageQuality}%</div>
+                  </div>
+                </div>
 
+                <div style={auditHistoryListWrapStyle}>
                   {filteredAudits.map((audit) => {
                     const isExpanded = expandedAuditId === audit.id;
 
                     return (
-                      <div key={audit.id} style={auditEntryStyle}>
-                        <div style={auditRowStyle}>
-                          <div style={auditCellDateStyle}>
-                            <div style={primaryCellTextStyle}>
-                              {formatDateOnly(audit.audit_date)}
-                            </div>
-                            <div style={secondaryCellTextStyle}>{audit.team}</div>
-                          </div>
-
-                          <div style={auditCellCaseStyle}>
-                            <div style={primaryCellTextStyle}>
-                              {audit.case_type}
-                            </div>
+                      <div
+                        key={audit.id}
+                        style={{
+                          ...auditHistoryCardStyle,
+                          ...(isExpanded ? auditHistoryCardActiveStyle : {}),
+                        }}
+                      >
+                        <div style={auditHistoryTopRowStyle}>
+                          <div>
+                            <div style={primaryCellTextStyle}>{audit.case_type}</div>
                             <div style={secondaryCellTextStyle}>
-                              {getAgentLabel(audit.agent_id, audit.agent_name)}
+                              {formatDateOnly(audit.audit_date)} • {getAgentLabel(audit.agent_id, audit.agent_name)}
                             </div>
                           </div>
 
-                          <div style={auditCellReferenceStyle}>
-                            <div style={primaryCellTextStyle}>
-                              {getAuditReference(audit)}
-                            </div>
-                          </div>
-
-                          <div style={auditCellScoreStyle}>
-                            <span style={scorePillStyle}>
+                          <div style={{ textAlign: 'right' }}>
+                            <div style={auditHistoryScoreStyle}>
                               {Number(audit.quality_score).toFixed(2)}%
-                            </span>
-                          </div>
-
-                          <div style={auditCellReleaseStyle}>
+                            </div>
                             <span
                               style={{
                                 ...pillStyle,
-                                backgroundColor: audit.shared_with_agent
-                                  ? '#166534'
-                                  : '#475569',
+                                backgroundColor: audit.shared_with_agent ? '#166534' : '#475569',
+                                marginTop: '8px',
                               }}
                             >
                               {audit.shared_with_agent ? 'Released' : 'Hidden'}
                             </span>
-                            <div style={secondaryCellTextStyle}>
-                              {formatDate(audit.shared_at)}
-                            </div>
-                          </div>
-
-                          <div style={auditCellCreatorStyle}>
-                            <div style={primaryCellTextStyle}>
-                              {audit.created_by_name ||
-                                audit.created_by_email ||
-                                '-'}
-                            </div>
-                          </div>
-
-                          <div style={auditCellCommentsStyle}>
-                            <div style={primaryCellTextStyle}>
-                              {getCommentsPreview(audit.comments)}
-                            </div>
-                          </div>
-
-                          <div style={auditCellActionsStyle}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedAuditId(
-                                  expandedAuditId === audit.id ? null : audit.id
-                                )
-                              }
-                              style={miniSecondaryButton}
-                            >
-                              {isExpanded ? 'Hide' : 'Details'}
-                            </button>
                           </div>
                         </div>
 
+                        <div style={auditHistoryMetaGridStyle}>
+                          <div style={auditHistoryMetaCardStyle}>
+                            <div style={detailLabelStyle}>Reference</div>
+                            <div style={detailValueStyle}>{getAuditReference(audit)}</div>
+                          </div>
+                          <div style={auditHistoryMetaCardStyle}>
+                            <div style={detailLabelStyle}>Created By</div>
+                            <div style={detailValueStyle}>
+                              {audit.created_by_name || audit.created_by_email || '-'}
+                            </div>
+                          </div>
+                          <div style={auditHistoryMetaCardStyle}>
+                            <div style={detailLabelStyle}>Release Date</div>
+                            <div style={detailValueStyle}>{formatDate(audit.shared_at)}</div>
+                          </div>
+                        </div>
+
+                        <div style={auditHistoryCommentStyle}>
+                          {audit.comments?.trim() || 'No audit comment saved for this item.'}
+                        </div>
+
+                        <div style={sectionHeaderActionsStyle}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedAuditId(expandedAuditId === audit.id ? null : audit.id)
+                            }
+                            style={miniSecondaryButton}
+                          >
+                            {isExpanded ? 'Hide Details' : 'Open Details'}
+                          </button>
+                        </div>
+
                         {isExpanded ? (
-                          <div style={auditExpandedRowStyle}>
-                            <div style={expandedPanelStyle}>
-                              <div style={detailInfoGridStyle}>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Agent</div>
-                                  <div style={detailValueStyle}>
-                                    {getAgentLabel(audit.agent_id, audit.agent_name)}
-                                  </div>
-                                </div>
-
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Reference</div>
-                                  <div style={detailValueStyle}>
-                                    {getAuditReference(audit)}
-                                  </div>
-                                </div>
-
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Release Date</div>
-                                  <div style={detailValueStyle}>
-                                    {formatDate(audit.shared_at)}
-                                  </div>
-                                </div>
-
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Created By</div>
-                                  <div style={detailValueStyle}>
-                                    {audit.created_by_name ||
-                                      audit.created_by_email ||
-                                      '-'}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div style={fullCommentCardStyle}>
-                                <div style={detailLabelStyle}>Full Comment</div>
-                                <div style={fullCommentTextStyle}>
-                                  {audit.comments?.trim() || '-'}
-                                </div>
-                              </div>
-
-                              <div style={{ ...sectionEyebrow, marginTop: '18px' }}>
-                                Score Details
-                              </div>
-                              <div style={{ display: 'grid', gap: '10px' }}>
-                                {(audit.score_details || []).map((detail) => (
-                                  <div
-                                    key={`${audit.id}-${detail.metric}`}
-                                    style={detailRowStyle}
-                                  >
-                                    <div>
-                                      <div
-                                        style={{
-                                          color: 'var(--da-title, #f8fafc)',
-                                          fontWeight: 700,
-                                        }}
-                                      >
-                                        {detail.metric}
-                                      </div>
-                                      <div
-                                        style={{
-                                          color: 'var(--da-subtle-text, #94a3b8)',
-                                          fontSize: '12px',
-                                          marginTop: '4px',
-                                        }}
-                                      >
-                                        {isNoScoreDetail(detail)
-                                          ? 'Yes / No question • No score'
-                                          : `Pass ${detail.pass} • Borderline ${detail.borderline} • Adjusted ${Number(detail.adjustedWeight || 0).toFixed(2)}`}
-                                      </div>
-                                      {detail.metric_comment ? (
-                                        <div style={metricNoteCardStyle}>
-                                          <div style={metricNoteLabelStyle}>
-                                            QA Note
-                                          </div>
-                                          <div style={metricNoteTextStyle}>
-                                            {detail.metric_comment}
-                                          </div>
-                                        </div>
-                                      ) : null}
-                                    </div>
-
-                                    <span
+                          <div style={auditHistoryExpandedWrapStyle}>
+                            <div style={{ ...sectionEyebrow, marginBottom: '10px' }}>
+                              Score Details
+                            </div>
+                            <div style={{ display: 'grid', gap: '10px' }}>
+                              {(audit.score_details || []).map((detail) => (
+                                <div
+                                  key={`${audit.id}-${detail.metric}`}
+                                  style={detailRowStyle}
+                                >
+                                  <div>
+                                    <div
                                       style={{
-                                        ...pillStyle,
-                                        backgroundColor: getResultBadgeColor(
-                                          detail.result
-                                        ),
+                                        color: 'var(--da-title, #f8fafc)',
+                                        fontWeight: 700,
                                       }}
                                     >
-                                      {detail.result}
-                                    </span>
+                                      {detail.metric}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: 'var(--da-subtle-text, #94a3b8)',
+                                        fontSize: '12px',
+                                        marginTop: '4px',
+                                      }}
+                                    >
+                                      {isNoScoreDetail(detail)
+                                        ? 'Yes / No question • No score'
+                                        : `Pass ${detail.pass} • Borderline ${detail.borderline} • Adjusted ${Number(detail.adjustedWeight || 0).toFixed(2)}`}
+                                    </div>
+                                    {detail.metric_comment ? (
+                                      <div style={metricNoteCardStyle}>
+                                        <div style={metricNoteLabelStyle}>QA Note</div>
+                                        <div style={metricNoteTextStyle}>{detail.metric_comment}</div>
+                                      </div>
+                                    ) : null}
                                   </div>
-                                ))}
-                              </div>
+
+                                  <span
+                                    style={{
+                                      ...pillStyle,
+                                      backgroundColor: getResultBadgeColor(detail.result),
+                                    }}
+                                  >
+                                    {detail.result}
+                                  </span>
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ) : null}
@@ -1248,7 +1197,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                     );
                   })}
                 </div>
-              </div>
+              </>
             )}
           </Section>
 
@@ -1304,154 +1253,8 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             )}
           </Section>
 
-          <DigitalTrophyCabinet scope="team" currentUser={currentUser} />
-
-          <Section title="Coaching Review Queue">
-            {filteredFeedbackItems.length === 0 ? (
-              <p>No coaching items found for this team filter.</p>
-            ) : (
-              <div style={auditTableWrapStyle}>
-                <div style={coachingTableStyle}>
-                  <div style={{ ...coachingRowStyle, ...auditHeaderRowStyle }}>
-                    <div>Agent</div>
-                    <div>Subject</div>
-                    <div>Priority / Stage</div>
-                    <div>Due Date</div>
-                    <div>Acknowledged</div>
-                    <div>Actions</div>
-                  </div>
-
-                  {filteredFeedbackItems.map((item) => {
-                    const parsedPlan = parseCoachingPlan(item.action_plan);
-                    const isExpanded = expandedFeedbackId === item.id;
-
-                    return (
-                      <div key={item.id} style={auditEntryStyle}>
-                        <div style={coachingRowStyle}>
-                          <div>
-                            <div style={primaryCellTextStyle}>{getAgentLabel(item.agent_id, item.agent_name)}</div>
-                            <div style={secondaryCellTextStyle}>{item.team}</div>
-                          </div>
-
-                          <div>
-                            <div style={primaryCellTextStyle}>{item.subject}</div>
-                            <div style={secondaryCellTextStyle}>{item.qa_name}</div>
-                          </div>
-
-                          <div>
-                            <div style={primaryCellTextStyle}>{parsedPlan.priority}</div>
-                            <div style={secondaryCellTextStyle}>{parsedPlan.reviewStage}</div>
-                          </div>
-
-                          <div>
-                            <div style={primaryCellTextStyle}>{formatDateOnly(item.due_date)}</div>
-                            <div style={secondaryCellTextStyle}>{item.status}</div>
-                          </div>
-
-                          <div>
-                            <span style={{
-                              ...pillStyle,
-                              backgroundColor: item.acknowledged_by_agent ? '#166534' : '#475569',
-                            }}>
-                              {item.acknowledged_by_agent ? 'Yes' : 'Not yet'}
-                            </span>
-                          </div>
-
-                          <div style={auditCellActionsStyle}>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedFeedbackId(expandedFeedbackId === item.id ? null : item.id)
-                              }
-                              style={miniSecondaryButton}
-                            >
-                              {isExpanded ? 'Hide' : 'Review'}
-                            </button>
-                          </div>
-                        </div>
-
-                        {isExpanded ? (
-                          <div style={auditExpandedRowStyle}>
-                            <div style={expandedPanelStyle}>
-                              <div style={detailInfoGridStyle}>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Coaching Summary</div>
-                                  <div style={detailValueStyle}>{item.feedback_note || '-'}</div>
-                                </div>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Action Plan</div>
-                                  <div style={detailValueStyle}>{parsedPlan.actionPlan || '-'}</div>
-                                </div>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Justification</div>
-                                  <div style={detailValueStyle}>{parsedPlan.justification || '-'}</div>
-                                </div>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Agent Comment</div>
-                                  <div style={detailValueStyle}>{parsedPlan.agentComment || 'No agent comment yet.'}</div>
-                                </div>
-                              </div>
-
-                              <div style={detailInfoGridStyle}>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Review Stage</div>
-                                  <select
-                                    value={reviewStageDrafts[item.id] || parsedPlan.reviewStage}
-                                    onChange={(e) =>
-                                      setReviewStageDrafts((prev) => ({
-                                        ...prev,
-                                        [item.id]: e.target.value as ReviewStage,
-                                      }))
-                                    }
-                                    style={fieldStyle}
-                                  >
-                                    <option value="QA Shared">QA Shared</option>
-                                    <option value="Acknowledged">Acknowledged</option>
-                                    <option value="Agent Responded">Agent Responded</option>
-                                    <option value="Supervisor Reviewed">Supervisor Reviewed</option>
-                                    <option value="Follow-up">Follow-up</option>
-                                    <option value="Closed">Closed</option>
-                                  </select>
-                                </div>
-                                <div style={detailInfoCardStyle}>
-                                  <div style={detailLabelStyle}>Supervisor Review</div>
-                                  <textarea
-                                    value={supervisorReviewDrafts[item.id] ?? parsedPlan.supervisorReview}
-                                    onChange={(e) =>
-                                      setSupervisorReviewDrafts((prev) => ({
-                                        ...prev,
-                                        [item.id]: e.target.value,
-                                      }))
-                                    }
-                                    rows={4}
-                                    style={fieldStyle}
-                                    placeholder="Add supervisor direction, coaching recommendation, or escalation note."
-                                  />
-                                </div>
-                              </div>
-
-                              <div style={sectionHeaderActionsStyle}>
-                                <button
-                                  type="button"
-                                  onClick={() => void handleSaveSupervisorReview(item)}
-                                  style={miniSecondaryButton}
-                                >
-                                  Save Supervisor Review
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </Section>
-
           <RecognitionWall compact currentUser={currentUser as any} />
-          <VoiceOfEmployeeSupabase currentUser={currentUser} />
+          <DigitalTrophyCabinet scope="team" currentUser={currentUser} />
 
           <MonitoringWidget
             count={monitoringItems.length}
@@ -1939,6 +1742,93 @@ const recordsCellDateToStyle = {};
 const recordsCellMetricStyle = {};
 const recordsCellNotesStyle = {};
 
+
+const sectionIntroTextStyle = {
+  marginTop: '0',
+  marginBottom: '14px',
+  color: 'var(--da-subtle-text, #94a3b8)',
+  lineHeight: 1.6,
+};
+
+const auditHistoryStatsGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '12px',
+  marginBottom: '14px',
+};
+
+const auditHistoryStatCardStyle = {
+  borderRadius: '16px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '14px 16px',
+};
+
+const auditHistoryListWrapStyle = {
+  display: 'grid',
+  gap: '14px',
+  maxHeight: '900px',
+  overflowY: 'auto' as const,
+  paddingRight: '6px',
+};
+
+const auditHistoryCardStyle = {
+  borderRadius: '22px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background:
+    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
+  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
+  padding: '18px',
+  display: 'grid',
+  gap: '12px',
+};
+
+const auditHistoryCardActiveStyle = {
+  outline: '2px solid rgba(96,165,250,0.45)',
+  outlineOffset: '0',
+};
+
+const auditHistoryTopRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  alignItems: 'flex-start',
+};
+
+const auditHistoryScoreStyle = {
+  color: 'var(--da-title, #f8fafc)',
+  fontSize: '22px',
+  fontWeight: 900,
+};
+
+const auditHistoryMetaGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '12px',
+};
+
+const auditHistoryMetaCardStyle = {
+  borderRadius: '14px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '12px 14px',
+};
+
+const auditHistoryCommentStyle = {
+  borderRadius: '14px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '14px 16px',
+  color: 'var(--da-page-text, #e5eefb)',
+  lineHeight: 1.6,
+  whiteSpace: 'pre-wrap' as const,
+};
+
+const auditHistoryExpandedWrapStyle = {
+  display: 'grid',
+  gap: '10px',
+  marginTop: '4px',
+};
 
 const supervisorInboxGridStyle = {
   display: 'grid',
