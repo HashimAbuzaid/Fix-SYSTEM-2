@@ -692,14 +692,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     return !parsed.agentComment.trim();
   }).length;
 
-  const debugLoadedCoachingRows = feedbackItems.length;
-  const debugOpenRowsAfterTeamFilter = teamOpenFeedbackItems.length;
-  const debugOpenRowsAfterSelectedAgentFilter = scopedOpenFeedbackItems.length;
-  const debugVisibleQueueRows = supervisorInboxItems.length;
-  const debugSelectedAgentLabel = selectedAgent
-    ? getAgentLabel(selectedAgent.agent_id, selectedAgent.agent_name)
-    : 'All team agents';
-
   async function handleSaveSupervisorReview(item: AgentFeedback) {
     setErrorMessage('');
 
@@ -964,60 +956,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
               title="Awaiting Supervisor"
               value={String(awaitingSupervisorCount)}
             />
-          </div>
-
-          <div style={debugBannerStyle}>
-            <div style={debugBannerHeaderStyle}>Coaching Queue Debug</div>
-            <div style={debugBannerGridStyle}>
-              <div style={debugMetricCardStyle}>
-                <div style={detailLabelStyle}>Loaded rows from agent_feedback</div>
-                <div style={debugMetricValueStyle}>{String(debugLoadedCoachingRows)}</div>
-              </div>
-              <div style={debugMetricCardStyle}>
-                <div style={detailLabelStyle}>Open rows after team filter</div>
-                <div style={debugMetricValueStyle}>{String(debugOpenRowsAfterTeamFilter)}</div>
-              </div>
-              <div style={debugMetricCardStyle}>
-                <div style={detailLabelStyle}>Open rows after selected-agent filter</div>
-                <div style={debugMetricValueStyle}>{String(debugOpenRowsAfterSelectedAgentFilter)}</div>
-              </div>
-              <div style={debugMetricCardStyle}>
-                <div style={detailLabelStyle}>Visible queue rows</div>
-                <div style={debugMetricValueStyle}>{String(debugVisibleQueueRows)}</div>
-              </div>
-            </div>
-
-            <div style={debugMetaRowStyle}>
-              <div style={debugMetaPillStyle}>
-                <strong>Selected agent:</strong> {debugSelectedAgentLabel}
-              </div>
-              <div style={debugMetaPillStyle}>
-                <strong>Fallback to team queue:</strong> {coachingFallbackToTeam ? 'Yes' : 'No'}
-              </div>
-              <div style={debugMetaPillStyle}>
-                <strong>Team:</strong> {currentUser.team || '-'}
-              </div>
-            </div>
-
-            {supervisorInboxItems.length > 0 ? (
-              <div style={debugSampleListStyle}>
-                {supervisorInboxItems.slice(0, 5).map((item) => {
-                  const parsed = parseCoachingPlan(item.action_plan);
-                  return (
-                    <div key={`debug-${item.id}`} style={debugSampleRowStyle}>
-                      <div style={debugSamplePrimaryStyle}>{item.subject}</div>
-                      <div style={debugSampleSecondaryStyle}>
-                        {getAgentLabel(item.agent_id, item.agent_name)} • {item.status} • {parsed.reviewStage}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div style={debugEmptyNoticeStyle}>
-                No queue rows are visible. If coaching exists in the coaching center but not here, this points to a data-access, team-value, or status mismatch.
-              </div>
-            )}
           </div>
 
           <Section title="Coaching Review Queue">
@@ -1927,92 +1865,6 @@ const supervisorInboxTopRowStyle = {
   justifyContent: 'space-between',
   gap: '12px',
   alignItems: 'flex-start',
-};
-
-
-const debugBannerStyle = {
-  marginTop: '16px',
-  marginBottom: '10px',
-  borderRadius: '18px',
-  border: '1px solid rgba(245, 158, 11, 0.28)',
-  background: 'rgba(245, 158, 11, 0.08)',
-  padding: '16px',
-  display: 'grid',
-  gap: '12px',
-};
-
-const debugBannerHeaderStyle = {
-  color: 'var(--da-title, #f8fafc)',
-  fontSize: '15px',
-  fontWeight: 900,
-};
-
-const debugBannerGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-  gap: '10px',
-};
-
-const debugMetricCardStyle = {
-  borderRadius: '12px',
-  border: '1px solid rgba(245, 158, 11, 0.24)',
-  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '12px 14px',
-};
-
-const debugMetricValueStyle = {
-  color: 'var(--da-title, #f8fafc)',
-  fontSize: '20px',
-  fontWeight: 900,
-};
-
-const debugMetaRowStyle = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-};
-
-const debugMetaPillStyle = {
-  borderRadius: '999px',
-  border: '1px solid rgba(245, 158, 11, 0.22)',
-  background: 'rgba(245, 158, 11, 0.10)',
-  color: 'var(--da-page-text, #e5eefb)',
-  padding: '8px 12px',
-  fontSize: '12px',
-  fontWeight: 700,
-};
-
-const debugSampleListStyle = {
-  display: 'grid',
-  gap: '8px',
-};
-
-const debugSampleRowStyle = {
-  borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.14)',
-  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
-};
-
-const debugSamplePrimaryStyle = {
-  color: 'var(--da-title, #f8fafc)',
-  fontSize: '13px',
-  fontWeight: 800,
-};
-
-const debugSampleSecondaryStyle = {
-  marginTop: '4px',
-  color: 'var(--da-subtle-text, #94a3b8)',
-  fontSize: '12px',
-  lineHeight: 1.45,
-};
-
-const debugEmptyNoticeStyle = {
-  borderRadius: '12px',
-  border: '1px dashed rgba(245, 158, 11, 0.32)',
-  padding: '12px 14px',
-  color: 'var(--da-page-text, #e5eefb)',
-  lineHeight: 1.55,
 };
 
 export default SupervisorPortal;
