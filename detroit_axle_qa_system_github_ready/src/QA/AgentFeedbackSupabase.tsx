@@ -1,20 +1,35 @@
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+
+type TeamName = 'Calls' | 'Tickets' | 'Sales';
+type FeedbackType = 'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up';
+type FeedbackStatus = 'Open' | 'In Progress' | 'Closed';
+
+type CurrentUser = {
+  id?: string;
+  role?: 'admin' | 'qa' | 'agent' | 'supervisor';
+  agent_id?: string | null;
+  agent_name?: string;
+  display_name?: string | null;
+  team?: TeamName | null;
+  email?: string;
+} | null;
 
 type AgentFeedback = {
   id: string;
   agent_id: string;
   agent_name: string;
-  team: 'Calls' | 'Tickets' | 'Sales';
+  team: TeamName;
   qa_name: string;
-  feedback_type: 'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up';
+  feedback_type: FeedbackType;
   subject: string;
   feedback_note: string;
   action_plan: string | null;
   due_date: string | null;
-  status: 'Open' | 'In Progress' | 'Closed';
+  status: FeedbackStatus;
   created_at: string;
-  acknowledged_by_agent?: boolean;
+  acknowledged_by_agent?: boolean | null;
   acknowledged_at?: string | null;
 };
 
@@ -24,44 +39,168 @@ type AgentProfile = {
   agent_id: string | null;
   agent_name: string;
   display_name: string | null;
-  team: 'Calls' | 'Tickets' | 'Sales' | null;
+  team: TeamName | null;
 };
 
-function AgentFeedbackSupabase() {
+type AuditItem = {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  team: TeamName;
+  case_type: string;
+  audit_date: string;
+  quality_score: number;
+  comments: string | null;
+  shared_with_agent?: boolean | null;
+};
+
+function normalizeAgentId(value?: string | null) {
+  return String(value || '').trim().replace(/\.0+$/, '');
+}
+
+function normalizeAgentName(value?: string | null) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString();
+}
+
+function formatDateOnly(value?: string | null) {
+  if (!value) return '-';
+  const raw = String(value).slice(0, 10);
+  if (!raw) return '-';
+  const date = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleDateString();
+}
+
+function getCurrentDateValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysUntil(dateValue?: string | null) {
+  const raw = String(dateValue || '').slice(0, 10);
+  if (!raw) return null;
+  const base = new Date(`${raw}T00:00:00`);
+  if (Number.isNaN(base.getTime())) return null;
+  const todayRaw = getCurrentDateValue();
+  const today = new Date(`${todayRaw}T00:00:00`);
+  const diffMs = base.getTime() - today.getTime();
+  return Math.floor(diffMs / 86400000);
+}
+
+function getTypeColor(typeValue: FeedbackType) {
+  if (typeValue === 'Warning') return '#991b1b';
+  if (typeValue === 'Audit Feedback') return '#7c3aed';
+  if (typeValue === 'Follow-up') return '#b45309';
+  return '#166534';
+}
+
+function getStatusColor(statusValue: FeedbackStatus) {
+  if (statusValue === 'Closed') return '#166534';
+  if (statusValue === 'In Progress') return '#92400e';
+  return '#1d4ed8';
+}
+
+function getDashboardThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--cc-page-text': isLight ? '#334155' : '#e5eefb',
+    '--cc-title': isLight ? '#0f172a' : '#f8fafc',
+    '--cc-subtitle': isLight ? '#64748b' : '#94a3b8',
+    '--cc-muted': isLight ? '#475569' : '#cbd5e1',
+    '--cc-subtle': isLight ? '#64748b' : '#94a3b8',
+    '--cc-eyebrow': isLight ? '#3b82f6' : '#93c5fd',
+    '--cc-panel-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+    '--cc-panel-border': isLight
+      ? '1px solid rgba(203,213,225,0.92)'
+      : '1px solid rgba(148,163,184,0.14)',
+    '--cc-panel-shadow': isLight
+      ? '0 18px 40px rgba(15,23,42,0.10)'
+      : '0 18px 40px rgba(2,6,23,0.35)',
+    '--cc-card-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.52)',
+    '--cc-soft-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.62)',
+    '--cc-row-border': isLight
+      ? '1px solid rgba(203,213,225,0.92)'
+      : '1px solid rgba(148,163,184,0.16)',
+    '--cc-field-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.74)',
+    '--cc-field-border': isLight
+      ? '1px solid rgba(203,213,225,0.92)'
+      : '1px solid rgba(148,163,184,0.18)',
+    '--cc-field-text': isLight ? '#334155' : '#e5eefb',
+    '--cc-button-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.74)',
+    '--cc-button-text': isLight ? '#475569' : '#e5eefb',
+    '--cc-button-border': isLight
+      ? '1px solid rgba(203,213,225,0.92)'
+      : '1px solid rgba(148,163,184,0.18)',
+    '--cc-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.24)',
+    '--cc-error-text': isLight ? '#b91c1c' : '#fecaca',
+    '--cc-success-bg': isLight ? 'rgba(240,253,244,0.98)' : 'rgba(20,83,45,0.24)',
+    '--cc-success-text': isLight ? '#166534' : '#bbf7d0',
+    '--cc-accent-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.14)',
+    '--cc-accent-text': isLight ? '#2563eb' : '#93c5fd',
+  };
+}
+
+function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const [feedbackItems, setFeedbackItems] = useState<AgentFeedback[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
+  const [audits, setAudits] = useState<AuditItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  const [savedAgentFilter, setSavedAgentFilter] = useState('');
+  const [savedStatusFilter, setSavedStatusFilter] = useState<'All' | FeedbackStatus>('All');
+  const [savedTypeFilter, setSavedTypeFilter] = useState<'All' | FeedbackType>('All');
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [expandedFeedbackId, setExpandedFeedbackId] = useState<string | null>(null);
-  const [savedAgentFilter, setSavedAgentFilter] = useState('');
-  const [savedStatusFilter, setSavedStatusFilter] = useState<'All' | 'Open' | 'In Progress' | 'Closed'>('All');
 
   const [selectedAgentProfileId, setSelectedAgentProfileId] = useState('');
   const [agentSearch, setAgentSearch] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
-  const [qaName, setQaName] = useState('');
-  const [feedbackType, setFeedbackType] = useState<
-    'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up'
-  >('Coaching');
+  const [qaName, setQaName] = useState(currentUser?.agent_name || '');
+  const [feedbackType, setFeedbackType] = useState<FeedbackType>('Coaching');
   const [subject, setSubject] = useState('');
   const [feedbackNote, setFeedbackNote] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  const [justification, setJustification] = useState('');
+  const [actionPlan, setActionPlan] = useState('');
+  const [followUpDate, setFollowUpDate] = useState('');
+  const [statusOnCreate, setStatusOnCreate] = useState<FeedbackStatus>('Open');
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
+  const themeVars = getDashboardThemeVars();
 
   useEffect(() => {
-    void loadFeedbackAndProfiles();
+    void loadAll();
   }, []);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
-      if (
-        agentPickerRef.current &&
-        !agentPickerRef.current.contains(event.target as Node)
-      ) {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(event.target as Node)) {
         setIsAgentPickerOpen(false);
       }
     }
@@ -70,46 +209,47 @@ function AgentFeedbackSupabase() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  async function loadFeedbackAndProfiles() {
+  async function loadAll() {
     setLoading(true);
     setErrorMessage('');
 
-    const [feedbackResult, profilesResult] = await Promise.all([
-      supabase
-        .from('agent_feedback')
-        .select('*')
-        .order('created_at', { ascending: false }),
+    const [feedbackResult, profilesResult, auditsResult] = await Promise.all([
+      supabase.from('agent_feedback').select('*').order('created_at', { ascending: false }),
       supabase
         .from('profiles')
         .select('id, role, agent_id, agent_name, display_name, team')
         .eq('role', 'agent')
         .order('agent_name', { ascending: true }),
+      supabase
+        .from('audits')
+        .select('id, agent_id, agent_name, team, case_type, audit_date, quality_score, comments, shared_with_agent')
+        .order('audit_date', { ascending: false })
+        .limit(250),
     ]);
 
     setLoading(false);
 
-    if (feedbackResult.error) {
-      setErrorMessage(feedbackResult.error.message);
-      return;
-    }
-
-    if (profilesResult.error) {
-      setErrorMessage(profilesResult.error.message);
+    if (feedbackResult.error || profilesResult.error || auditsResult.error) {
+      setErrorMessage(
+        feedbackResult.error?.message ||
+          profilesResult.error?.message ||
+          auditsResult.error?.message ||
+          'Could not load coaching center data.'
+      );
       return;
     }
 
     setFeedbackItems((feedbackResult.data as AgentFeedback[]) || []);
     setProfiles((profilesResult.data as AgentProfile[]) || []);
+    setAudits((auditsResult.data as AuditItem[]) || []);
   }
 
   const visibleAgents = useMemo(() => {
     const search = agentSearch.trim().toLowerCase();
-
     if (!search) return profiles;
 
     return profiles.filter((profile) => {
       const label = getAgentLabel(profile);
-
       return (
         profile.agent_name.toLowerCase().includes(search) ||
         (profile.agent_id || '').toLowerCase().includes(search) ||
@@ -125,14 +265,14 @@ function AgentFeedbackSupabase() {
   function getAgentLabel(profile: AgentProfile) {
     return profile.display_name
       ? `${profile.agent_name} - ${profile.display_name}`
-      : `${profile.agent_name} - ${profile.agent_id}`;
+      : `${profile.agent_name} - ${profile.agent_id || '-'}`;
   }
 
   function getFeedbackDisplayName(item: AgentFeedback) {
     const matchedProfile = profiles.find(
       (profile) =>
-        profile.agent_id === item.agent_id &&
-        profile.agent_name === item.agent_name &&
+        normalizeAgentId(profile.agent_id) === normalizeAgentId(item.agent_id) &&
+        normalizeAgentName(profile.agent_name) === normalizeAgentName(item.agent_name) &&
         profile.team === item.team
     );
 
@@ -140,7 +280,7 @@ function AgentFeedbackSupabase() {
   }
 
   function getFeedbackAgentKey(item: AgentFeedback) {
-    return `${item.agent_id}||${item.agent_name}||${item.team}`;
+    return `${normalizeAgentId(item.agent_id)}||${normalizeAgentName(item.agent_name)}||${item.team}`;
   }
 
   const savedAgentOptions = useMemo(() => {
@@ -165,52 +305,142 @@ function AgentFeedbackSupabase() {
         !savedAgentFilter || getFeedbackAgentKey(item) === savedAgentFilter;
       const matchesStatus =
         savedStatusFilter === 'All' || item.status === savedStatusFilter;
+      const matchesType =
+        savedTypeFilter === 'All' || item.feedback_type === savedTypeFilter;
 
-      return matchesAgent && matchesStatus;
+      return matchesAgent && matchesStatus && matchesType;
     });
-  }, [feedbackItems, savedAgentFilter, savedStatusFilter]);
+  }, [feedbackItems, savedAgentFilter, savedStatusFilter, savedTypeFilter]);
+
+  const selectedAgentAudits = useMemo(() => {
+    if (!selectedAgent) return [];
+    return audits
+      .filter(
+        (item) =>
+          normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id) &&
+          normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name) &&
+          item.team === selectedAgent.team
+      )
+      .sort((a, b) => (a.audit_date < b.audit_date ? 1 : -1));
+  }, [audits, selectedAgent]);
+
+  const latestAudit = selectedAgentAudits[0] || null;
+  const selectedAgentAverage =
+    selectedAgentAudits.length > 0
+      ? selectedAgentAudits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
+        selectedAgentAudits.length
+      : 0;
+
+  const selectedAgentOpenItems = useMemo(() => {
+    if (!selectedAgent) return [];
+    return feedbackItems.filter(
+      (item) =>
+        normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id) &&
+        normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name) &&
+        item.team === selectedAgent.team &&
+        item.status !== 'Closed'
+    );
+  }, [feedbackItems, selectedAgent]);
+
+  const overdueCount = useMemo(
+    () =>
+      feedbackItems.filter(
+        (item) =>
+          !!item.due_date &&
+          item.status !== 'Closed' &&
+          String(item.due_date).slice(0, 10) < getCurrentDateValue()
+      ).length,
+    [feedbackItems]
+  );
+
+  const unacknowledgedCount = useMemo(
+    () =>
+      feedbackItems.filter(
+        (item) => item.status !== 'Closed' && !item.acknowledged_by_agent
+      ).length,
+    [feedbackItems]
+  );
+
+  const followUpCount = useMemo(
+    () =>
+      feedbackItems.filter(
+        (item) => item.feedback_type === 'Follow-up' && item.status !== 'Closed'
+      ).length,
+    [feedbackItems]
+  );
+
+  const coachingPlanCount = useMemo(
+    () => feedbackItems.filter((item) => !!(item.action_plan || '').trim()).length,
+    [feedbackItems]
+  );
 
   function handleSelectAgent(profile: AgentProfile) {
     setSelectedAgentProfileId(profile.id);
     setAgentSearch(getAgentLabel(profile));
     setIsAgentPickerOpen(false);
+
+    const recentAudit = audits.find(
+      (item) =>
+        normalizeAgentId(item.agent_id) === normalizeAgentId(profile.agent_id) &&
+        normalizeAgentName(item.agent_name) === normalizeAgentName(profile.agent_name) &&
+        item.team === profile.team
+    );
+
+    if (recentAudit) {
+      setSubject(`${recentAudit.team} coaching • ${recentAudit.case_type}`);
+      setJustification(recentAudit.comments || '');
+      setActionPlan(
+        `Review ${recentAudit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
+      );
+    }
   }
 
   function resetForm() {
     setSelectedAgentProfileId('');
     setAgentSearch('');
     setIsAgentPickerOpen(false);
-    setQaName('');
+    setQaName(currentUser?.agent_name || '');
     setFeedbackType('Coaching');
     setSubject('');
     setFeedbackNote('');
-    setDueDate('');
+    setJustification('');
+    setActionPlan('');
+    setFollowUpDate('');
+    setStatusOnCreate('Open');
   }
 
-
-
-  async function handleCreateFeedback() {
+  async function handleCreatePlan() {
     setErrorMessage('');
     setSuccessMessage('');
-    if (!selectedAgent || !qaName || !subject || !feedbackNote) {
-      setErrorMessage(
-        'Please choose an agent and fill QA Name, Subject, and Feedback Note.'
-      );
+
+    if (!selectedAgent || !qaName.trim() || !subject.trim() || !feedbackNote.trim()) {
+      setErrorMessage('Please choose an agent and fill QA Name, Subject, and Coaching Summary.');
       return;
     }
 
     setSaving(true);
 
+    const mergedActionPlan = [
+      actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
+      justification.trim() ? `\nJustification:\n${justification.trim()}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+      .trim();
+
     const { error } = await supabase.from('agent_feedback').insert({
       agent_id: selectedAgent.agent_id,
       agent_name: selectedAgent.agent_name,
       team: selectedAgent.team,
-      qa_name: qaName,
+      qa_name: qaName.trim(),
       feedback_type: feedbackType,
-      subject,
-      feedback_note: feedbackNote,
-      due_date: dueDate || null,
-      status: 'Open',
+      subject: subject.trim(),
+      feedback_note: feedbackNote.trim(),
+      action_plan: mergedActionPlan || null,
+      due_date: followUpDate || null,
+      status: statusOnCreate,
+      acknowledged_by_agent: false,
+      acknowledged_at: null,
     });
 
     setSaving(false);
@@ -220,17 +450,15 @@ function AgentFeedbackSupabase() {
       return;
     }
 
-    setSuccessMessage('Agent feedback created successfully.');
+    setSuccessMessage('Coaching plan created successfully.');
     resetForm();
-    void loadFeedbackAndProfiles();
+    void loadAll();
   }
 
-  async function handleStatusChange(
-    feedbackId: string,
-    newStatus: 'Open' | 'In Progress' | 'Closed'
-  ) {
+  async function handleStatusChange(feedbackId: string, newStatus: FeedbackStatus) {
     setErrorMessage('');
     setSuccessMessage('');
+
     const { error } = await supabase
       .from('agent_feedback')
       .update({ status: newStatus })
@@ -241,11 +469,38 @@ function AgentFeedbackSupabase() {
       return;
     }
 
-    setSuccessMessage(`Feedback status updated to ${newStatus}.`);
-
+    setSuccessMessage(`Plan status updated to ${newStatus}.`);
     setFeedbackItems((prev) =>
-      prev.map((item) =>
-        item.id === feedbackId ? { ...item, status: newStatus } : item
+      prev.map((item) => (item.id === feedbackId ? { ...item, status: newStatus } : item))
+    );
+  }
+
+  async function handleToggleAcknowledgment(item: AgentFeedback) {
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    const nextAck = !item.acknowledged_by_agent;
+    const acknowledgedAt = nextAck ? new Date().toISOString() : null;
+
+    const { error } = await supabase
+      .from('agent_feedback')
+      .update({
+        acknowledged_by_agent: nextAck,
+        acknowledged_at: acknowledgedAt,
+      })
+      .eq('id', item.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setSuccessMessage(nextAck ? 'Acknowledgment saved.' : 'Acknowledgment removed.');
+    setFeedbackItems((prev) =>
+      prev.map((entry) =>
+        entry.id === item.id
+          ? { ...entry, acknowledged_by_agent: nextAck, acknowledged_at: acknowledgedAt }
+          : entry
       )
     );
   }
@@ -256,14 +511,11 @@ function AgentFeedbackSupabase() {
 
     if (pendingDeleteId !== feedbackId) {
       setPendingDeleteId(feedbackId);
-      setSuccessMessage('Click delete again to confirm feedback removal.');
+      setSuccessMessage('Click delete again to confirm removal.');
       return;
     }
 
-    const { error } = await supabase
-      .from('agent_feedback')
-      .delete()
-      .eq('id', feedbackId);
+    const { error } = await supabase.from('agent_feedback').delete().eq('id', feedbackId);
 
     if (error) {
       setErrorMessage(error.message);
@@ -272,221 +524,238 @@ function AgentFeedbackSupabase() {
 
     setPendingDeleteId(null);
     setFeedbackItems((prev) => prev.filter((item) => item.id !== feedbackId));
-    setSuccessMessage('Feedback item deleted successfully.');
-  }
-
-  function getStatusColor(statusValue: string) {
-    if (statusValue === 'Closed') return '#166534';
-    if (statusValue === 'In Progress') return '#92400e';
-    return '#1d4ed8';
-  }
-
-  function getTypeColor(typeValue: string) {
-    if (typeValue === 'Warning') return '#991b1b';
-    if (typeValue === 'Audit Feedback') return '#7c3aed';
-    if (typeValue === 'Follow-up') return '#b45309';
-    return '#166534';
-  }
-
-  function formatDate(dateValue?: string | null) {
-    if (!dateValue) return '-';
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString();
+    setSuccessMessage('Coaching item deleted successfully.');
   }
 
   return (
-    <div style={{ color: 'var(--da-page-text, #e5eefb)' }}>
+    <div style={{ color: 'var(--cc-page-text, #e5eefb)', ...(themeVars as React.CSSProperties) }}>
       <div style={pageHeaderStyle}>
         <div>
-          <div style={sectionEyebrow}>Coaching Workspace</div>
-          <h2 style={{ margin: 0, fontSize: '30px' }}>Agent Feedback</h2>
-          <p style={{ margin: '10px 0 0 0', color: 'var(--da-subtle-text, #94a3b8)' }}>
-            Create coaching notes, warnings, follow-ups, and audit feedback
-            using the live agent directory from profiles.
+          <div style={sectionEyebrow}>Coaching Center</div>
+          <h2 style={{ margin: 0, fontSize: '32px', color: 'var(--cc-title, #f8fafc)' }}>
+            Turn audits into action plans
+          </h2>
+          <p style={{ margin: '10px 0 0 0', color: 'var(--cc-subtitle, #94a3b8)' }}>
+            Build coaching tasks, capture justification, track acknowledgment, and close the loop with follow-up dates.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => void loadFeedbackAndProfiles()}
-          style={secondaryButton}
-        >
+        <button type="button" onClick={() => void loadAll()} style={secondaryButton}>
           Refresh
         </button>
       </div>
 
       {errorMessage ? <div style={errorBannerStyle}>{errorMessage}</div> : null}
-      {successMessage ? (
-        <div style={successBannerStyle}>{successMessage}</div>
-      ) : null}
+      {successMessage ? <div style={successBannerStyle}>{successMessage}</div> : null}
 
-      <div style={panelStyle}>
-        <div style={formGridStyle}>
-          <div style={wideFieldStyle}>
-            <label style={labelStyle}>Agent</label>
-            <div ref={agentPickerRef} style={{ position: 'relative' }}>
-              <button
-                type="button"
-                onClick={() => setIsAgentPickerOpen((prev) => !prev)}
-                style={pickerButtonStyle}
+      <div style={summaryGridStyle}>
+        <SummaryCard title="Open Plans" value={String(feedbackItems.filter((item) => item.status !== 'Closed').length)} subtitle="All coaching items still active" />
+        <SummaryCard title="Overdue Follow-up" value={String(overdueCount)} subtitle="Due date passed and not closed" />
+        <SummaryCard title="Need Acknowledgment" value={String(unacknowledgedCount)} subtitle="Agent has not acknowledged yet" />
+        <SummaryCard title="Follow-up Queue" value={String(followUpCount)} subtitle="Open follow-up tasks" />
+      </div>
+
+      <div style={workspaceGridStyle}>
+        <div style={panelStyle}>
+          <div style={panelEyebrowStyle}>Create Plan</div>
+          <h3 style={panelTitleStyle}>Coaching Workspace</h3>
+          <p style={panelSubtitleStyle}>
+            Start from the agent, use the latest audit as context, and convert the finding into a clear next-step plan.
+          </p>
+
+          <div style={formGridStyle}>
+            <div style={wideFieldStyle}>
+              <label style={labelStyle}>Agent</label>
+              <div ref={agentPickerRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  onClick={() => setIsAgentPickerOpen((prev) => !prev)}
+                  style={pickerButtonStyle}
+                >
+                  <span style={{ color: selectedAgent ? 'var(--cc-title, #f8fafc)' : 'var(--cc-subtle, #94a3b8)' }}>
+                    {selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent'}
+                  </span>
+                  <span>▼</span>
+                </button>
+
+                {isAgentPickerOpen && (
+                  <div style={pickerMenuStyle}>
+                    <div style={pickerSearchWrapStyle}>
+                      <input
+                        type="text"
+                        value={agentSearch}
+                        onChange={(e) => setAgentSearch(e.target.value)}
+                        placeholder="Search by name, ID, or display name"
+                        style={fieldStyle}
+                      />
+                    </div>
+
+                    <div style={pickerListStyle}>
+                      {visibleAgents.length === 0 ? (
+                        <div style={pickerInfoStyle}>No agents found</div>
+                      ) : (
+                        visibleAgents.map((profile) => (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            onClick={() => handleSelectAgent(profile)}
+                            style={{
+                              ...pickerOptionStyle,
+                              ...(selectedAgentProfileId === profile.id ? pickerOptionActiveStyle : {}),
+                            }}
+                          >
+                            {getAgentLabel(profile)}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={infoCardStyle}>
+              <div style={infoCardTitleStyle}>Agent Snapshot</div>
+              <p style={infoLineStyle}><strong>Agent ID:</strong> {selectedAgent?.agent_id || '-'}</p>
+              <p style={infoLineStyle}><strong>Name:</strong> {selectedAgent?.agent_name || '-'}</p>
+              <p style={infoLineStyle}><strong>Display:</strong> {selectedAgent?.display_name || '-'}</p>
+              <p style={infoLineStyle}><strong>Team:</strong> {selectedAgent?.team || '-'}</p>
+              <p style={{ ...infoLineStyle, marginBottom: 0 }}>
+                <strong>Open Items:</strong> {selectedAgentOpenItems.length}
+              </p>
+            </div>
+
+            <div>
+              <label style={labelStyle}>QA Name</label>
+              <input
+                type="text"
+                value={qaName}
+                onChange={(e) => setQaName(e.target.value)}
+                style={fieldStyle}
+                placeholder="Enter QA name"
+              />
+            </div>
+
+            <div>
+              <label style={labelStyle}>Plan Type</label>
+              <select
+                value={feedbackType}
+                onChange={(e) => setFeedbackType(e.target.value as FeedbackType)}
+                style={fieldStyle}
               >
-                <span style={{ color: selectedAgent ? 'var(--da-title, #f8fafc)' : 'var(--da-subtle-text, #94a3b8)' }}>
-                  {selectedAgent
-                    ? getAgentLabel(selectedAgent)
-                    : 'Select agent'}
-                </span>
-                <span>▼</span>
-              </button>
+                <option value="Coaching">Coaching</option>
+                <option value="Audit Feedback">Audit Feedback</option>
+                <option value="Warning">Warning</option>
+                <option value="Follow-up">Follow-up</option>
+              </select>
+            </div>
 
-              {isAgentPickerOpen && (
-                <div style={pickerMenuStyle}>
-                  <div style={pickerSearchWrapStyle}>
-                    <input
-                      type="text"
-                      value={agentSearch}
-                      onChange={(e) => setAgentSearch(e.target.value)}
-                      placeholder="Search by name, ID, or display name"
-                      style={fieldStyle}
-                    />
-                  </div>
+            <div>
+              <label style={labelStyle}>Starting Status</label>
+              <select
+                value={statusOnCreate}
+                onChange={(e) => setStatusOnCreate(e.target.value as FeedbackStatus)}
+                style={fieldStyle}
+              >
+                <option value="Open">Open</option>
+                <option value="In Progress">In Progress</option>
+                <option value="Closed">Closed</option>
+              </select>
+            </div>
 
-                  <div style={pickerListStyle}>
-                    {visibleAgents.length === 0 ? (
-                      <div style={pickerInfoStyle}>No agents found</div>
-                    ) : (
-                      visibleAgents.map((profile) => (
-                        <button
-                          key={profile.id}
-                          type="button"
-                          onClick={() => handleSelectAgent(profile)}
-                          style={{
-                            ...pickerOptionStyle,
-                            ...(selectedAgentProfileId === profile.id
-                              ? pickerOptionActiveStyle
-                              : {}),
-                          }}
-                        >
-                          {getAgentLabel(profile)}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                </div>
-              )}
+            <div>
+              <label style={labelStyle}>Follow-up Date</label>
+              <input
+                type="date"
+                value={followUpDate}
+                onChange={(e) => setFollowUpDate(e.target.value)}
+                style={fieldStyle}
+              />
+            </div>
+
+            <div style={wideFieldStyle}>
+              <label style={labelStyle}>Subject</label>
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                style={fieldStyle}
+                placeholder="Example: Calls coaching • Refund accuracy"
+              />
+            </div>
+
+            <div style={wideFieldStyle}>
+              <label style={labelStyle}>Coaching Summary</label>
+              <textarea
+                value={feedbackNote}
+                onChange={(e) => setFeedbackNote(e.target.value)}
+                rows={4}
+                style={fieldStyle}
+                placeholder="Summarize the gap, expectation, and what good looks like."
+              />
+            </div>
+
+            <div style={wideFieldStyle}>
+              <label style={labelStyle}>Justification / Audit Context</label>
+              <textarea
+                value={justification}
+                onChange={(e) => setJustification(e.target.value)}
+                rows={4}
+                style={fieldStyle}
+                placeholder="Use audit comments, examples, or case references to justify the plan."
+              />
+            </div>
+
+            <div style={wideFieldStyle}>
+              <label style={labelStyle}>Action Plan</label>
+              <textarea
+                value={actionPlan}
+                onChange={(e) => setActionPlan(e.target.value)}
+                rows={5}
+                style={fieldStyle}
+                placeholder="Write concrete next steps, owner, and follow-up expectations."
+              />
             </div>
           </div>
 
-          <div style={infoCardStyle}>
-            <div style={infoCardTitleStyle}>Selected Agent</div>
-            <p style={infoLineStyle}>
-              <strong>Agent ID:</strong> {selectedAgent?.agent_id || '-'}
-            </p>
-            <p style={infoLineStyle}>
-              <strong>Agent Name:</strong> {selectedAgent?.agent_name || '-'}
-            </p>
-            <p style={infoLineStyle}>
-              <strong>Display Name:</strong>{' '}
-              {selectedAgent?.display_name || '-'}
-            </p>
-            <p style={{ ...infoLineStyle, marginBottom: 0 }}>
-              <strong>Team:</strong> {selectedAgent?.team || '-'}
-            </p>
-          </div>
-
-          <div>
-            <label style={labelStyle}>QA Name</label>
-            <input
-              type="text"
-              value={qaName}
-              onChange={(e) => setQaName(e.target.value)}
-              style={fieldStyle}
-              placeholder="Enter QA name"
-            />
-          </div>
-
-          <div>
-            <label style={labelStyle}>Feedback Type</label>
-            <select
-              value={feedbackType}
-              onChange={(e) =>
-                setFeedbackType(
-                  e.target.value as
-                    | 'Coaching'
-                    | 'Audit Feedback'
-                    | 'Warning'
-                    | 'Follow-up'
-                )
-              }
-              style={fieldStyle}
-            >
-              <option value="Coaching">Coaching</option>
-              <option value="Audit Feedback">Audit Feedback</option>
-              <option value="Warning">Warning</option>
-              <option value="Follow-up">Follow-up</option>
-            </select>
-          </div>
-
-          <div>
-            <label style={labelStyle}>Subject</label>
-            <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              style={fieldStyle}
-              placeholder="Enter feedback subject"
-            />
-          </div>
-
-          <div style={wideFieldStyle}>
-            <label style={labelStyle}>Feedback Note</label>
-            <textarea
-              value={feedbackNote}
-              onChange={(e) => setFeedbackNote(e.target.value)}
-              rows={5}
-              style={fieldStyle}
-              placeholder="Write the feedback details"
-            />
-          </div>
-
-          <div>
-            <label style={labelStyle}>Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={fieldStyle}
-            />
+          <div style={actionRowStyle}>
+            <button onClick={handleCreatePlan} disabled={saving} style={primaryButton}>
+              {saving ? 'Saving...' : 'Create Coaching Plan'}
+            </button>
+            <button type="button" onClick={resetForm} disabled={saving} style={secondaryButton}>
+              Clear Form
+            </button>
           </div>
         </div>
-      </div>
 
-      <div style={actionRowStyle}>
-        <button
-          onClick={handleCreateFeedback}
-          disabled={saving}
-          style={primaryButton}
-        >
-          {saving ? 'Saving...' : 'Create Feedback'}
-        </button>
-        <button
-          type="button"
-          onClick={resetForm}
-          disabled={saving}
-          style={secondaryButton}
-        >
-          Clear Form
-        </button>
-      </div>
+        <div style={stackPanelStyle}>
+          <div style={panelStyle}>
+            <div style={panelEyebrowStyle}>Audit Context</div>
+            <h3 style={panelTitleStyle}>Selected Agent Snapshot</h3>
+            {!selectedAgent ? (
+              <EmptyState text="Pick an agent to pull in audit context and active coaching items." />
+            ) : (
+              <div style={contextGridStyle}>
+                <ContextCard title="Latest Audit" value={latestAudit ? `${latestAudit.team} • ${latestAudit.case_type}` : '-'} helper={latestAudit ? `${formatDateOnly(latestAudit.audit_date)} • ${latestAudit.quality_score.toFixed(2)}%` : 'No recent audits found'} />
+                <ContextCard title="Average Quality" value={selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'} helper={`${selectedAgentAudits.length} audit(s) loaded`} />
+                <ContextCard title="Open Coaching" value={String(selectedAgentOpenItems.length)} helper="Open and in-progress plans" />
+              </div>
+            )}
+            {latestAudit ? (
+              <div style={auditCommentStyle}>
+                <div style={miniLabelStyle}>Latest Audit Comment</div>
+                <div style={auditCommentBodyStyle}>{latestAudit.comments || 'No comment on the latest audit.'}</div>
+              </div>
+            ) : null}
+          </div>
 
-      <div style={{ marginTop: '32px' }}>
-        <div style={sectionEyebrow}>Saved Feedback Items</div>
+          <div style={panelStyle}>
+            <div style={panelEyebrowStyle}>Plan Filters</div>
+            <h3 style={panelTitleStyle}>Coaching Pipeline</h3>
 
-        {!loading && feedbackItems.length > 0 ? (
-          <div style={savedFilterBarStyle}>
-            <div style={savedFilterGridStyle}>
+            <div style={filterGridStyle}>
               <div>
-                <label style={labelStyle}>Filter by Agent</label>
+                <label style={labelStyle}>Agent</label>
                 <select
                   value={savedAgentFilter}
                   onChange={(e) => setSavedAgentFilter(e.target.value)}
@@ -502,14 +771,10 @@ function AgentFeedbackSupabase() {
               </div>
 
               <div>
-                <label style={labelStyle}>Filter by Status</label>
+                <label style={labelStyle}>Status</label>
                 <select
                   value={savedStatusFilter}
-                  onChange={(e) =>
-                    setSavedStatusFilter(
-                      e.target.value as 'All' | 'Open' | 'In Progress' | 'Closed'
-                    )
-                  }
+                  onChange={(e) => setSavedStatusFilter(e.target.value as 'All' | FeedbackStatus)}
                   style={fieldStyle}
                 >
                   <option value="All">All Statuses</option>
@@ -518,29 +783,34 @@ function AgentFeedbackSupabase() {
                   <option value="Closed">Closed</option>
                 </select>
               </div>
-            </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                setSavedAgentFilter('');
-                setSavedStatusFilter('All');
-              }}
-              style={secondaryButton}
-            >
-              Clear Filters
-            </button>
+              <div>
+                <label style={labelStyle}>Type</label>
+                <select
+                  value={savedTypeFilter}
+                  onChange={(e) => setSavedTypeFilter(e.target.value as 'All' | FeedbackType)}
+                  style={fieldStyle}
+                >
+                  <option value="All">All Types</option>
+                  <option value="Coaching">Coaching</option>
+                  <option value="Audit Feedback">Audit Feedback</option>
+                  <option value="Warning">Warning</option>
+                  <option value="Follow-up">Follow-up</option>
+                </select>
+              </div>
+            </div>
           </div>
-        ) : null}
+        </div>
+      </div>
+
+      <div style={panelStyle}>
+        <div style={panelEyebrowStyle}>Saved Plans</div>
+        <h3 style={panelTitleStyle}>Coaching Tasks & Follow-up</h3>
 
         {loading ? (
-          <p style={{ color: 'var(--da-subtle-text, #94a3b8)' }}>Loading feedback...</p>
-        ) : feedbackItems.length === 0 ? (
-          <p style={{ color: 'var(--da-subtle-text, #94a3b8)' }}>No feedback items found.</p>
+          <p style={emptyTextStyle}>Loading coaching items...</p>
         ) : filteredFeedbackItems.length === 0 ? (
-          <p style={{ color: 'var(--da-subtle-text, #94a3b8)' }}>
-            No feedback items found for the current filters.
-          </p>
+          <EmptyState text="No coaching items found for the current filters." />
         ) : (
           <div style={feedbackTableWrapStyle}>
             <div style={feedbackTableStyle}>
@@ -548,7 +818,7 @@ function AgentFeedbackSupabase() {
                 <div style={feedbackCellAgentStyle}>Agent</div>
                 <div style={feedbackCellTypeStyle}>Type</div>
                 <div style={feedbackCellSubjectStyle}>Subject</div>
-                <div style={feedbackCellDueDateStyle}>Due Date</div>
+                <div style={feedbackCellDueDateStyle}>Follow-up</div>
                 <div style={feedbackCellStatusStyle}>Status</div>
                 <div style={feedbackCellAckStyle}>Acknowledged</div>
                 <div style={feedbackCellActionsStyle}>Actions</div>
@@ -556,6 +826,8 @@ function AgentFeedbackSupabase() {
 
               {filteredFeedbackItems.map((item) => {
                 const isExpanded = expandedFeedbackId === item.id;
+                const dueDiff = daysUntil(item.due_date);
+                const isOverdue = dueDiff !== null && dueDiff < 0 && item.status !== 'Closed';
 
                 return (
                   <div key={item.id} style={feedbackEntryStyle}>
@@ -575,35 +847,55 @@ function AgentFeedbackSupabase() {
 
                       <div style={feedbackCellSubjectStyle}>
                         <div style={primaryCellTextStyle}>{item.subject}</div>
+                        <div style={secondaryCellTextStyle}>By {item.qa_name}</div>
                       </div>
 
                       <div style={feedbackCellDueDateStyle}>
-                        <div style={primaryCellTextStyle}>{item.due_date || '-'}</div>
+                        <div style={primaryCellTextStyle}>{formatDateOnly(item.due_date)}</div>
+                        <div style={{ ...secondaryCellTextStyle, color: isOverdue ? '#b91c1c' : 'var(--cc-subtle, #94a3b8)' }}>
+                          {item.due_date ? (isOverdue ? 'Overdue' : dueDiff === 0 ? 'Due today' : `${dueDiff} day(s) left`) : 'No due date'}
+                        </div>
                       </div>
 
                       <div style={feedbackCellStatusStyle}>
-                        <span style={statusPill(getStatusColor(item.status))}>
-                          {item.status}
-                        </span>
+                        <select
+                          value={item.status}
+                          onChange={(e) => void handleStatusChange(item.id, e.target.value as FeedbackStatus)}
+                          style={miniSelectStyle}
+                        >
+                          <option value="Open">Open</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Closed">Closed</option>
+                        </select>
                       </div>
 
                       <div style={feedbackCellAckStyle}>
-                        {item.acknowledged_by_agent ? (
-                          <span style={acknowledgedPillStyle}>Acknowledged</span>
-                        ) : (
-                          <span style={notAcknowledgedPillStyle}>Not yet</span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => void handleToggleAcknowledgment(item)}
+                          style={item.acknowledged_by_agent ? acknowledgedPillButtonStyle : notAcknowledgedPillButtonStyle}
+                        >
+                          {item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'}
+                        </button>
                       </div>
 
                       <div style={feedbackCellActionsStyle}>
                         <button
                           type="button"
-                          onClick={() =>
-                            setExpandedFeedbackId(isExpanded ? null : item.id)
-                          }
+                          onClick={() => setExpandedFeedbackId(isExpanded ? null : item.id)}
                           style={secondaryMiniButton}
                         >
                           {isExpanded ? 'Hide' : 'Details'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDelete(item.id)}
+                          style={{
+                            ...dangerMiniButton,
+                            ...(pendingDeleteId === item.id ? dangerMiniButtonActive : {}),
+                          }}
+                        >
+                          {pendingDeleteId === item.id ? 'Confirm' : 'Delete'}
                         </button>
                       </div>
                     </div>
@@ -611,68 +903,13 @@ function AgentFeedbackSupabase() {
                     {isExpanded ? (
                       <div style={expandedFeedbackWrapStyle}>
                         <div style={expandedFeedbackPanelStyle}>
-                          <div style={feedbackDetailGridStyle}>
-                            <div style={feedbackDetailCardStyle}>
-                              <div style={feedbackDetailLabelStyle}>QA Name</div>
-                              <div style={feedbackDetailValueStyle}>{item.qa_name}</div>
-                            </div>
-                            <div style={feedbackDetailCardStyle}>
-                              <div style={feedbackDetailLabelStyle}>Created At</div>
-                              <div style={feedbackDetailValueStyle}>{formatDate(item.created_at)}</div>
-                            </div>
-                            <div style={feedbackDetailCardStyle}>
-                              <div style={feedbackDetailLabelStyle}>Due Date</div>
-                              <div style={feedbackDetailValueStyle}>{item.due_date || '-'}</div>
-                            </div>
-                            <div style={feedbackDetailCardStyle}>
-                              <div style={feedbackDetailLabelStyle}>Acknowledged</div>
-                              <div style={feedbackDetailValueStyle}>
-                                {item.acknowledged_by_agent
-                                  ? item.acknowledged_at
-                                    ? formatDate(item.acknowledged_at)
-                                    : 'Yes'
-                                  : 'Not yet'}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div style={feedbackNoteCardStyle}>
-                            <div style={feedbackDetailLabelStyle}>Feedback</div>
-                            <div style={feedbackNoteTextStyle}>{item.feedback_note}</div>
-                          </div>
-
-                          <div style={expandedActionRowStyle}>
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(item.id, 'Open')}
-                              style={secondaryButton}
-                            >
-                              Mark Open
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(item.id, 'In Progress')}
-                              style={secondaryButton}
-                            >
-                              In Progress
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleStatusChange(item.id, 'Closed')}
-                              style={secondaryButton}
-                            >
-                              Close
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(item.id)}
-                              style={dangerButton}
-                            >
-                              {pendingDeleteId === item.id ? 'Confirm Delete' : 'Delete'}
-                            </button>
+                          <DetailBlock label="Coaching Summary" value={item.feedback_note} />
+                          <DetailBlock label="Action Plan & Justification" value={item.action_plan || 'No action plan saved.'} />
+                          <div style={expandedGridStyle}>
+                            <DetailMini label="Created" value={formatDateTime(item.created_at)} />
+                            <DetailMini label="Acknowledged At" value={formatDateTime(item.acknowledged_at)} />
+                            <DetailMini label="Follow-up Date" value={formatDateOnly(item.due_date)} />
+                            <DetailMini label="Status" value={item.status} />
                           </div>
                         </div>
                       </div>
@@ -688,400 +925,527 @@ function AgentFeedbackSupabase() {
   );
 }
 
-function statusPill(backgroundColor: string) {
-  return {
-    display: 'inline-block',
-    padding: '6px 10px',
-    borderRadius: '999px',
-    fontSize: '12px',
-    fontWeight: 800,
-    color: '#ffffff',
-    backgroundColor,
-  };
+function SummaryCard({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
+  return (
+    <div style={summaryCardStyle}>
+      <div style={summaryCardLabelStyle}>{title}</div>
+      <div style={summaryCardValueStyle}>{value}</div>
+      <div style={summaryCardSubtitleStyle}>{subtitle}</div>
+    </div>
+  );
 }
 
-const pageHeaderStyle = {
+function ContextCard({ title, value, helper }: { title: string; value: string; helper: string }) {
+  return (
+    <div style={contextCardStyle}>
+      <div style={miniLabelStyle}>{title}</div>
+      <div style={contextValueStyle}>{value}</div>
+      <div style={contextHelperStyle}>{helper}</div>
+    </div>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={detailBlockStyle}>
+      <div style={miniLabelStyle}>{label}</div>
+      <div style={detailValueStyle}>{value}</div>
+    </div>
+  );
+}
+
+function DetailMini({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={detailMiniStyle}>
+      <div style={miniLabelStyle}>{label}</div>
+      <div style={primaryCellTextStyle}>{value}</div>
+    </div>
+  );
+}
+
+function EmptyState({ text }: { text: string }) {
+  return <div style={emptyStateStyle}>{text}</div>;
+}
+
+const pageHeaderStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'space-between',
-  gap: '16px',
   alignItems: 'flex-start',
-  flexWrap: 'wrap' as const,
-  marginBottom: '20px',
+  gap: '16px',
+  flexWrap: 'wrap',
+  marginBottom: '22px',
 };
 
-const sectionEyebrow = {
-  color: 'var(--da-accent-text, #60a5fa)',
+const sectionEyebrow: React.CSSProperties = {
+  color: 'var(--cc-eyebrow, #93c5fd)',
   fontSize: '12px',
   fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.16em',
-  marginBottom: '12px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.14em',
+  marginBottom: '8px',
 };
 
-const panelStyle = {
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  border: '1px solid rgba(148, 163, 184, 0.14)',
-  borderRadius: '24px',
-  padding: '22px',
-  boxShadow: '0 18px 40px rgba(2, 6, 23, 0.35)',
-  backdropFilter: 'blur(14px)',
+const panelEyebrowStyle: React.CSSProperties = {
+  color: 'var(--cc-eyebrow, #93c5fd)',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase',
+  letterSpacing: '0.14em',
+  marginBottom: '8px',
 };
 
-const formGridStyle = {
+const panelTitleStyle: React.CSSProperties = {
+  marginTop: 0,
+  marginBottom: '8px',
+  color: 'var(--cc-title, #f8fafc)',
+  fontSize: '24px',
+  fontWeight: 900,
+};
+
+const panelSubtitleStyle: React.CSSProperties = {
+  marginTop: 0,
+  marginBottom: '16px',
+  color: 'var(--cc-subtitle, #94a3b8)',
+  fontSize: '14px',
+};
+
+const summaryGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: '16px',
+  marginBottom: '18px',
 };
 
-const wideFieldStyle = {
+const summaryCardStyle: React.CSSProperties = {
+  background: 'var(--cc-panel-bg)',
+  border: 'var(--cc-panel-border)',
+  borderRadius: '22px',
+  padding: '20px',
+  boxShadow: 'var(--cc-panel-shadow)',
+};
+
+const summaryCardLabelStyle: React.CSSProperties = {
+  color: 'var(--cc-subtle)',
+  fontSize: '12px',
+  fontWeight: 700,
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+  marginBottom: '8px',
+};
+
+const summaryCardValueStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
+  fontSize: '30px',
+  fontWeight: 900,
+  marginBottom: '8px',
+};
+
+const summaryCardSubtitleStyle: React.CSSProperties = {
+  color: 'var(--cc-subtle)',
+  fontSize: '12px',
+};
+
+const workspaceGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1.3fr) minmax(320px, 0.9fr)',
+  gap: '18px',
+  marginBottom: '18px',
+};
+
+const stackPanelStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '18px',
+};
+
+const panelStyle: React.CSSProperties = {
+  background: 'var(--cc-panel-bg)',
+  border: 'var(--cc-panel-border)',
+  borderRadius: '24px',
+  padding: '20px',
+  boxShadow: 'var(--cc-panel-shadow)',
+};
+
+const formGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+  gap: '14px',
+};
+
+const filterGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gap: '12px',
+};
+
+const wideFieldStyle: React.CSSProperties = {
   gridColumn: '1 / -1',
 };
 
-const labelStyle = {
+const labelStyle: React.CSSProperties = {
   display: 'block',
   marginBottom: '8px',
-  fontSize: '13px',
-  color: 'var(--da-muted-text, #cbd5e1)',
+  color: 'var(--cc-muted)',
+  fontSize: '12px',
   fontWeight: 700,
 };
 
-const fieldStyle = {
+const fieldStyle: React.CSSProperties = {
   width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  background: 'var(--da-surface-bg, rgba(15, 23, 42, 0.7))',
-  color: 'var(--da-page-text, #e5eefb)',
-};
-
-const pickerButtonStyle = {
-  width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  background: 'var(--da-surface-bg, rgba(15, 23, 42, 0.7))',
-  color: 'var(--da-page-text, #e5eefb)',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-
-const pickerMenuStyle = {
-  position: 'absolute' as const,
-  top: 'calc(100% + 8px)',
-  left: 0,
-  right: 0,
-  background: 'var(--da-menu-bg, rgba(15, 23, 42, 0.96))',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  borderRadius: '18px',
-  boxShadow: '0 18px 44px rgba(2, 6, 23, 0.45)',
-  zIndex: 20,
-  overflow: 'hidden',
-  backdropFilter: 'blur(16px)',
-};
-
-const pickerSearchWrapStyle = {
-  padding: '12px',
-  borderBottom: '1px solid rgba(148, 163, 184, 0.12)',
-};
-
-const pickerListStyle = {
-  maxHeight: '280px',
-  overflowY: 'auto' as const,
-  padding: '8px',
-  display: 'grid',
-  gap: '8px',
-};
-
-const pickerInfoStyle = {
-  padding: '12px',
-  borderRadius: '12px',
-  backgroundColor: 'var(--da-surface-bg, rgba(15, 23, 42, 0.68))',
-  color: 'var(--da-subtle-text, #94a3b8)',
-};
-
-const pickerOptionStyle = {
   padding: '12px 14px',
-  borderRadius: '12px',
-  border: '1px solid rgba(148, 163, 184, 0.12)',
-  backgroundColor: 'var(--da-surface-bg, rgba(15, 23, 42, 0.6))',
-  textAlign: 'left' as const,
+  borderRadius: '14px',
+  border: 'var(--cc-field-border)',
+  background: 'var(--cc-field-bg)',
+  color: 'var(--cc-field-text)',
+  minHeight: '48px',
+};
+
+const primaryButton: React.CSSProperties = {
+  padding: '12px 16px',
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#ffffff',
+  border: '1px solid rgba(96,165,250,0.24)',
+  borderRadius: '14px',
   cursor: 'pointer',
-  fontWeight: 600,
-  color: 'var(--da-page-text, #e5eefb)',
+  fontWeight: 700,
 };
 
-const pickerOptionActiveStyle = {
-  border: '1px solid rgba(96, 165, 250, 0.36)',
-  backgroundColor: 'var(--da-active-option-bg, rgba(30, 64, 175, 0.32))',
+const secondaryButton: React.CSSProperties = {
+  padding: '12px 16px',
+  background: 'var(--cc-button-bg)',
+  color: 'var(--cc-button-text)',
+  border: 'var(--cc-button-border)',
+  borderRadius: '14px',
+  cursor: 'pointer',
+  fontWeight: 700,
 };
 
-const infoCardStyle = {
-  gridColumn: '1 / -1',
+const actionRowStyle: React.CSSProperties = {
+  display: 'flex',
+  gap: '10px',
+  flexWrap: 'wrap',
+  marginTop: '18px',
+};
+
+const infoCardStyle: React.CSSProperties = {
   borderRadius: '18px',
-  padding: '18px',
-  border: '1px solid rgba(148, 163, 184, 0.12)',
-  background: 'var(--da-card-bg, rgba(15, 23, 42, 0.5))',
+  background: 'var(--cc-soft-bg)',
+  border: 'var(--cc-row-border)',
+  padding: '16px',
 };
 
-const infoCardTitleStyle = {
-  color: 'var(--da-accent-text, #93c5fd)',
-  fontSize: '12px',
+const infoCardTitleStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
   fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
   marginBottom: '10px',
 };
 
-const infoLineStyle = {
+const infoLineStyle: React.CSSProperties = {
+  color: 'var(--cc-page-text)',
   margin: '0 0 8px 0',
-  color: 'var(--da-muted-text, #cbd5e1)',
+  fontSize: '13px',
 };
 
-const actionRowStyle = {
+const pickerButtonStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '12px 14px',
+  borderRadius: '14px',
+  border: 'var(--cc-field-border)',
+  background: 'var(--cc-field-bg)',
+  color: 'var(--cc-field-text)',
+  minHeight: '48px',
+  cursor: 'pointer',
   display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-  marginTop: '24px',
-};
-
-const primaryButton = {
-  padding: '14px 18px',
-  borderRadius: '16px',
-  border: '1px solid rgba(96, 165, 250, 0.24)',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  fontWeight: 800,
-  cursor: 'pointer',
-  boxShadow: '0 16px 32px rgba(37, 99, 235, 0.28)',
-};
-
-const secondaryButton = {
-  padding: '14px 18px',
-  borderRadius: '16px',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  background: 'var(--da-field-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--da-page-text, #e5eefb)',
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-const errorBannerStyle = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: 'var(--da-error-border, 1px solid rgba(248, 113, 113, 0.22))',
-  background: 'var(--da-error-bg, rgba(127, 29, 29, 0.24))',
-  color: 'var(--da-error-text, #fecaca)',
-};
-
-
-const successBannerStyle = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: 'var(--da-success-border, 1px solid rgba(74, 222, 128, 0.2))',
-  background: 'var(--da-success-bg, rgba(22, 101, 52, 0.16))',
-  color: 'var(--da-success-text, #bbf7d0)',
-};
-
-const dangerButton = {
-  padding: '14px 18px',
-  borderRadius: '16px',
-  border: '1px solid rgba(248, 113, 113, 0.18)',
-  background: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
-  color: '#ffffff',
-  fontWeight: 700,
-  cursor: 'pointer',
-};
-
-
-const feedbackTableWrapStyle = {
-  marginTop: '16px',
-  overflowX: 'auto' as const,
-  borderRadius: '18px',
-  border: '1px solid rgba(148, 163, 184, 0.14)',
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.98) 100%)',
-  boxShadow: '0 18px 40px rgba(15, 23, 42, 0.08)',
-};
-
-const feedbackTableStyle = {
-  minWidth: '1120px',
-};
-
-const feedbackEntryStyle = {
-  borderBottom: '1px solid rgba(203, 213, 225, 0.8)',
-};
-
-const feedbackRowStyle = {
-  display: 'grid',
-  gridTemplateColumns:
-    '280px 140px minmax(220px, 1.4fr) 140px 130px 160px 110px',
-  gap: '14px',
+  justifyContent: 'space-between',
   alignItems: 'center',
-  padding: '14px 16px',
 };
 
-const feedbackHeaderRowStyle = {
-  position: 'sticky' as const,
-  top: 0,
-  zIndex: 1,
-  background: 'rgba(13, 27, 57, 0.98)',
-  color: '#93c5fd',
-  fontSize: '12px',
+const pickerMenuStyle: React.CSSProperties = {
+  position: 'absolute',
+  top: 'calc(100% + 8px)',
+  left: 0,
+  right: 0,
+  zIndex: 20,
+  borderRadius: '18px',
+  background: 'var(--cc-panel-bg)',
+  border: 'var(--cc-panel-border)',
+  boxShadow: 'var(--cc-panel-shadow)',
+  padding: '12px',
+};
+
+const pickerSearchWrapStyle: React.CSSProperties = {
+  marginBottom: '10px',
+};
+
+const pickerListStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '8px',
+  maxHeight: '260px',
+  overflowY: 'auto',
+};
+
+const pickerInfoStyle: React.CSSProperties = {
+  padding: '12px 14px',
+  color: 'var(--cc-subtle)',
+};
+
+const pickerOptionStyle: React.CSSProperties = {
+  padding: '12px 14px',
+  borderRadius: '12px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  color: 'var(--cc-page-text)',
+  textAlign: 'left',
+  cursor: 'pointer',
+};
+
+const pickerOptionActiveStyle: React.CSSProperties = {
+  background: 'var(--cc-accent-bg)',
+  color: 'var(--cc-accent-text)',
+};
+
+const contextGridStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
+};
+
+const contextCardStyle: React.CSSProperties = {
+  borderRadius: '18px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '16px',
+};
+
+const contextValueStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
+  fontSize: '20px',
   fontWeight: 800,
-  textTransform: 'uppercase' as const,
+  margin: '6px 0',
+};
+
+const contextHelperStyle: React.CSSProperties = {
+  color: 'var(--cc-subtle)',
+  fontSize: '12px',
+};
+
+const auditCommentStyle: React.CSSProperties = {
+  marginTop: '14px',
+  borderRadius: '18px',
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-card-bg)',
+  padding: '16px',
+};
+
+const miniLabelStyle: React.CSSProperties = {
+  color: 'var(--cc-eyebrow)',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase',
   letterSpacing: '0.12em',
 };
 
-const feedbackCellAgentStyle = {};
-const feedbackCellTypeStyle = {};
-const feedbackCellSubjectStyle = {};
-const feedbackCellDueDateStyle = {};
-const feedbackCellStatusStyle = {};
-const feedbackCellAckStyle = {};
-const feedbackCellActionsStyle = {
+const auditCommentBodyStyle: React.CSSProperties = {
+  color: 'var(--cc-page-text)',
+  lineHeight: 1.6,
+  marginTop: '10px',
+  whiteSpace: 'pre-wrap',
+};
+
+const feedbackTableWrapStyle: React.CSSProperties = {
+  overflowX: 'auto',
+  borderRadius: '18px',
+  marginTop: '14px',
+};
+
+const feedbackTableStyle: React.CSSProperties = {
+  minWidth: '1120px',
+  display: 'grid',
+  gap: '10px',
+};
+
+const feedbackEntryStyle: React.CSSProperties = {
+  display: 'grid',
+  gap: '10px',
+};
+
+const feedbackRowStyle: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '2fr 1fr 1.6fr 1fr 1fr 1fr 1.3fr',
+  gap: '10px',
+  alignItems: 'center',
+  padding: '14px',
+  borderRadius: '16px',
+  background: 'var(--cc-card-bg)',
+  border: 'var(--cc-row-border)',
+};
+
+const feedbackHeaderRowStyle: React.CSSProperties = {
+  background: 'var(--cc-soft-bg)',
+};
+
+const feedbackCellAgentStyle: React.CSSProperties = {};
+const feedbackCellTypeStyle: React.CSSProperties = {};
+const feedbackCellSubjectStyle: React.CSSProperties = {};
+const feedbackCellDueDateStyle: React.CSSProperties = {};
+const feedbackCellStatusStyle: React.CSSProperties = {};
+const feedbackCellAckStyle: React.CSSProperties = {};
+const feedbackCellActionsStyle: React.CSSProperties = {
   display: 'flex',
   gap: '8px',
-  flexWrap: 'wrap' as const,
+  flexWrap: 'wrap',
 };
 
-const primaryCellTextStyle = {
-  color: '#0f172a',
-  fontSize: '14px',
+const primaryCellTextStyle: React.CSSProperties = {
+  color: 'var(--cc-title)',
   fontWeight: 700,
-  lineHeight: 1.4,
+  fontSize: '14px',
 };
 
-const secondaryCellTextStyle = {
+const secondaryCellTextStyle: React.CSSProperties = {
+  color: 'var(--cc-subtle)',
   marginTop: '4px',
-  color: '#64748b',
   fontSize: '12px',
-  fontWeight: 600,
-  lineHeight: 1.4,
 };
 
-const acknowledgedPillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: '118px',
-  padding: '8px 12px',
-  borderRadius: '999px',
-  background: 'rgba(22, 101, 52, 0.14)',
-  border: '1px solid rgba(22, 101, 52, 0.18)',
-  color: '#166534',
-  fontSize: '12px',
-  fontWeight: 800,
+const miniSelectStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: '40px',
+  padding: '8px 10px',
+  borderRadius: '12px',
+  border: 'var(--cc-field-border)',
+  background: 'var(--cc-field-bg)',
+  color: 'var(--cc-field-text)',
 };
 
-const notAcknowledgedPillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: '118px',
-  padding: '8px 12px',
-  borderRadius: '999px',
-  background: 'rgba(148, 163, 184, 0.12)',
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  color: '#475569',
-  fontSize: '12px',
-  fontWeight: 800,
-};
-
-const secondaryMiniButton = {
-  padding: '8px 12px',
-  borderRadius: '10px',
-  border: '1px solid rgba(148, 163, 184, 0.24)',
-  background: '#ffffff',
-  color: '#475569',
-  fontWeight: 700,
+const secondaryMiniButton: React.CSSProperties = {
+  padding: '9px 12px',
+  borderRadius: '12px',
+  background: 'var(--cc-button-bg)',
+  color: 'var(--cc-button-text)',
+  border: 'var(--cc-button-border)',
   cursor: 'pointer',
+  fontWeight: 700,
 };
 
-const expandedFeedbackWrapStyle = {
-  padding: '0 16px 16px 16px',
+const dangerMiniButton: React.CSSProperties = {
+  padding: '9px 12px',
+  borderRadius: '12px',
+  background: 'rgba(239,68,68,0.10)',
+  color: '#dc2626',
+  border: '1px solid rgba(239,68,68,0.24)',
+  cursor: 'pointer',
+  fontWeight: 700,
 };
 
-const expandedFeedbackPanelStyle = {
+const dangerMiniButtonActive: React.CSSProperties = {
+  background: 'rgba(239,68,68,0.18)',
+};
+
+const acknowledgedPillButtonStyle: React.CSSProperties = {
+  padding: '9px 12px',
+  borderRadius: '999px',
+  background: 'rgba(22,101,52,0.10)',
+  color: '#166534',
+  border: '1px solid rgba(22,101,52,0.20)',
+  cursor: 'pointer',
+  fontWeight: 800,
+};
+
+const notAcknowledgedPillButtonStyle: React.CSSProperties = {
+  padding: '9px 12px',
+  borderRadius: '999px',
+  background: 'rgba(37,99,235,0.10)',
+  color: '#1d4ed8',
+  border: '1px solid rgba(37,99,235,0.20)',
+  cursor: 'pointer',
+  fontWeight: 800,
+};
+
+const expandedFeedbackWrapStyle: React.CSSProperties = {
+  paddingLeft: '14px',
+  paddingRight: '14px',
+};
+
+const expandedFeedbackPanelStyle: React.CSSProperties = {
   borderRadius: '18px',
-  border: '1px solid rgba(203, 213, 225, 0.92)',
-  background:
-    'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.98) 100%)',
-  padding: '18px',
-};
-
-const feedbackDetailGridStyle = {
+  border: 'var(--cc-row-border)',
+  background: 'var(--cc-soft-bg)',
+  padding: '16px',
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: '12px',
-  marginBottom: '16px',
 };
 
-const feedbackDetailCardStyle = {
+const detailBlockStyle: React.CSSProperties = {
   borderRadius: '14px',
-  border: '1px solid rgba(203, 213, 225, 0.92)',
-  background: '#ffffff',
-  padding: '14px 16px',
+  background: 'var(--cc-card-bg)',
+  border: 'var(--cc-row-border)',
+  padding: '14px',
 };
 
-const feedbackDetailLabelStyle = {
-  color: '#94a3b8',
-  fontSize: '12px',
-  fontWeight: 700,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.08em',
-  marginBottom: '8px',
-};
-
-const feedbackDetailValueStyle = {
-  color: '#0f172a',
-  fontSize: '14px',
-  fontWeight: 700,
-  lineHeight: 1.5,
-};
-
-const feedbackNoteCardStyle = {
-  borderRadius: '14px',
-  border: '1px solid rgba(203, 213, 225, 0.92)',
-  background: '#ffffff',
-  padding: '14px 16px',
-  marginBottom: '16px',
-};
-
-const feedbackNoteTextStyle = {
-  color: '#334155',
-  fontSize: '14px',
+const detailValueStyle: React.CSSProperties = {
+  color: 'var(--cc-page-text)',
   lineHeight: 1.7,
-  whiteSpace: 'pre-wrap' as const,
-  wordBreak: 'break-word' as const,
+  marginTop: '8px',
+  whiteSpace: 'pre-wrap',
 };
 
-const expandedActionRowStyle = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-};
-
-
-const savedFilterBarStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '14px',
-  alignItems: 'flex-end',
-  flexWrap: 'wrap' as const,
-  margin: '12px 0 18px 0',
-};
-
-const savedFilterGridStyle = {
+const expandedGridStyle: React.CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 320px))',
-  gap: '14px',
-  flex: 1,
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
 };
 
-export default AgentFeedbackSupabase;
+const detailMiniStyle: React.CSSProperties = {
+  borderRadius: '14px',
+  background: 'var(--cc-card-bg)',
+  border: 'var(--cc-row-border)',
+  padding: '14px',
+};
+
+const emptyTextStyle: React.CSSProperties = {
+  color: 'var(--cc-subtle)',
+};
+
+const emptyStateStyle: React.CSSProperties = {
+  marginTop: '8px',
+  padding: '18px',
+  borderRadius: '16px',
+  border: 'var(--cc-row-border)',
+  backgroundColor: 'var(--cc-card-bg)',
+  color: 'var(--cc-subtle)',
+  textAlign: 'center',
+  fontWeight: 500,
+};
+
+const errorBannerStyle: React.CSSProperties = {
+  marginBottom: '16px',
+  padding: '14px 16px',
+  borderRadius: '16px',
+  backgroundColor: 'var(--cc-error-bg)',
+  color: 'var(--cc-error-text)',
+};
+
+const successBannerStyle: React.CSSProperties = {
+  marginBottom: '16px',
+  padding: '14px 16px',
+  borderRadius: '16px',
+  backgroundColor: 'var(--cc-success-bg)',
+  color: 'var(--cc-success-text)',
+};
+
+function statusPill(color: string): React.CSSProperties {
+  return {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: '999px',
+    padding: '7px 10px',
+    fontSize: '12px',
+    fontWeight: 800,
+    background: `${color}18`,
+    color,
+    border: `1px solid ${color}30`,
+  };
+}
+
+export default CoachingCenter;
