@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
@@ -115,6 +115,56 @@ type RecurringIssue = {
 
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
 
+
+function getReportsThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          document.documentElement.getAttribute('data-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--screen-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
+    '--screen-muted': isLight ? '#64748b' : '#94a3b8',
+    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
+    '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
+    '--screen-panel-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+    '--screen-card-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+    '--screen-card-soft-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,248,253,0.96) 100%)'
+      : 'rgba(15,23,42,0.52)',
+    '--screen-field-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.70)',
+    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
+    '--screen-table-head-bg': isLight ? 'rgba(13,27,57,0.98)' : 'rgba(2,6,23,0.92)',
+    '--screen-pill-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.56)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
+    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
+    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.96)',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.10)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
+    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.24)' : 'rgba(96,165,250,0.26)',
+  };
+}
+
 function ReportsSupabase() {
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -135,6 +185,7 @@ function ReportsSupabase() {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
+  const themeVars = getReportsThemeVars();
 
   useEffect(() => {
     void loadReportsData();
@@ -651,7 +702,10 @@ function ReportsSupabase() {
   }
 
   return (
-    <div style={{ color: '#e5eefb' }}>
+    <div
+      data-no-theme-invert="true"
+      style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
+    >
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Reporting</div>
@@ -832,7 +886,6 @@ function ReportsSupabase() {
       <PerformanceTrendsSection
         audits={filteredAudits}
         allAudits={trendTeamAudits}
-        profiles={profiles}
         selectedAgent={selectedAgent}
         effectiveTeamFilter={trendTeamFilter}
       />
@@ -919,133 +972,164 @@ function ReportsSupabase() {
         </Section>
       )}
 
-      <Section title="Recent Audits">
-        {filteredAudits.length === 0 ? (
-          <p>No audits in this range.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {filteredAudits.slice(0, 10).map((item) => (
-              <div key={item.id} style={contentCardStyle}>
-                <p>
-                  <strong>Agent:</strong> {item.agent_name}
-                </p>
-                <p>
-                  <strong>Display Name:</strong>{' '}
-                  {getDisplayName(item.agent_id, item.agent_name, item.team) ||
-                    '-'}
-                </p>
-                <p>
-                  <strong>Team:</strong> {item.team}
-                </p>
-                <p>
-                  <strong>Case Type:</strong> {item.case_type}
-                </p>
-                <p>
-                  <strong>Date:</strong> {item.audit_date}
-                </p>
+<Section title="Recent Audits">
+  {filteredAudits.length === 0 ? (
+    <p style={emptyMessageStyle}>No audits in this range.</p>
+  ) : (
+    <div style={thinTableWrapStyle}>
+      <div style={thinTableStyle}>
+        <div style={{ ...recentAuditsRowGridStyle, ...thinHeaderRowStyle }}>
+          <div style={recentAuditDateCellStyle}>Date</div>
+          <div style={recentAuditAgentCellStyle}>Agent</div>
+          <div style={recentAuditCaseCellStyle}>Case Type</div>
+          <div style={recentAuditReferenceCellStyle}>Reference</div>
+          <div style={recentAuditScoreCellStyle}>Quality</div>
+        </div>
 
-                {(item.team === 'Calls' || item.team === 'Sales') && (
-                  <>
-                    <p>
-                      <strong>Order Number:</strong> {item.order_number || '-'}
-                    </p>
-                    <p>
-                      <strong>Phone Number:</strong> {item.phone_number || '-'}
-                    </p>
-                  </>
-                )}
+        {filteredAudits.map((item) => (
+          <div key={item.id} style={recentAuditsRowGridStyle}>
+            <div style={recentAuditDateCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.audit_date}</div>
+              <div style={thinSecondaryTextStyle}>{item.team}</div>
+            </div>
 
-                {item.team === 'Tickets' && (
-                  <p>
-                    <strong>Ticket ID:</strong> {item.ticket_id || '-'}
-                  </p>
-                )}
-
-                <p>
-                  <strong>Quality:</strong>{' '}
-                  {Number(item.quality_score).toFixed(2)}%
-                </p>
+            <div style={recentAuditAgentCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.agent_name}</div>
+              <div style={thinSecondaryTextStyle}>
+                {getDisplayName(item.agent_id, item.agent_name, item.team) || '-'}
               </div>
-            ))}
-          </div>
-        )}
-      </Section>
+            </div>
 
-      <Section title="Recent Supervisor Requests">
-        {filteredRequests.length === 0 ? (
-          <p>No supervisor requests in this range.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {filteredRequests.slice(0, 10).map((item) => (
-              <div key={item.id} style={contentCardStyle}>
-                <p>
-                  <strong>Case Ref:</strong> {item.case_reference}
-                </p>
-                <p>
-                  <strong>Agent:</strong> {item.agent_name || '-'}
-                </p>
-                <p>
-                  <strong>Display Name:</strong>{' '}
-                  {getDisplayName(
-                    item.agent_id || null,
-                    item.agent_name || null,
-                    item.team || null
-                  ) || '-'}
-                </p>
-                <p>
-                  <strong>Team:</strong> {item.team || '-'}
-                </p>
-                <p>
-                  <strong>Priority:</strong> {item.priority}
-                </p>
-                <p>
-                  <strong>Status:</strong> {item.status}
-                </p>
-                <p>
-                  <strong>Created:</strong>{' '}
-                  {new Date(item.created_at).toLocaleString()}
-                </p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+            <div style={recentAuditCaseCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.case_type}</div>
+            </div>
 
-      <Section title="Recent Agent Feedback">
-        {filteredFeedback.length === 0 ? (
-          <p>No feedback items in this range.</p>
-        ) : (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            {filteredFeedback.slice(0, 10).map((item) => (
-              <div key={item.id} style={contentCardStyle}>
-                <p>
-                  <strong>Agent:</strong> {item.agent_name}
-                </p>
-                <p>
-                  <strong>Display Name:</strong>{' '}
-                  {getDisplayName(
-                    item.agent_id || null,
-                    item.agent_name || null,
-                    item.team || null
-                  ) || '-'}
-                </p>
-                <p>
-                  <strong>Team:</strong> {item.team}
-                </p>
-                <p>
-                  <strong>Type:</strong> {item.feedback_type}
-                </p>
-                <p>
-                  <strong>Subject:</strong> {item.subject}
-                </p>
-                <p>
-                  <strong>Status:</strong> {item.status}
-                </p>
+            <div style={recentAuditReferenceCellStyle}>
+              <div style={thinPrimaryTextStyle}>
+                {item.team === 'Tickets'
+                  ? `Ticket: ${item.ticket_id || '-'}`
+                  : `Order: ${item.order_number || '-'} • Phone: ${item.phone_number || '-'}`
+                }
               </div>
-            ))}
+            </div>
+
+            <div style={recentAuditScoreCellStyle}>
+              <span style={scorePillStyle}>
+                {Number(item.quality_score).toFixed(2)}%
+              </span>
+            </div>
           </div>
-        )}
-      </Section>
+        ))}
+      </div>
+    </div>
+  )}
+</Section>
+
+<Section title="Recent Supervisor Requests">
+  {filteredRequests.length === 0 ? (
+    <p style={emptyMessageStyle}>No supervisor requests in this range.</p>
+  ) : (
+    <div style={thinTableWrapStyle}>
+      <div style={thinTableStyle}>
+        <div style={{ ...recentRequestsRowGridStyle, ...thinHeaderRowStyle }}>
+          <div style={recentRequestDateCellStyle}>Created</div>
+          <div style={recentRequestCaseRefCellStyle}>Case Ref</div>
+          <div style={recentRequestAgentCellStyle}>Agent</div>
+          <div style={recentRequestPriorityCellStyle}>Priority</div>
+          <div style={recentRequestStatusCellStyle}>Status</div>
+        </div>
+
+        {filteredRequests.map((item) => (
+          <div key={item.id} style={recentRequestsRowGridStyle}>
+            <div style={recentRequestDateCellStyle}>
+              <div style={thinPrimaryTextStyle}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </div>
+              <div style={thinSecondaryTextStyle}>{item.team || '-'}</div>
+            </div>
+
+            <div style={recentRequestCaseRefCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.case_reference}</div>
+              <div style={thinSecondaryTextStyle}>{item.case_type || '-'}</div>
+            </div>
+
+            <div style={recentRequestAgentCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.agent_name || '-'}</div>
+              <div style={thinSecondaryTextStyle}>
+                {getDisplayName(
+                  item.agent_id || null,
+                  item.agent_name || null,
+                  item.team || null
+                ) || '-'}
+              </div>
+            </div>
+
+            <div style={recentRequestPriorityCellStyle}>
+              <span style={pillStyle}>{item.priority}</span>
+            </div>
+
+            <div style={recentRequestStatusCellStyle}>
+              <span style={pillStyle}>{item.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</Section>
+
+<Section title="Recent Agent Feedback">
+  {filteredFeedback.length === 0 ? (
+    <p style={emptyMessageStyle}>No feedback items in this range.</p>
+  ) : (
+    <div style={thinTableWrapStyle}>
+      <div style={thinTableStyle}>
+        <div style={{ ...recentFeedbackRowGridStyle, ...thinHeaderRowStyle }}>
+          <div style={recentFeedbackDateCellStyle}>Created</div>
+          <div style={recentFeedbackAgentCellStyle}>Agent</div>
+          <div style={recentFeedbackTypeCellStyle}>Type</div>
+          <div style={recentFeedbackSubjectCellStyle}>Subject</div>
+          <div style={recentFeedbackStatusCellStyle}>Status</div>
+        </div>
+
+        {filteredFeedback.map((item) => (
+          <div key={item.id} style={recentFeedbackRowGridStyle}>
+            <div style={recentFeedbackDateCellStyle}>
+              <div style={thinPrimaryTextStyle}>
+                {new Date(item.created_at).toLocaleDateString()}
+              </div>
+              <div style={thinSecondaryTextStyle}>{item.team}</div>
+            </div>
+
+            <div style={recentFeedbackAgentCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.agent_name}</div>
+              <div style={thinSecondaryTextStyle}>
+                {getDisplayName(
+                  item.agent_id || null,
+                  item.agent_name || null,
+                  item.team || null
+                ) || '-'}
+              </div>
+            </div>
+
+            <div style={recentFeedbackTypeCellStyle}>
+              <span style={pillStyle}>{item.feedback_type}</span>
+            </div>
+
+            <div style={recentFeedbackSubjectCellStyle}>
+              <div style={thinPrimaryTextStyle}>{item.subject}</div>
+              <div style={thinSecondaryTextStyle}>{item.qa_name || '-'}</div>
+            </div>
+
+            <div style={recentFeedbackStatusCellStyle}>
+              <span style={pillStyle}>{item.status}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )}
+</Section>
     </div>
   );
 }
@@ -1053,13 +1137,11 @@ function ReportsSupabase() {
 function PerformanceTrendsSection({
   audits,
   allAudits,
-  profiles,
   selectedAgent,
   effectiveTeamFilter,
 }: {
   audits: AuditItem[];
   allAudits: AuditItem[];
-  profiles: AgentProfile[];
   selectedAgent: AgentProfile | null;
   effectiveTeamFilter: string;
 }) {
@@ -1272,10 +1354,6 @@ function PerformanceTrendsSection({
           selected scope and compares them to the same overall baseline.
         </div>
       ) : null}
-
-      <div style={{ display: 'none' }}>
-        {profiles.length}
-      </div>
     </Section>
   );
 }
@@ -1583,7 +1661,7 @@ const pageHeaderStyle = {
 };
 
 const sectionEyebrow = {
-  color: '#60a5fa',
+  color: 'var(--screen-accent)',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.18em',
@@ -1592,12 +1670,12 @@ const sectionEyebrow = {
 };
 
 const filterPanelStyle = {
-  background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-panel-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '20px',
   padding: '20px',
   marginBottom: '22px',
+  boxShadow: 'var(--screen-shadow)',
 };
 
 const filterGridStyle = {
@@ -1609,7 +1687,7 @@ const filterGridStyle = {
 const labelStyle = {
   display: 'block',
   marginBottom: '8px',
-  color: '#cbd5e1',
+  color: 'var(--screen-muted)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -1618,23 +1696,23 @@ const fieldStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.16)',
-  background: 'rgba(15,23,42,0.7)',
-  color: '#e5eefb',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-field-bg)',
+  color: 'var(--screen-field-text)',
 };
 
 const pickerButtonStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.16)',
-  background: 'rgba(15,23,42,0.7)',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-field-bg)',
   textAlign: 'left' as const,
   cursor: 'pointer',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  color: '#e5eefb',
+  color: 'var(--screen-field-text)',
 };
 
 const pickerMenuStyle = {
@@ -1642,10 +1720,10 @@ const pickerMenuStyle = {
   top: 'calc(100% + 8px)',
   left: 0,
   right: 0,
-  background: 'rgba(15,23,42,0.96)',
-  border: '1px solid rgba(148,163,184,0.16)',
+  background: 'var(--screen-menu-bg)',
+  border: '1px solid var(--screen-border-strong)',
   borderRadius: '16px',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
+  boxShadow: 'var(--screen-shadow)',
   zIndex: 20,
   overflow: 'hidden',
 };
@@ -1661,19 +1739,19 @@ const pickerListStyle = {
 const pickerInfoStyle = {
   padding: '12px',
   borderRadius: '8px',
-  backgroundColor: 'rgba(15,23,42,0.68)',
-  color: '#94a3b8',
+  backgroundColor: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-muted)',
 };
 
 const pickerOptionStyle = {
   padding: '12px',
   borderRadius: '8px',
-  border: '1px solid rgba(148,163,184,0.12)',
-  backgroundColor: 'rgba(15,23,42,0.6)',
+  border: '1px solid var(--screen-border)',
+  backgroundColor: 'var(--screen-card-soft-bg)',
   textAlign: 'left' as const,
   cursor: 'pointer',
   fontWeight: 500,
-  color: '#e5eefb',
+  color: 'var(--screen-text)',
 };
 
 const pickerOptionActiveStyle = {
@@ -1707,9 +1785,9 @@ const primaryButton = {
 
 const secondaryButton = {
   padding: '10px 14px',
-  backgroundColor: 'rgba(15,23,42,0.9)',
-  color: 'white',
-  border: '1px solid rgba(148,163,184,0.16)',
+  backgroundColor: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-secondary-btn-text)',
+  border: '1px solid var(--screen-border-strong)',
   borderRadius: '10px',
   cursor: 'pointer',
   fontWeight: 700,
@@ -1724,27 +1802,27 @@ const summaryGridStyle = {
 };
 
 const summaryCardStyle = {
-  background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '16px',
   padding: '20px',
+  boxShadow: 'var(--screen-shadow)',
 };
 
 const summaryCardTitleStyle = {
   fontSize: '14px',
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   marginBottom: '8px',
 };
 
 const summaryCardValueStyle = {
   fontSize: '28px',
   fontWeight: 800,
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
 };
 
 const sectionTitleStyle = {
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
   marginBottom: '14px',
 };
 
@@ -1756,16 +1834,16 @@ const detailGridStyle = {
 };
 
 const detailCardStyle = {
-  background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '16px',
   padding: '18px',
-  color: '#e5eefb',
+  color: 'var(--screen-text)',
+  boxShadow: 'var(--screen-shadow)',
 };
 
 const detailLabelStyle = {
-  color: '#93c5fd',
+  color: 'var(--screen-accent)',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.12em',
@@ -1774,12 +1852,12 @@ const detailLabelStyle = {
 };
 
 const contentCardStyle = {
-  background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '16px',
   padding: '18px',
-  color: '#e5eefb',
+  color: 'var(--screen-text)',
+  boxShadow: 'var(--screen-shadow)',
 };
 
 const trendHeaderRowStyle = {
@@ -1792,13 +1870,13 @@ const trendHeaderRowStyle = {
 
 const trendTitleStyle = {
   margin: '8px 0 6px 0',
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
   fontSize: '24px',
 };
 
 const trendSubtitleStyle = {
   margin: 0,
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
 };
 
 const trendToggleWrapStyle = {
@@ -1806,14 +1884,14 @@ const trendToggleWrapStyle = {
   gap: '8px',
   padding: '6px',
   borderRadius: '18px',
-  background: 'rgba(15,23,42,0.52)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-soft-bg)',
+  border: '1px solid var(--screen-border)',
 };
 
 const trendToggleButtonStyle = {
   border: 'none',
   background: 'transparent',
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   padding: '10px 14px',
   borderRadius: '12px',
   fontWeight: 800,
@@ -1822,13 +1900,13 @@ const trendToggleButtonStyle = {
 
 const trendToggleButtonActiveStyle = {
   background: 'rgba(37,99,235,0.16)',
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
 };
 
 const trendHelperTextStyle = {
   marginTop: '-12px',
   marginBottom: '18px',
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   fontSize: '13px',
   lineHeight: 1.6,
 };
@@ -1837,9 +1915,8 @@ const trendChartShellStyle = {
   marginTop: '18px',
   borderRadius: '22px',
   padding: '18px',
-  background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-bg)',
+  border: '1px solid var(--screen-border)',
 };
 
 const trendChartSvgStyle = {
@@ -1864,7 +1941,7 @@ const trendLegendItemStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '8px',
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -1884,7 +1961,7 @@ const trendChartLabelsStyle = {
 };
 
 const trendChartLabelStyle = {
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   fontSize: '12px',
   textAlign: 'center' as const,
 };
@@ -1902,13 +1979,13 @@ const trendTableRowStyle = {
   gap: '12px',
   padding: '12px 14px',
   borderRadius: '14px',
-  background: 'rgba(15,23,42,0.52)',
-  color: '#e5eefb',
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-text)',
   alignItems: 'center',
 };
 
 const trendTableHeaderStyle = {
-  color: '#93c5fd',
+  color: 'var(--screen-accent)',
   textTransform: 'uppercase' as const,
   letterSpacing: '0.1em',
   fontWeight: 800,
@@ -1918,8 +1995,8 @@ const trendTableHeaderStyle = {
 const trendIssueCardStyle = {
   padding: '14px',
   borderRadius: '16px',
-  background: 'rgba(15,23,42,0.52)',
-  border: '1px solid rgba(148,163,184,0.14)',
+  background: 'var(--screen-card-soft-bg)',
+  border: '1px solid var(--screen-border)',
 };
 
 const trendIssueHeaderStyle = {
@@ -1930,7 +2007,7 @@ const trendIssueHeaderStyle = {
 };
 
 const trendIssueMetricStyle = {
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
   fontWeight: 800,
 };
 
@@ -1943,13 +2020,13 @@ const trendIssueCountPillStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   background: 'rgba(37,99,235,0.16)',
-  color: '#f8fafc',
+  color: 'var(--screen-heading)',
   fontWeight: 900,
 };
 
 const trendIssueMetaStyle = {
   marginTop: '8px',
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   fontSize: '13px',
 };
 
@@ -1970,9 +2047,175 @@ const trendIssueBarFillStyle = {
 };
 
 const trendEmptyStateStyle = {
-  color: '#94a3b8',
+  color: 'var(--screen-muted)',
   fontSize: '14px',
   lineHeight: 1.6,
+};
+
+const thinTableWrapStyle = {
+  maxHeight: '340px',
+  overflowY: 'auto' as const,
+  borderRadius: '18px',
+  border: '1px solid var(--screen-border)',
+  background: 'var(--screen-card-bg)',
+  boxShadow: 'var(--screen-shadow)',
+};
+
+const thinTableStyle = {
+  minWidth: '100%',
+};
+
+const thinRowStyle = {
+  display: 'grid',
+  gap: '12px',
+  padding: '12px 16px',
+  alignItems: 'center',
+  borderBottom: '1px solid var(--screen-border)',
+  color: 'var(--screen-text)',
+  background: 'transparent',
+};
+
+const thinHeaderRowStyle = {
+  position: 'sticky' as const,
+  top: 0,
+  zIndex: 2,
+  background: 'var(--screen-table-head-bg)',
+  color: 'var(--screen-accent)',
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.08em',
+  fontWeight: 800,
+  fontSize: '12px',
+};
+
+const thinPrimaryTextStyle = {
+  color: 'var(--screen-heading)',
+  fontWeight: 700,
+  fontSize: '13px',
+  lineHeight: 1.35,
+};
+
+const thinSecondaryTextStyle = {
+  color: 'var(--screen-muted)',
+  fontSize: '12px',
+  marginTop: '3px',
+  lineHeight: 1.35,
+};
+
+const pillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '28px',
+  padding: '0 10px',
+  borderRadius: '999px',
+  background: 'var(--screen-pill-bg)',
+  border: '1px solid var(--screen-border)',
+  color: 'var(--screen-heading)',
+  fontSize: '12px',
+  fontWeight: 800,
+};
+
+const scorePillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minHeight: '30px',
+  padding: '0 12px',
+  borderRadius: '999px',
+  background: 'var(--screen-score-pill-bg)',
+  border: '1px solid var(--screen-score-pill-border)',
+  color: 'var(--screen-heading)',
+  fontSize: '12px',
+  fontWeight: 900,
+};
+
+const recentAuditsRowGridStyle = {
+  ...thinRowStyle,
+  gridTemplateColumns: '1.05fr 1.35fr 1.05fr 1.8fr 0.7fr',
+};
+
+const recentRequestsRowGridStyle = {
+  ...thinRowStyle,
+  gridTemplateColumns: '0.9fr 1.2fr 1.3fr 0.8fr 0.8fr',
+};
+
+const recentFeedbackRowGridStyle = {
+  ...thinRowStyle,
+  gridTemplateColumns: '0.9fr 1.25fr 0.9fr 1.6fr 0.8fr',
+};
+
+const recentAuditDateCellStyle = {
+  minWidth: 0,
+};
+
+const recentAuditAgentCellStyle = {
+  minWidth: 0,
+};
+
+const recentAuditCaseCellStyle = {
+  minWidth: 0,
+};
+
+const recentAuditReferenceCellStyle = {
+  minWidth: 0,
+};
+
+const recentAuditScoreCellStyle = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const recentRequestDateCellStyle = {
+  minWidth: 0,
+};
+
+const recentRequestCaseRefCellStyle = {
+  minWidth: 0,
+};
+
+const recentRequestAgentCellStyle = {
+  minWidth: 0,
+};
+
+const recentRequestPriorityCellStyle = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const recentRequestStatusCellStyle = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const recentFeedbackDateCellStyle = {
+  minWidth: 0,
+};
+
+const recentFeedbackAgentCellStyle = {
+  minWidth: 0,
+};
+
+const recentFeedbackTypeCellStyle = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const recentFeedbackSubjectCellStyle = {
+  minWidth: 0,
+};
+
+const recentFeedbackStatusCellStyle = {
+  minWidth: 0,
+  display: 'flex',
+  alignItems: 'center',
+};
+
+const emptyMessageStyle = {
+  color: 'var(--screen-muted)',
 };
 
 export default ReportsSupabase;
