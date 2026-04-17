@@ -693,14 +693,6 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     return !parsed.agentComment.trim();
   }).length;
 
-  const debugLoadedCoachingRows = feedbackItems.length;
-  const debugOpenRowsAfterTeamFilter = teamOpenFeedbackItems.length;
-  const debugOpenRowsAfterSelectedAgentFilter = scopedOpenFeedbackItems.length;
-  const debugVisibleQueueRows = supervisorInboxItems.length;
-  const debugSelectedAgentLabel = selectedAgent
-    ? getAgentLabel(selectedAgent.agent_id, selectedAgent.agent_name)
-    : 'All team agents';
-
   async function handleSaveSupervisorReview(item: AgentFeedback) {
     setErrorMessage('');
 
@@ -969,7 +961,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
 
           <Section title="Coaching Review Queue">
             <p style={sectionIntroTextStyle}>
-              Supervisors can review the full coaching cycle here. Keep the queue compact, then open one row to see the full coaching details just like the agent view.
+              Supervisors can review the full coaching cycle here. The queue stays compact, and each row opens into the full coaching view with agent reply, action plan, justification, and supervisor review controls.
             </p>
 
             <div style={coachingMetricsGridStyle}>
@@ -1576,7 +1568,7 @@ const labelStyle = {
 
 const fieldStyle = {
   width: '100%',
-  padding: '10px 12px',
+  padding: '12px 14px',
   borderRadius: '12px',
   border: 'var(--da-field-border, 1px solid rgba(148,163,184,0.16))',
   background: 'var(--da-field-bg, rgba(15,23,42,0.7))',
@@ -1585,7 +1577,7 @@ const fieldStyle = {
 
 const pickerButtonStyle = {
   width: '100%',
-  padding: '10px 12px',
+  padding: '12px 14px',
   borderRadius: '12px',
   border: 'var(--da-field-border, 1px solid rgba(148,163,184,0.16))',
   background: 'var(--da-field-bg, rgba(15,23,42,0.7))',
@@ -1658,7 +1650,7 @@ const cardStyle = {
   background:
     'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  borderRadius: '16px',
+  borderRadius: '18px',
   padding: '18px',
   boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
 };
@@ -1675,7 +1667,7 @@ const secondaryButton = {
 
 const errorBanner = {
   marginTop: '16px',
-  padding: '10px 12px',
+  padding: '12px 14px',
   borderRadius: '10px',
   backgroundColor: 'rgba(127,29,29,0.24)',
   border: '1px solid rgba(248,113,113,0.22)',
@@ -1730,7 +1722,7 @@ const detailInfoCardStyle = {
   borderRadius: '14px',
   border: '1px solid rgba(148,163,184,0.14)',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
+  padding: '12px 14px',
 };
 
 const detailLabelStyle = {
@@ -1754,7 +1746,7 @@ const detailRowStyle = {
   justifyContent: 'space-between',
   gap: '12px',
   alignItems: 'center',
-  padding: '10px 12px',
+  padding: '12px 14px',
   borderRadius: '14px',
   border: '1px solid rgba(148,163,184,0.12)',
   background: 'var(--da-surface-bg, rgba(15,23,42,0.52))',
@@ -1787,7 +1779,7 @@ const metricNoteTextStyle = {
 const recordsTableWrapStyle = {
   marginTop: '16px',
   overflowX: 'auto' as const,
-  borderRadius: '16px',
+  borderRadius: '18px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background:
     'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
@@ -1844,25 +1836,25 @@ const auditHistoryStatCardStyle = {
   borderRadius: '14px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
+  padding: '12px 14px',
 };
 
 const auditHistoryListWrapStyle = {
   display: 'grid',
   gap: '10px',
-  maxHeight: '440px',
+  maxHeight: '420px',
   overflowY: 'auto' as const,
   paddingRight: '6px',
 };
 
 const auditHistoryCardStyle = {
-  borderRadius: '16px',
+  borderRadius: '18px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.14))',
   padding: '10px 12px',
   display: 'grid',
-  gap: '10px',
+  gap: '8px',
 };
 
 const auditHistoryCardActiveStyle = {
@@ -1904,7 +1896,7 @@ const coachingMetricCardStyle = {
   borderRadius: '14px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
+  padding: '12px 14px',
 };
 
 const coachingFallbackNoticeStyle = {
@@ -1916,35 +1908,6 @@ const coachingFallbackNoticeStyle = {
   padding: '10px 12px',
   lineHeight: 1.55,
   fontSize: '13px',
-};
-
-const supervisorInboxListStyle = {
-  display: 'grid',
-  gap: '12px',
-  maxHeight: '440px',
-  overflowY: 'auto' as const,
-  paddingRight: '6px',
-};
-
-const supervisorInboxBodyGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '10px',
-};
-
-const supervisorInboxMiniCardStyle = {
-  borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.14)',
-  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
-};
-
-const supervisorInboxPreviewStyle = {
-  color: 'var(--da-page-text, #e5eefb)',
-  lineHeight: 1.55,
-  fontSize: '13px',
-  marginTop: '6px',
-  whiteSpace: 'pre-wrap' as const,
 };
 
 const auditCompactTopRowStyle = {
@@ -1971,29 +1934,49 @@ const auditHistoryCommentFullStyle = {
   borderRadius: '12px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  padding: '10px 12px',
+  padding: '12px 14px',
   color: 'var(--da-page-text, #e5eefb)',
   lineHeight: 1.6,
   fontSize: '13px',
   whiteSpace: 'pre-wrap' as const,
 };
 
-const supervisorInboxCardStyle = {
-  borderRadius: '22px',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.24))',
-  padding: '18px',
-  display: 'grid',
-  gap: '12px',
+const feedbackAcknowledgedPillStyle = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  minWidth: '118px',
+  padding: '10px 14px',
+  borderRadius: '999px',
+  border: '1px solid rgba(74,222,128,0.24)',
+  background: 'rgba(22,101,52,0.16)',
+  color: '#166534',
+  fontWeight: 800,
+  fontSize: '13px',
 };
 
-const supervisorInboxTopRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'flex-start',
+const auditExpandedRowStyle = { padding: '0 12px 12px 12px' };
+
+const expandedPanelStyle = {
+  borderRadius: '16px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
+  padding: '14px',
+};
+
+const fullCommentCardStyle = {
+  borderRadius: '14px',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  padding: '12px',
+};
+
+const fullCommentTextStyle = {
+  color: 'var(--da-page-text, #e5eefb)',
+  fontSize: '13px',
+  lineHeight: 1.65,
+  whiteSpace: 'pre-wrap' as const,
+  wordBreak: 'break-word' as const,
 };
 
 const supervisorFeedbackTableWrapStyle = {
