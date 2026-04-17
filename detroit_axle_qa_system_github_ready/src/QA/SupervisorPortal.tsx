@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
-import SupervisorTeamDashboard from './SupervisorTeamDashboard';
 import MonitoringWidget from './MonitoringWidget';
 import MonitoringDrawer from './MonitoringDrawer';
 import SupervisorRequestsSupabase from './SupervisorRequestsSupabase';
 import RecognitionWall from './RecognitionWall';
 import DigitalTrophyCabinet from './DigitalTrophyCabinet';
+import SupervisorTeamDashboard from './SupervisorTeamDashboard';
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 
@@ -92,6 +92,7 @@ type MonitoringItem = {
 };
 
 type SupervisorPortalTab = 'overview' | 'team-dashboard' | 'requests';
+
 type SupervisorPortalProps = {
   currentUser: UserProfile;
 };
@@ -787,48 +788,44 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
         </button>
         <button
           type="button"
+          onClick={() => setActiveTab('team-dashboard')}
+          style={{
+            ...tabButtonStyle,
+            ...(activeTab === 'team-dashboard' ? activeTabButtonStyle : {}),
+          }}
+        >
+          Team Dashboard
+        </button>
+        <button
+          type="button"
           onClick={() => setActiveTab('requests')}
           style={{
             ...tabButtonStyle,
             ...(activeTab === 'requests' ? activeTabButtonStyle : {}),
           }}
         >
-          <button
-  type="button"
-  onClick={() => setActiveTab('team-dashboard')}
-  style={{
-    ...tabButtonStyle,
-    ...(activeTab === 'team-dashboard' ? activeTabButtonStyle : {}),
-  }}
->
-  Team Dashboard
-</button>
           Supervisor Requests
         </button>
       </div>
 
       {activeTab === 'requests' ? (
-  <div style={{ marginTop: '24px' }}>
-    <SupervisorRequestsSupabase currentUser={currentUser} />
-  </div>
-) : activeTab === 'team-dashboard' ? (
-  <div style={{ marginTop: '24px' }}>
-    <SupervisorTeamDashboard
-      currentTeam={currentUser.team as TeamName}
-      agents={teamAgents}
-      audits={audits}
-      feedbackItems={feedbackItems}
-      monitoringItems={monitoringItems}
-      records={records}
-      selectedAgent={selectedAgent}
-    />
-  </div>
-) : (
-  <>
-    ...existing overview content...
-  </>
-)}
-
+        <div style={{ marginTop: '24px' }}>
+          <SupervisorRequestsSupabase currentUser={currentUser} />
+        </div>
+      ) : activeTab === 'team-dashboard' ? (
+        <div style={{ marginTop: '24px' }}>
+          <SupervisorTeamDashboard
+            currentTeam={currentUser.team as TeamName}
+            agents={teamAgents}
+            audits={audits}
+            feedbackItems={feedbackItems}
+            monitoringItems={monitoringItems}
+            records={records}
+            selectedAgent={selectedAgent}
+          />
+        </div>
+      ) : (
+        <>
           {errorMessage ? <div style={errorBanner}>{errorMessage}</div> : null}
 
           <div style={panelStyle}>
@@ -840,7 +837,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                 onClick={() => setIsAgentPickerOpen((prev) => !prev)}
                 style={pickerButtonStyle}
               >
-                <span style={{ color: selectedAgent ? 'var(--da-title, #a7cff7)' : 'var(--da-subtle-text, #94a3b8)' }}>
+                <span style={{ color: selectedAgent ? 'var(--da-title, #f8fafc)' : 'var(--da-subtle-text, #94a3b8)' }}>
                   {selectedAgent
                     ? getAgentLabel(
                         selectedAgent.agent_id,
