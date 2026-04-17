@@ -914,8 +914,7 @@ async function downloadTrendExportPackage(params: {
     '',
     'The workbook contains the Overview, Chart Data, Trend Breakdown, Recurring Issues, Procedure Hotspots, and Procedure Cases sheets.',
     'The chart image matches the line chart shown on the Performance Trends panel at export time.',
-  ].join('
-');
+  ].join('\\n');
 
   const zipBlob = createZipBlob([
     { name: workbookName, data: encoder.encode(workbookXml) },
