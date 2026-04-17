@@ -832,7 +832,6 @@ function ReportsSupabase() {
       <PerformanceTrendsSection
         audits={filteredAudits}
         allAudits={trendTeamAudits}
-        profiles={profiles}
         selectedAgent={selectedAgent}
         effectiveTeamFilter={trendTeamFilter}
       />

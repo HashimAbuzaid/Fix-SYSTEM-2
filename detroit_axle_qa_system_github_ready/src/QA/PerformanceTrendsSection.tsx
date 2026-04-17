@@ -56,20 +56,11 @@ type RecurringIssue = {
 type Props = {
   audits: AuditItem[];
   allAudits: AuditItem[];
-  profiles: AgentProfile[];
   selectedAgent: AgentProfile | null;
   effectiveTeamFilter: string;
 };
 
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
-
-function normalizeAgentId(value?: string | null) {
-  return String(value || '').trim().replace(/\.0+$/, '');
-}
-
-function normalizeAgentName(value?: string | null) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
 
 function startOfWeek(dateValue: string) {
   const date = new Date(`${dateValue}T00:00:00`);
@@ -92,23 +83,19 @@ function formatWeekLabel(dateValue: string) {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 6);
 
-  const shortLabel = `${weekStart.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })}`;
-
-  const label = `${weekStart.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })} - ${weekEnd.toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-  })}`;
-
   return {
     key: formatIsoDate(weekStart),
-    label,
-    shortLabel,
+    label: `${weekStart.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    })} - ${weekEnd.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    })}`,
+    shortLabel: weekStart.toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+    }),
   };
 }
 
@@ -117,6 +104,7 @@ function formatMonthLabel(dateValue: string) {
   const year = date.getFullYear();
   const month = date.getMonth();
   const first = new Date(year, month, 1);
+
   return {
     key: `${year}-${String(month + 1).padStart(2, '0')}`,
     label: first.toLocaleDateString(undefined, {
@@ -135,8 +123,7 @@ function getPeriodMeta(dateValue: string, mode: PeriodMode) {
 
 function average(values: number[]) {
   if (values.length === 0) return null;
-  const total = values.reduce((sum, value) => sum + value, 0);
-  return total / values.length;
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
 
 function roundScore(value: number | null) {
@@ -144,25 +131,11 @@ function roundScore(value: number | null) {
   return Number(value.toFixed(2));
 }
 
-function getDisplayNameForAudit(audit: AuditItem, profiles: AgentProfile[]) {
-  const auditId = normalizeAgentId(audit.agent_id);
-  const auditName = normalizeAgentName(audit.agent_name);
-  const auditTeam = String(audit.team || '');
-
-  const match = profiles.find((profile) => {
-    const idMatches =
-      auditId && normalizeAgentId(profile.agent_id) && normalizeAgentId(profile.agent_id) === auditId;
-
-    const nameMatches = normalizeAgentName(profile.agent_name) === auditName;
-    const teamMatches = String(profile.team || '') === auditTeam;
-
-    return teamMatches && (idMatches || nameMatches);
-  });
-
-  return match?.display_name || null;
-}
-
-function buildTrendPoints(subjectAudits: AuditItem[], teamAudits: AuditItem[], mode: PeriodMode): TrendPoint[] {
+function buildTrendPoints(
+  subjectAudits: AuditItem[],
+  teamAudits: AuditItem[],
+  mode: PeriodMode
+): TrendPoint[] {
   const keys = new Set<string>();
   const subjectMap = new Map<string, number[]>();
   const teamMap = new Map<string, number[]>();
@@ -221,7 +194,6 @@ function buildRecurringIssues(audits: AuditItem[]): RecurringIssue[] {
       };
 
       current.count += 1;
-
       if (detail.result === 'Borderline') current.borderlineCount += 1;
       if (detail.result === 'Fail') current.failCount += 1;
       if (detail.result === 'Auto-Fail') current.autoFailCount += 1;
@@ -247,13 +219,6 @@ function buildRecurringIssues(audits: AuditItem[]): RecurringIssue[] {
     .slice(0, 6);
 }
 
-function getDeltaTone(value: number | null) {
-  if (value == null) return '#64748b';
-  if (value >= 2) return '#166534';
-  if (value <= -2) return '#991b1b';
-  return '#b45309';
-}
-
 function getMomentumLabel(value: number | null) {
   if (value == null) return 'Not enough data';
   if (value >= 2) return 'Rising';
@@ -272,8 +237,13 @@ function getLineChartPoints(values: Array<number | null>, width: number, height:
   return values
     .map((value, index) => {
       if (value == null) return null;
-      const x = padding + (index * (width - padding * 2)) / Math.max(values.length - 1, 1);
-      const y = height - padding - ((value - min) / range) * (height - padding * 2);
+      const x =
+        padding +
+        (index * (width - padding * 2)) / Math.max(values.length - 1, 1);
+      const y =
+        height -
+        padding -
+        ((value - min) / range) * (height - padding * 2);
       return `${x},${y}`;
     })
     .filter(Boolean)
@@ -293,7 +263,11 @@ function MiniTrendChart({ points }: { points: TrendPoint[] }) {
 
   return (
     <div style={chartShellStyle}>
-      <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style={chartSvgStyle}>
+      <svg
+        viewBox="0 0 1000 240"
+        preserveAspectRatio="none"
+        style={chartSvgStyle}
+      >
         <line x1="28" y1="212" x2="972" y2="212" style={chartAxisStyle} />
         {teamPolyline ? (
           <polyline
@@ -339,31 +313,51 @@ function MiniTrendChart({ points }: { points: TrendPoint[] }) {
   );
 }
 
-export default function PerformanceTrendsSection({ audits, allAudits, profiles, selectedAgent, effectiveTeamFilter }: Props) {
+export default function PerformanceTrendsSection({
+  audits,
+  allAudits,
+  selectedAgent,
+  effectiveTeamFilter,
+}: Props) {
   const [periodMode, setPeriodMode] = useState<PeriodMode>('weekly');
 
-  const scopedTeamAudits = useMemo(() => {
-    if (!effectiveTeamFilter) return allAudits;
-    return allAudits.filter((audit) => audit.team === effectiveTeamFilter);
-  }, [allAudits, effectiveTeamFilter]);
+  const trendPoints = useMemo(() => {
+    return buildTrendPoints(audits, allAudits, periodMode);
+  }, [audits, allAudits, periodMode]);
 
-  const trendPoints = useMemo(() => buildTrendPoints(audits, scopedTeamAudits, periodMode), [audits, scopedTeamAudits, periodMode]);
-  const recurringIssues = useMemo(() => buildRecurringIssues(audits), [audits]);
+  const recurringIssues = useMemo(() => {
+    return buildRecurringIssues(audits);
+  }, [audits]);
 
-  const latestAverage = trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].subjectAverage : null;
-  const previousAverage = trendPoints.length > 1 ? trendPoints[trendPoints.length - 2].subjectAverage : null;
-  const teamLatestAverage = trendPoints.length > 0 ? trendPoints[trendPoints.length - 1].teamAverage : null;
+  const latestAverage = trendPoints.length > 0
+    ? trendPoints[trendPoints.length - 1].subjectAverage
+    : null;
 
-  const momentumDelta = latestAverage != null && previousAverage != null ? Number((latestAverage - previousAverage).toFixed(2)) : null;
-  const teamGap = latestAverage != null && teamLatestAverage != null ? Number((latestAverage - teamLatestAverage).toFixed(2)) : null;
+  const previousAverage = trendPoints.length > 1
+    ? trendPoints[trendPoints.length - 2].subjectAverage
+    : null;
+
+  const teamLatestAverage = trendPoints.length > 0
+    ? trendPoints[trendPoints.length - 1].teamAverage
+    : null;
+
+  const momentumDelta =
+    latestAverage != null && previousAverage != null
+      ? Number((latestAverage - previousAverage).toFixed(2))
+      : null;
+
+  const teamGap =
+    latestAverage != null && teamLatestAverage != null
+      ? Number((latestAverage - teamLatestAverage).toFixed(2))
+      : null;
 
   const subjectLabel = selectedAgent
-    ? selectedAgent.display_name
-      ? `${selectedAgent.agent_name} - ${selectedAgent.display_name}`
-      : `${selectedAgent.agent_name} - ${selectedAgent.agent_id || '-'}`
+    ? (selectedAgent.display_name
+        ? `${selectedAgent.agent_name} - ${selectedAgent.display_name}`
+        : `${selectedAgent.agent_name} - ${selectedAgent.agent_id || '-'}`)
     : effectiveTeamFilter
-      ? `${effectiveTeamFilter} Team`
-      : 'All Teams';
+    ? `${effectiveTeamFilter} Team`
+    : 'All Teams';
 
   const strongestIssue = recurringIssues[0]?.metric || 'None';
   const totalIssueTouches = recurringIssues.reduce((sum, issue) => sum + issue.count, 0);
@@ -383,14 +377,20 @@ export default function PerformanceTrendsSection({ audits, allAudits, profiles, 
           <button
             type="button"
             onClick={() => setPeriodMode('weekly')}
-            style={{ ...toggleButtonStyle, ...(periodMode === 'weekly' ? toggleButtonActiveStyle : {}) }}
+            style={{
+              ...toggleButtonStyle,
+              ...(periodMode === 'weekly' ? toggleButtonActiveStyle : {}),
+            }}
           >
             Weekly
           </button>
           <button
             type="button"
             onClick={() => setPeriodMode('monthly')}
-            style={{ ...toggleButtonStyle, ...(periodMode === 'monthly' ? toggleButtonActiveStyle : {}) }}
+            style={{
+              ...toggleButtonStyle,
+              ...(periodMode === 'monthly' ? toggleButtonActiveStyle : {}),
+            }}
           >
             Monthly
           </button>
@@ -398,20 +398,34 @@ export default function PerformanceTrendsSection({ audits, allAudits, profiles, 
       </div>
 
       <div style={summaryGridStyle}>
-        <SummaryCard title="Current Average" value={latestAverage != null ? `${latestAverage.toFixed(2)}%` : '-'} subtitle="Latest visible period" />
+        <SummaryCard
+          title="Current Average"
+          value={latestAverage != null ? `${latestAverage.toFixed(2)}%` : '-'}
+          subtitle="Latest visible period"
+        />
         <SummaryCard
           title="Momentum"
           value={getMomentumLabel(momentumDelta)}
-          subtitle={momentumDelta != null ? `${momentumDelta > 0 ? '+' : ''}${momentumDelta.toFixed(2)} pts vs prior period` : 'Need at least 2 periods'}
-          accentColor={getDeltaTone(momentumDelta)}
+          subtitle={
+            momentumDelta != null
+              ? `${momentumDelta > 0 ? '+' : ''}${momentumDelta.toFixed(2)} pts vs prior period`
+              : 'Need at least 2 periods'
+          }
         />
         <SummaryCard
           title="Vs Team Average"
-          value={teamGap != null ? `${teamGap > 0 ? '+' : ''}${teamGap.toFixed(2)} pts` : '-'}
+          value={
+            teamGap != null
+              ? `${teamGap > 0 ? '+' : ''}${teamGap.toFixed(2)} pts`
+              : '-'
+          }
           subtitle="Latest visible period"
-          accentColor={getDeltaTone(teamGap)}
         />
-        <SummaryCard title="Top Recurring Issue" value={strongestIssue} subtitle={`${totalIssueTouches} total issue hits in selection`} />
+        <SummaryCard
+          title="Top Recurring Issue"
+          value={strongestIssue}
+          subtitle={`${totalIssueTouches} total issue hits in selection`}
+        />
       </div>
 
       <MiniTrendChart points={trendPoints} />
@@ -467,7 +481,10 @@ export default function PerformanceTrendsSection({ audits, allAudits, profiles, 
                     <div
                       style={{
                         ...issueBarFillStyle,
-                        width: `${Math.max(12, Math.round((issue.count / Math.max(recurringIssues[0]?.count || 1, 1)) * 100))}%`,
+                        width: `${Math.max(
+                          12,
+                          Math.round((issue.count / Math.max(recurringIssues[0]?.count || 1, 1)) * 100)
+                        )}%`,
                       }}
                     />
                   </div>
@@ -493,17 +510,13 @@ export default function PerformanceTrendsSection({ audits, allAudits, profiles, 
   );
 }
 
-function SummaryCard({ title, value, subtitle, accentColor }: { title: string; value: string; subtitle: string; accentColor?: string }) {
-  return (
-    <div style={summaryCardStyle}>
-      <div style={summaryLabelStyle}>{title}</div>
-      <div style={{ ...summaryValueStyle, color: accentColor || 'var(--screen-heading, #f8fafc)' }}>{value}</div>
-      <div style={summarySubtextStyle}>{subtitle}</div>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <section style={sectionStyle}>
       <div style={sectionHeaderStaticStyle}>
@@ -515,49 +528,293 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+}) {
+  return (
+    <div style={summaryCardStyle}>
+      <div style={summaryLabelStyle}>{title}</div>
+      <div style={summaryValueStyle}>{value}</div>
+      <div style={summarySubtextStyle}>{subtitle}</div>
+    </div>
+  );
+}
+
 const sectionStyle: CSSProperties = {
   marginTop: '28px',
   padding: '22px',
   borderRadius: '24px',
   border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-panel-bg, linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%))',
+  background:
+    'var(--screen-panel-bg, linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%))',
   boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
 };
 
-const sectionHeaderStaticStyle: CSSProperties = { marginBottom: '18px' };
-const sectionTopTitleStyle: CSSProperties = { margin: '6px 0 0 0', color: 'var(--screen-heading, #f8fafc)', fontSize: '28px' };
-const sectionHeaderRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' };
-const sectionEyebrowStyle: CSSProperties = { color: 'var(--screen-accent, #60a5fa)', fontSize: '12px', letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 800 };
-const sectionTitleStyle: CSSProperties = { margin: '8px 0 6px 0', color: 'var(--screen-heading, #f8fafc)', fontSize: '24px' };
-const sectionSubtitleStyle: CSSProperties = { margin: 0, color: 'var(--screen-muted, #94a3b8)' };
-const toggleWrapStyle: CSSProperties = { display: 'inline-flex', gap: '8px', padding: '6px', borderRadius: '18px', background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))', border: '1px solid var(--screen-border, rgba(148,163,184,0.14))' };
-const toggleButtonStyle: CSSProperties = { border: 'none', background: 'transparent', color: 'var(--screen-muted, #94a3b8)', padding: '10px 14px', borderRadius: '12px', fontWeight: 800, cursor: 'pointer' };
-const toggleButtonActiveStyle: CSSProperties = { background: 'rgba(37,99,235,0.16)', color: 'var(--screen-heading, #f8fafc)' };
-const summaryGridStyle: CSSProperties = { marginTop: '18px', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' };
-const summaryCardStyle: CSSProperties = { borderRadius: '20px', padding: '16px', background: 'var(--screen-card-bg, rgba(15,23,42,0.82))', border: '1px solid var(--screen-border, rgba(148,163,184,0.14))' };
-const summaryLabelStyle: CSSProperties = { color: 'var(--screen-muted, #94a3b8)', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 800 };
-const summaryValueStyle: CSSProperties = { marginTop: '10px', fontSize: '28px', fontWeight: 900 };
-const summarySubtextStyle: CSSProperties = { marginTop: '8px', color: 'var(--screen-subtle, #94a3b8)', fontSize: '13px', lineHeight: 1.5 };
-const chartShellStyle: CSSProperties = { marginTop: '18px', borderRadius: '22px', padding: '18px', background: 'var(--screen-card-bg, rgba(15,23,42,0.82))', border: '1px solid var(--screen-border, rgba(148,163,184,0.14))' };
-const chartSvgStyle: CSSProperties = { width: '100%', height: '260px', display: 'block' };
-const chartAxisStyle = { stroke: 'rgba(148,163,184,0.28)', strokeWidth: 2 };
-const chartLegendStyle: CSSProperties = { display: 'flex', gap: '18px', flexWrap: 'wrap', marginTop: '10px' };
-const legendItemStyle: CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--screen-muted, #94a3b8)', fontWeight: 700, fontSize: '13px' };
-const legendDotStyle: CSSProperties = { width: '12px', height: '12px', borderRadius: '999px', display: 'inline-block' };
-const chartLabelsRowStyle: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))', gap: '8px', marginTop: '14px' };
-const chartLabelStyle: CSSProperties = { color: 'var(--screen-subtle, #94a3b8)', fontSize: '12px', textAlign: 'center' };
-const detailsGridStyle: CSSProperties = { marginTop: '18px', display: 'grid', gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)', gap: '14px' };
-const panelStyle: CSSProperties = { borderRadius: '20px', padding: '18px', background: 'var(--screen-card-bg, rgba(15,23,42,0.82))', border: '1px solid var(--screen-border, rgba(148,163,184,0.14))' };
-const panelTitleStyle: CSSProperties = { margin: '0 0 14px 0', color: 'var(--screen-heading, #f8fafc)', fontSize: '18px', fontWeight: 800 };
-const tableWrapStyle: CSSProperties = { display: 'grid', gap: '8px' };
-const tableRowStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '1.35fr 0.9fr 0.9fr 0.7fr 0.7fr', gap: '12px', padding: '12px 14px', borderRadius: '14px', background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))', color: 'var(--screen-text, #e5eefb)', alignItems: 'center' };
-const tableHeaderRowStyle: CSSProperties = { color: 'var(--screen-accent, #60a5fa)', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 800, fontSize: '12px' };
-const issueCardStyle: CSSProperties = { padding: '14px', borderRadius: '16px', background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))', border: '1px solid var(--screen-border, rgba(148,163,184,0.14))' };
-const issueHeaderRowStyle: CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: '10px', alignItems: 'center' };
-const issueMetricStyle: CSSProperties = { color: 'var(--screen-heading, #f8fafc)', fontWeight: 800 };
-const issueCountPillStyle: CSSProperties = { minWidth: '32px', height: '32px', padding: '0 10px', borderRadius: '999px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,99,235,0.16)', color: 'var(--screen-heading, #f8fafc)', fontWeight: 900 };
-const issueMetaStyle: CSSProperties = { marginTop: '8px', color: 'var(--screen-muted, #94a3b8)', fontSize: '13px' };
-const issueBarTrackStyle: CSSProperties = { marginTop: '10px', width: '100%', height: '10px', borderRadius: '999px', background: 'rgba(148,163,184,0.16)', overflow: 'hidden' };
-const issueBarFillStyle: CSSProperties = { height: '100%', borderRadius: '999px', background: 'linear-gradient(90deg, rgba(37,99,235,0.95) 0%, rgba(59,130,246,0.88) 100%)' };
-const helperNoteStyle: CSSProperties = { marginTop: '14px', color: 'var(--screen-muted, #94a3b8)', fontSize: '13px', lineHeight: 1.6 };
-const emptyStateStyle: CSSProperties = { color: 'var(--screen-muted, #94a3b8)', fontSize: '14px', lineHeight: 1.6 };
+const sectionHeaderStaticStyle: CSSProperties = {
+  marginBottom: '18px',
+};
+
+const sectionTopTitleStyle: CSSProperties = {
+  margin: '6px 0 0 0',
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '28px',
+};
+
+const sectionHeaderRowStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '16px',
+  alignItems: 'flex-start',
+  flexWrap: 'wrap',
+};
+
+const sectionEyebrowStyle: CSSProperties = {
+  color: 'var(--screen-accent, #60a5fa)',
+  fontSize: '12px',
+  letterSpacing: '0.14em',
+  textTransform: 'uppercase',
+  fontWeight: 800,
+};
+
+const sectionTitleStyle: CSSProperties = {
+  margin: '8px 0 6px 0',
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '24px',
+};
+
+const sectionSubtitleStyle: CSSProperties = {
+  margin: 0,
+  color: 'var(--screen-muted, #94a3b8)',
+};
+
+const toggleWrapStyle: CSSProperties = {
+  display: 'inline-flex',
+  gap: '8px',
+  padding: '6px',
+  borderRadius: '18px',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+};
+
+const toggleButtonStyle: CSSProperties = {
+  border: 'none',
+  background: 'transparent',
+  color: 'var(--screen-muted, #94a3b8)',
+  padding: '10px 14px',
+  borderRadius: '12px',
+  fontWeight: 800,
+  cursor: 'pointer',
+};
+
+const toggleButtonActiveStyle: CSSProperties = {
+  background: 'rgba(37,99,235,0.16)',
+  color: 'var(--screen-heading, #f8fafc)',
+};
+
+const summaryGridStyle: CSSProperties = {
+  marginTop: '18px',
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+  gap: '14px',
+};
+
+const summaryCardStyle: CSSProperties = {
+  borderRadius: '20px',
+  padding: '16px',
+  background: 'var(--screen-card-bg, rgba(15,23,42,0.82))',
+  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+};
+
+const summaryLabelStyle: CSSProperties = {
+  color: 'var(--screen-muted, #94a3b8)',
+  fontSize: '12px',
+  textTransform: 'uppercase',
+  letterSpacing: '0.12em',
+  fontWeight: 800,
+};
+
+const summaryValueStyle: CSSProperties = {
+  marginTop: '10px',
+  fontSize: '28px',
+  fontWeight: 900,
+  color: 'var(--screen-heading, #f8fafc)',
+};
+
+const summarySubtextStyle: CSSProperties = {
+  marginTop: '8px',
+  color: 'var(--screen-subtle, #94a3b8)',
+  fontSize: '13px',
+  lineHeight: 1.5,
+};
+
+const chartShellStyle: CSSProperties = {
+  marginTop: '18px',
+  borderRadius: '22px',
+  padding: '18px',
+  background: 'var(--screen-card-bg, rgba(15,23,42,0.82))',
+  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+};
+
+const chartSvgStyle: CSSProperties = {
+  width: '100%',
+  height: '260px',
+  display: 'block',
+};
+
+const chartAxisStyle = {
+  stroke: 'rgba(148,163,184,0.28)',
+  strokeWidth: 2,
+};
+
+const chartLegendStyle: CSSProperties = {
+  display: 'flex',
+  gap: '18px',
+  flexWrap: 'wrap',
+  marginTop: '10px',
+};
+
+const legendItemStyle: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '8px',
+  color: 'var(--screen-muted, #94a3b8)',
+  fontWeight: 700,
+  fontSize: '13px',
+};
+
+const legendDotStyle: CSSProperties = {
+  width: '12px',
+  height: '12px',
+  borderRadius: '999px',
+  display: 'inline-block',
+};
+
+const chartLabelsRowStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(60px, 1fr))',
+  gap: '8px',
+  marginTop: '14px',
+};
+
+const chartLabelStyle: CSSProperties = {
+  color: 'var(--screen-subtle, #94a3b8)',
+  fontSize: '12px',
+  textAlign: 'center',
+};
+
+const detailsGridStyle: CSSProperties = {
+  marginTop: '18px',
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)',
+  gap: '14px',
+};
+
+const panelStyle: CSSProperties = {
+  borderRadius: '20px',
+  padding: '18px',
+  background: 'var(--screen-card-bg, rgba(15,23,42,0.82))',
+  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+};
+
+const panelTitleStyle: CSSProperties = {
+  margin: '0 0 14px 0',
+  color: 'var(--screen-heading, #f8fafc)',
+  fontSize: '18px',
+  fontWeight: 800,
+};
+
+const tableWrapStyle: CSSProperties = {
+  display: 'grid',
+  gap: '8px',
+};
+
+const tableRowStyle: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: '1.35fr 0.9fr 0.9fr 0.7fr 0.7fr',
+  gap: '12px',
+  padding: '12px 14px',
+  borderRadius: '14px',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  color: 'var(--screen-text, #e5eefb)',
+  alignItems: 'center',
+};
+
+const tableHeaderRowStyle: CSSProperties = {
+  color: 'var(--screen-accent, #60a5fa)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.1em',
+  fontWeight: 800,
+  fontSize: '12px',
+};
+
+const issueCardStyle: CSSProperties = {
+  padding: '14px',
+  borderRadius: '16px',
+  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
+  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
+};
+
+const issueHeaderRowStyle: CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '10px',
+  alignItems: 'center',
+};
+
+const issueMetricStyle: CSSProperties = {
+  color: 'var(--screen-heading, #f8fafc)',
+  fontWeight: 800,
+};
+
+const issueCountPillStyle: CSSProperties = {
+  minWidth: '32px',
+  height: '32px',
+  padding: '0 10px',
+  borderRadius: '999px',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  background: 'rgba(37,99,235,0.16)',
+  color: 'var(--screen-heading, #f8fafc)',
+  fontWeight: 900,
+};
+
+const issueMetaStyle: CSSProperties = {
+  marginTop: '8px',
+  color: 'var(--screen-muted, #94a3b8)',
+  fontSize: '13px',
+};
+
+const issueBarTrackStyle: CSSProperties = {
+  marginTop: '10px',
+  width: '100%',
+  height: '10px',
+  borderRadius: '999px',
+  background: 'rgba(148,163,184,0.16)',
+  overflow: 'hidden',
+};
+
+const issueBarFillStyle: CSSProperties = {
+  height: '100%',
+  borderRadius: '999px',
+  background: 'linear-gradient(90deg, rgba(37,99,235,0.95) 0%, rgba(59,130,246,0.88) 100%)',
+};
+
+const helperNoteStyle: CSSProperties = {
+  marginTop: '14px',
+  color: 'var(--screen-muted, #94a3b8)',
+  fontSize: '13px',
+  lineHeight: 1.6,
+};
+
+const emptyStateStyle: CSSProperties = {
+  color: 'var(--screen-muted, #94a3b8)',
+  fontSize: '14px',
+  lineHeight: 1.6,
+};
