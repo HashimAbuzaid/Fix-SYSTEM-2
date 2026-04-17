@@ -243,38 +243,47 @@ function getSupervisorThemeVars(): Record<string, string> {
   const isLight = themeMode === 'light' || themeMode === 'white';
 
   return {
-    '--da-page-text': isLight ? '#334155' : '#e5eefb',
+    '--da-page-text': isLight ? '#1f2937' : '#e5eefb',
     '--da-title': isLight ? '#0f172a' : '#f8fafc',
-    '--da-muted-text': isLight ? '#475569' : '#cbd5e1',
+    '--da-muted-text': isLight ? '#334155' : '#cbd5e1',
     '--da-subtle-text': isLight ? '#64748b' : '#94a3b8',
     '--da-accent-text': isLight ? '#2563eb' : '#60a5fa',
     '--da-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,248,255,0.98) 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%)'
       : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
     '--da-panel-border': isLight
-      ? '1px solid rgba(191,219,254,0.95)'
+      ? '1px solid rgba(203,213,225,0.95)'
       : '1px solid rgba(148,163,184,0.14)',
     '--da-panel-shadow': isLight
-      ? '0 16px 36px rgba(15,23,42,0.08)'
+      ? '0 12px 28px rgba(15,23,42,0.08)'
       : '0 18px 40px rgba(2,6,23,0.35)',
-    '--da-surface-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.62)',
+    '--da-surface-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.62)',
     '--da-card-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.52)',
     '--da-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,252,0.99) 100%)'
+      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(249,250,251,0.99) 100%)'
       : 'rgba(15,23,42,0.74)',
     '--da-field-border': isLight
-      ? '1px solid rgba(191,219,254,0.95)'
+      ? '1px solid rgba(203,213,225,0.95)'
       : '1px solid rgba(148,163,184,0.16)',
     '--da-field-text': isLight ? '#0f172a' : '#e5eefb',
-    '--da-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.96)',
+    '--da-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.96)',
     '--da-option-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.60)',
-    '--da-active-option-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
-    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.78)',
+    '--da-active-option-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
+    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
     '--da-secondary-text': isLight ? '#334155' : '#e5eefb',
     '--da-secondary-border': isLight
-      ? '1px solid rgba(191,219,254,0.95)'
+      ? '1px solid rgba(203,213,225,0.95)'
       : '1px solid rgba(148,163,184,0.18)',
     '--da-error-text': isLight ? '#b91c1c' : '#fecaca',
+
+    '--sd-critical-bg': isLight ? 'rgba(239,68,68,0.16)' : 'rgba(220,38,38,0.16)',
+    '--sd-critical-text': isLight ? '#b91c1c' : '#fecaca',
+    '--sd-warning-bg': isLight ? 'rgba(245,158,11,0.16)' : 'rgba(245,158,11,0.16)',
+    '--sd-warning-text': isLight ? '#b45309' : '#fde68a',
+    '--sd-watch-bg': isLight ? 'rgba(59,130,246,0.14)' : 'rgba(59,130,246,0.14)',
+    '--sd-watch-text': isLight ? '#1d4ed8' : '#bfdbfe',
+    '--sd-good-bg': isLight ? 'rgba(34,197,94,0.14)' : 'rgba(22,163,74,0.12)',
+    '--sd-good-text': isLight ? '#166534' : '#bbf7d0',
   };
 }
 
@@ -1605,7 +1614,7 @@ const filterGridStyle = {
 const labelStyle = {
   display: 'block',
   marginBottom: '8px',
-  color: 'var(--da-muted-text, #475569)',
+  color: 'var(--da-muted-text, #334155)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -1864,7 +1873,7 @@ const recordsCellNotesStyle = {};
 const sectionIntroTextStyle = {
   marginTop: '0',
   marginBottom: '12px',
-  color: 'var(--da-muted-text, #475569)',
+  color: 'var(--da-muted-text, #334155)',
   lineHeight: 1.6,
   fontSize: '13px',
 };

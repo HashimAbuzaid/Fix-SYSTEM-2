@@ -822,7 +822,7 @@ export default function SupervisorTeamDashboard({
           ) : (
             <div style={tableWrapStyle}>
               <div style={tableStyle}>
-                <div style={{ ...tableRowStyle, ...tableHeaderRowStyle }}>
+                <div style={{ ...lowPerformerRowStyle, ...tableHeaderRowStyle }}>
                   <div style={lowPerformerAgentCellStyle}>Agent</div>
                   <div style={lowPerformerQualityCellStyle}>Avg</div>
                   <div style={lowPerformerFlagsCellStyle}>Flags</div>
@@ -839,7 +839,7 @@ export default function SupervisorTeamDashboard({
                     <div
                       key={item.agentKey}
                       style={{
-                        ...tableRowStyle,
+                        ...lowPerformerRowStyle,
                         ...(isFocused ? focusedRowStyle : {}),
                       }}
                     >
@@ -937,7 +937,7 @@ export default function SupervisorTeamDashboard({
           ) : (
             <div style={tableWrapStyle}>
               <div style={tableStyle}>
-                <div style={{ ...tableRowStyle, ...tableHeaderRowStyle }}>
+                <div style={{ ...overdueCoachingRowStyle, ...tableHeaderRowStyle }}>
                   <div style={overdueAgentCellStyle}>Agent</div>
                   <div style={overdueSubjectCellStyle}>Subject</div>
                   <div style={overdueDateCellStyle}>Due</div>
@@ -945,7 +945,7 @@ export default function SupervisorTeamDashboard({
                 </div>
 
                 {overdueCoaching.map((item) => (
-                  <div key={item.id} style={tableRowStyle}>
+                  <div key={item.id} style={overdueCoachingRowStyle}>
                     <div style={overdueAgentCellStyle}>
                       <div style={cellPrimaryStyle}>{item.label}</div>
                       <div style={cellSecondaryStyle}>
@@ -1066,7 +1066,7 @@ const heroPanelStyle: CSSProperties = {
   borderRadius: '24px',
   padding: '22px',
   background:
-    'linear-gradient(135deg, rgba(37,99,235,0.16) 0%, var(--da-card-bg, rgba(15,23,42,0.52)) 62%, var(--da-surface-bg, rgba(15,23,42,0.62)) 100%)',
+    'linear-gradient(135deg, rgba(37,99,235,0.12) 0%, var(--da-card-bg, rgba(15,23,42,0.52)) 58%, var(--da-surface-bg, rgba(15,23,42,0.62)) 100%)',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2,6,23,0.26))',
 };
@@ -1087,7 +1087,7 @@ const titleStyle: CSSProperties = {
 
 const subtitleStyle: CSSProperties = {
   margin: 0,
-  color: 'var(--da-muted-text, #cbd5e1)',
+  color: 'var(--da-muted-text, #334155)',
   lineHeight: 1.6,
 };
 
@@ -1135,7 +1135,7 @@ const pulseValueStyle: CSSProperties = {
 
 const pulseHelperStyle: CSSProperties = {
   marginTop: '8px',
-  color: 'var(--da-muted-text, #cbd5e1)',
+  color: 'var(--da-muted-text, #334155)',
   fontSize: '13px',
   lineHeight: 1.5,
 };
@@ -1160,7 +1160,7 @@ const sectionTitleStyle: CSSProperties = {
 
 const sectionSubtitleStyle: CSSProperties = {
   margin: '6px 0 0 0',
-  color: 'var(--da-muted-text, #cbd5e1)',
+  color: 'var(--da-muted-text, #334155)',
   lineHeight: 1.55,
   fontSize: '13px',
 };
@@ -1170,6 +1170,7 @@ const heatmapWrapStyle: CSSProperties = {
   borderRadius: '18px',
   border: '1px solid rgba(148,163,184,0.12)',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.10))',
 };
 
 const heatmapTableStyle: CSSProperties = {
@@ -1211,6 +1212,7 @@ const heatmapMetricCellStyle: CSSProperties = {
   padding: '10px 8px',
   borderRadius: '12px',
   textAlign: 'center',
+  boxShadow: 'inset 0 0 0 1px rgba(148,163,184,0.08)',
 };
 
 const heatCellTopStyle: CSSProperties = {
@@ -1226,15 +1228,19 @@ const heatCellBottomStyle: CSSProperties = {
 
 const twoColumnGridStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)',
+  gridTemplateColumns: 'minmax(0, 1.32fr) minmax(0, 1fr)',
   gap: '18px',
+  alignItems: 'start',
 };
 
 const tableWrapStyle: CSSProperties = {
   overflowX: 'auto',
+  overflowY: 'auto',
+  maxHeight: '440px',
   borderRadius: '16px',
   border: '1px solid rgba(148,163,184,0.12)',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.10))',
 };
 
 const tableStyle: CSSProperties = {
@@ -1245,8 +1251,9 @@ const tableRowStyle: CSSProperties = {
   display: 'grid',
   gap: '12px',
   alignItems: 'center',
-  padding: '12px 14px',
+  padding: '10px 14px',
   borderBottom: '1px solid rgba(148,163,184,0.08)',
+  background: 'transparent',
 };
 
 const tableHeaderRowStyle: CSSProperties = {
@@ -1261,6 +1268,16 @@ const tableHeaderRowStyle: CSSProperties = {
   letterSpacing: '0.1em',
 };
 
+const lowPerformerRowStyle: CSSProperties = {
+  ...tableRowStyle,
+  gridTemplateColumns: 'minmax(260px, 1.45fr) 100px 90px 110px minmax(190px, 1fr) 110px',
+};
+
+const overdueCoachingRowStyle: CSSProperties = {
+  ...tableRowStyle,
+  gridTemplateColumns: 'minmax(230px, 1.25fr) minmax(240px, 1.2fr) 140px 160px',
+};
+
 const lowPerformerAgentCellStyle: CSSProperties = {};
 const lowPerformerQualityCellStyle: CSSProperties = {};
 const lowPerformerFlagsCellStyle: CSSProperties = {};
@@ -1269,6 +1286,7 @@ const lowPerformerCoachingCellStyle: CSSProperties = {};
 const lowPerformerRiskCellStyle: CSSProperties = {
   display: 'flex',
   justifyContent: 'flex-start',
+  alignItems: 'center',
 };
 
 const overdueAgentCellStyle: CSSProperties = {};
@@ -1328,6 +1346,7 @@ const flagCardStyle: CSSProperties = {
   padding: '14px',
   border: '1px solid rgba(148,163,184,0.12)',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(2,6,23,0.08))',
 };
 
 const flagCardTopStyle: CSSProperties = {
@@ -1354,6 +1373,7 @@ const reasonPillStyle: CSSProperties = {
   color: 'var(--da-page-text, #e5eefb)',
   fontSize: '12px',
   fontWeight: 700,
+  lineHeight: 1.2,
 };
 
 
