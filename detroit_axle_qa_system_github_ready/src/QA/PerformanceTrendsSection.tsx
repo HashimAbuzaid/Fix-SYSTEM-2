@@ -492,11 +492,7 @@ function buildExcelWorkbookXml(sheets: ExcelSheet[]) {
 </Workbook>`;
 }
 
-function downloadExcelWorkbook(filename: string, xml: string) {
-  const blob = new Blob([xml], {
-    type: 'application/vnd.ms-excel;charset=utf-8;',
-  });
-
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -532,6 +528,7 @@ function buildPerformanceTrendWorkbookXml(params: {
   recurringIssues: RecurringIssue[];
   procedureHotspots: ProcedureHotspot[];
   procedureCases: ProcedureCaseItem[];
+  chartAssetName: string;
 }) {
   const {
     subjectLabel,
@@ -546,6 +543,7 @@ function buildPerformanceTrendWorkbookXml(params: {
     recurringIssues,
     procedureHotspots,
     procedureCases,
+    chartAssetName,
   } = params;
 
   return buildExcelWorkbookXml([
@@ -563,6 +561,23 @@ function buildPerformanceTrendWorkbookXml(params: {
         [makeExcelCell('Top Recurring Issue', 'Header'), makeExcelCell(strongestIssue, 'Body')],
         [makeExcelCell('Procedure Flagged Cases', 'Header'), makeExcelCell(procedureTotal, 'Count', 'Number')],
         [makeExcelCell('Top Procedure Case Type', 'Header'), makeExcelCell(topProcedureCaseType, 'Body')],
+        [makeExcelCell('Chart Asset in ZIP', 'Header'), makeExcelCell(chartAssetName, 'Body')],
+      ],
+    },
+    {
+      name: 'Chart Data',
+      columnWidths: [160, 130, 130],
+      rows: [
+        [
+          makeExcelCell('Period', 'Header'),
+          makeExcelCell('Selected Scope Avg', 'Header'),
+          makeExcelCell('Team Avg', 'Header'),
+        ],
+        ...trendPoints.map((point) => [
+          makeExcelCell(point.label, 'Body'),
+          makeExcelCell(point.subjectAverage ?? '', point.subjectAverage == null ? 'Body' : 'Number', point.subjectAverage == null ? 'String' : 'Number'),
+          makeExcelCell(point.teamAverage ?? '', point.teamAverage == null ? 'Body' : 'Number', point.teamAverage == null ? 'String' : 'Number'),
+        ]),
       ],
     },
     {
@@ -650,6 +665,266 @@ function buildPerformanceTrendWorkbookXml(params: {
       ],
     },
   ]);
+}
+
+function buildTrendChartSvg(
+  points: TrendPoint[],
+  subjectLabel: string,
+  periodMode: PeriodMode
+) {
+  const width = 1400;
+  const height = 460;
+  const chartLeft = 80;
+  const chartRight = 40;
+  const chartTop = 72;
+  const chartBottom = 94;
+  const plotWidth = width - chartLeft - chartRight;
+  const plotHeight = height - chartTop - chartBottom;
+
+  const subjectValues = points.map((point) => point.subjectAverage);
+  const teamValues = points.map((point) => point.teamAverage);
+  const allValues = [...subjectValues, ...teamValues].filter(
+    (value): value is number => value != null
+  );
+
+  const minValue = allValues.length ? Math.min(...allValues) : 0;
+  const maxValue = allValues.length ? Math.max(...allValues) : 100;
+  const paddedMin = Math.max(0, Math.floor((minValue - 2) / 5) * 5);
+  const paddedMax = Math.min(100, Math.ceil((maxValue + 2) / 5) * 5);
+  const valueRange = Math.max(paddedMax - paddedMin, 1);
+
+  const getPolyline = (values: Array<number | null>, stroke: string, strokeWidth: number) => {
+    const pointsText = values
+      .map((value, index) => {
+        if (value == null) return null;
+        const x =
+          chartLeft +
+          (index * plotWidth) / Math.max(values.length - 1, 1);
+        const y =
+          chartTop +
+          plotHeight -
+          ((value - paddedMin) / valueRange) * plotHeight;
+        return `${x},${y}`;
+      })
+      .filter(Boolean)
+      .join(' ');
+
+    return pointsText
+      ? `<polyline points="${pointsText}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" />`
+      : '';
+  };
+
+  const gridLines = [0, 0.25, 0.5, 0.75, 1]
+    .map((step) => {
+      const y = chartTop + plotHeight - step * plotHeight;
+      const value = paddedMin + step * valueRange;
+      return `
+        <line x1="${chartLeft}" y1="${y}" x2="${width - chartRight}" y2="${y}" stroke="#D7DFEA" stroke-width="1" />
+        <text x="${chartLeft - 12}" y="${y + 4}" font-size="12" text-anchor="end" fill="#64748B">${value.toFixed(0)}%</text>
+      `;
+    })
+    .join('');
+
+  const xLabels = points
+    .map((point, index) => {
+      const x =
+        chartLeft +
+        (index * plotWidth) / Math.max(points.length - 1, 1);
+      return `<text x="${x}" y="${height - 36}" font-size="12" text-anchor="middle" fill="#64748B">${point.shortLabel}</text>`;
+    })
+    .join('');
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="0" width="${width}" height="${height}" rx="24" fill="#FFFFFF" />
+  <text x="36" y="38" font-size="24" font-weight="700" fill="#0F172A">Performance Trends</text>
+  <text x="36" y="60" font-size="13" fill="#64748B">${subjectLabel} • ${periodMode === 'weekly' ? 'Weekly' : 'Monthly'} view</text>
+
+  ${gridLines}
+
+  <line x1="${chartLeft}" y1="${chartTop + plotHeight}" x2="${width - chartRight}" y2="${chartTop + plotHeight}" stroke="#94A3B8" stroke-width="1.2" />
+
+  ${getPolyline(teamValues, "#94A3B8", 4)}
+  ${getPolyline(subjectValues, "#2563EB", 5)}
+
+  <circle cx="${chartLeft + 4}" cy="26" r="6" fill="#2563EB" />
+  <text x="${chartLeft + 18}" y="30" font-size="13" fill="#334155">Selected Scope</text>
+  <circle cx="${chartLeft + 150}" cy="26" r="6" fill="#94A3B8" />
+  <text x="${chartLeft + 164}" y="30" font-size="13" fill="#334155">Team Average</text>
+
+  ${xLabels}
+</svg>`;
+}
+
+function svgToPngBlob(svgMarkup: string, width: number, height: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const svgBlob = new Blob([svgMarkup], {
+      type: 'image/svg+xml;charset=utf-8;',
+    });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const context = canvas.getContext('2d');
+
+        if (!context) {
+          URL.revokeObjectURL(svgUrl);
+          reject(new Error('Canvas context is unavailable.'));
+          return;
+        }
+
+        context.fillStyle = '#FFFFFF';
+        context.fillRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(svgUrl);
+
+          if (!blob) {
+            reject(new Error('Unable to create chart PNG.'));
+            return;
+          }
+
+          resolve(blob);
+        }, 'image/png');
+      } catch (error) {
+        URL.revokeObjectURL(svgUrl);
+        reject(error instanceof Error ? error : new Error('Unable to draw chart PNG.'));
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(svgUrl);
+      reject(new Error('Unable to load chart SVG.'));
+    };
+
+    image.src = svgUrl;
+  });
+}
+
+function crc32(bytes: Uint8Array) {
+  let crc = 0 ^ -1;
+
+  for (let i = 0; i < bytes.length; i += 1) {
+    crc ^= bytes[i];
+    for (let j = 0; j < 8; j += 1) {
+      const mask = -(crc & 1);
+      crc = (crc >>> 1) ^ (0xedb88320 & mask);
+    }
+  }
+
+  return (crc ^ -1) >>> 0;
+}
+
+function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+
+  entries.forEach((entry) => {
+    const nameBytes = encoder.encode(entry.name);
+    const data = entry.data;
+    const checksum = crc32(data);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, 0, true);
+    localView.setUint16(12, 0, true);
+    localView.setUint32(14, checksum, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    localParts.push(localHeader, data);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, 0, true);
+    centralView.setUint16(14, 0, true);
+    centralView.setUint32(16, checksum, true);
+    centralView.setUint32(20, data.length, true);
+    centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    centralParts.push(centralHeader);
+    offset += localHeader.length + data.length;
+  });
+
+  const centralDirectoryOffset = offset;
+  const centralDirectorySize = centralParts.reduce((sum, part) => sum + part.length, 0);
+
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, entries.length, true);
+  endView.setUint16(10, entries.length, true);
+  endView.setUint32(12, centralDirectorySize, true);
+  endView.setUint32(16, centralDirectoryOffset, true);
+  endView.setUint16(20, 0, true);
+
+  return new Blob([...localParts, ...centralParts, endRecord], {
+    type: 'application/zip',
+  });
+}
+
+async function downloadTrendExportPackage(params: {
+  baseFilename: string;
+  workbookXml: string;
+  chartSvg: string;
+  chartPngBlob: Blob;
+}) {
+  const { baseFilename, workbookXml, chartSvg, chartPngBlob } = params;
+  const encoder = new TextEncoder();
+  const workbookName = `${baseFilename}.xls`;
+  const chartSvgName = `${baseFilename}_chart.svg`;
+  const chartPngName = `${baseFilename}_chart.png`;
+  const readmeName = `${baseFilename}_README.txt`;
+
+  const readmeText = [
+    'Performance Trends export package',
+    '',
+    `Workbook: ${workbookName}`,
+    `Chart PNG: ${chartPngName}`,
+    `Chart SVG: ${chartSvgName}`,
+    '',
+    'The workbook contains the Overview, Chart Data, Trend Breakdown, Recurring Issues, Procedure Hotspots, and Procedure Cases sheets.',
+    'The chart image matches the line chart shown on the Performance Trends panel at export time.',
+  ].join('
+');
+
+  const zipBlob = createZipBlob([
+    { name: workbookName, data: encoder.encode(workbookXml) },
+    { name: chartSvgName, data: encoder.encode(chartSvg) },
+    { name: chartPngName, data: new Uint8Array(await chartPngBlob.arrayBuffer()) },
+    { name: readmeName, data: encoder.encode(readmeText) },
+  ]);
+
+  downloadBlob(`${baseFilename}.zip`, zipBlob);
 }
 
 function getMomentumLabel(value: number | null) {
@@ -805,28 +1080,39 @@ export default function PerformanceTrendsSection({
   const procedureTotal = procedureCases.length;
   const topProcedureCaseType = procedureHotspots[0]?.caseType || 'None';
 
-  function handleExportTrendWorkbook() {
-    const workbookXml = buildPerformanceTrendWorkbookXml({
-      subjectLabel,
-      periodMode,
-      latestAverage,
-      momentumDelta,
-      teamGap,
-      strongestIssue,
-      procedureTotal,
-      topProcedureCaseType,
-      trendPoints,
-      recurringIssues,
-      procedureHotspots,
-      procedureCases,
-    });
-
-    downloadExcelWorkbook(
-      `performance_trends_${sanitizeFilePart(subjectLabel)}_${periodMode}_${new Date()
+  async function handleExportTrendWorkbook() {
+    try {
+      const baseFilename = `performance_trends_${sanitizeFilePart(subjectLabel)}_${periodMode}_${new Date()
         .toISOString()
-        .slice(0, 10)}.xls`,
-      workbookXml
-    );
+        .slice(0, 10)}`;
+      const chartSvg = buildTrendChartSvg(trendPoints, subjectLabel, periodMode);
+      const chartPngBlob = await svgToPngBlob(chartSvg, 1400, 460);
+      const workbookXml = buildPerformanceTrendWorkbookXml({
+        subjectLabel,
+        periodMode,
+        latestAverage,
+        momentumDelta,
+        teamGap,
+        strongestIssue,
+        procedureTotal,
+        topProcedureCaseType,
+        trendPoints,
+        recurringIssues,
+        procedureHotspots,
+        procedureCases,
+        chartAssetName: `${baseFilename}_chart.png`,
+      });
+
+      await downloadTrendExportPackage({
+        baseFilename,
+        workbookXml,
+        chartSvg,
+        chartPngBlob,
+      });
+    } catch (error) {
+      console.error('Performance Trends export failed', error);
+      alert('Unable to export Performance Trends with chart right now.');
+    }
   }
 
   return (
@@ -869,7 +1155,7 @@ export default function PerformanceTrendsSection({
             onClick={handleExportTrendWorkbook}
             style={exportTrendButtonStyle}
           >
-            Export Trends Excel
+            Export Trends Excel + Chart
           </button>
         </div>
       </div>
