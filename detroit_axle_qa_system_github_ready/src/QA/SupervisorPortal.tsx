@@ -818,7 +818,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       </div>
 
       {activeTab === 'requests' ? (
-        <div style={{ marginTop: '24px' }}>
+        <div style={requestsTabShellStyle}>
           <SupervisorRequestsSupabase currentUser={currentUser} />
         </div>
       ) : activeTab === 'team-dashboard' ? (
@@ -1531,10 +1531,13 @@ function SummaryCard({ title, value }: { title: string; value: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ marginTop: '32px' }}>
-      <h3 style={{ marginBottom: '14px' }}>{title}</h3>
+    <section style={sectionShellStyle}>
+      <div style={sectionHeaderWrapStyle}>
+        <div style={sectionHeaderEyebrowStyle}>Supervisor View</div>
+        <h3 style={sectionTitleStyle}>{title}</h3>
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -1542,6 +1545,45 @@ const sectionHeaderActionsStyle = {
   display: 'flex',
   justifyContent: 'flex-end',
   marginBottom: '10px',
+};
+
+const requestsTabShellStyle = {
+  marginTop: '24px',
+  borderRadius: '24px',
+  padding: '18px',
+  background:
+    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  boxShadow: 'var(--da-panel-shadow, 0 12px 28px rgba(15,23,42,0.08))',
+};
+
+const sectionShellStyle = {
+  marginTop: '32px',
+  borderRadius: '22px',
+  padding: '18px',
+  background:
+    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
+  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
+  boxShadow: 'var(--da-panel-shadow, 0 12px 28px rgba(15,23,42,0.08))',
+};
+
+const sectionHeaderWrapStyle = {
+  marginBottom: '14px',
+};
+
+const sectionHeaderEyebrowStyle = {
+  color: 'var(--da-accent-text, #2563eb)',
+  fontSize: '11px',
+  fontWeight: 800,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase' as const,
+  marginBottom: '8px',
+};
+
+const sectionTitleStyle = {
+  margin: 0,
+  color: 'var(--da-title, #0f172a)',
+  fontSize: '22px',
 };
 
 const collapsedMessageStyle = {
@@ -1836,7 +1878,7 @@ const recordsTableWrapStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background:
     'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.2))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.10))',
 };
 
 const recordsTableStyle = {
@@ -1850,18 +1892,20 @@ const recordsRowStyle = {
   alignItems: 'center',
   padding: '14px 16px',
   borderBottom: '1px solid rgba(148,163,184,0.1)',
+  background: 'transparent',
 };
 
 const recordsHeaderRowStyle = {
   position: 'sticky' as const,
   top: 0,
   zIndex: 1,
-  background: 'rgba(2,6,23,0.92)',
+  background: 'var(--da-menu-bg, rgba(15,23,42,0.96))',
   color: 'var(--da-accent-text, #93c5fd)',
   fontSize: '12px',
   fontWeight: 800,
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
+  boxShadow: 'inset 0 -1px 0 rgba(148,163,184,0.12)',
 };
 
 const recordsCellAgentStyle = {};
@@ -1872,15 +1916,15 @@ const recordsCellNotesStyle = {};
 
 const sectionIntroTextStyle = {
   marginTop: '0',
-  marginBottom: '12px',
+  marginBottom: '14px',
   color: 'var(--da-muted-text, #334155)',
-  lineHeight: 1.6,
+  lineHeight: 1.65,
   fontSize: '13px',
 };
 
 const auditHistoryStatsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   gap: '10px',
   marginBottom: '12px',
 };
@@ -1890,24 +1934,26 @@ const auditHistoryStatCardStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   padding: '12px 14px',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 22px rgba(2,6,23,0.08))',
 };
 
 const auditHistoryListWrapStyle = {
   display: 'grid',
   gap: '10px',
-  maxHeight: '420px',
+  maxHeight: '440px',
   overflowY: 'auto' as const,
   paddingRight: '6px',
+  paddingBottom: '2px',
 };
 
 const auditHistoryCardStyle = {
   borderRadius: '18px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.14))',
-  padding: '10px 12px',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.10))',
+  padding: '12px 14px',
   display: 'grid',
-  gap: '8px',
+  gap: '10px',
 };
 
 const auditHistoryCardActiveStyle = {
@@ -1927,7 +1973,7 @@ const auditHistoryCommentStyle = {
   background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
   padding: '10px 12px',
   color: 'var(--da-page-text, #e5eefb)',
-  lineHeight: 1.55,
+  lineHeight: 1.6,
   whiteSpace: 'pre-wrap' as const,
   fontSize: '13px',
 };
@@ -1940,7 +1986,7 @@ const auditHistoryExpandedWrapStyle = {
 
 const coachingMetricsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
   gap: '10px',
   marginBottom: '12px',
 };
@@ -1950,6 +1996,7 @@ const coachingMetricCardStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   padding: '12px 14px',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(2,6,23,0.08))',
 };
 
 const coachingFallbackNoticeStyle = {
@@ -2035,9 +2082,12 @@ const fullCommentTextStyle = {
 const supervisorFeedbackTableWrapStyle = {
   marginTop: '8px',
   overflowX: 'auto' as const,
+  maxHeight: '520px',
+  overflowY: 'auto' as const,
   borderRadius: '16px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.08))',
 };
 
 const supervisorFeedbackTableStyle = {
@@ -2066,6 +2116,7 @@ const supervisorFeedbackHeaderRowStyle = {
   fontWeight: 800,
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
+  boxShadow: 'inset 0 -1px 0 rgba(148,163,184,0.12)',
 };
 
 const supervisorFeedbackCellTypeStyle = {};
