@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
+import SupervisorTeamDashboard from './SupervisorTeamDashboard';
 import MonitoringWidget from './MonitoringWidget';
 import MonitoringDrawer from './MonitoringDrawer';
 import SupervisorRequestsSupabase from './SupervisorRequestsSupabase';
@@ -90,8 +91,7 @@ type MonitoringItem = {
   resolved_by_email: string | null;
 };
 
-type SupervisorPortalTab = 'overview' | 'requests';
-
+type SupervisorPortalTab = 'overview' | 'team-dashboard' | 'requests';
 type SupervisorPortalProps = {
   currentUser: UserProfile;
 };
@@ -793,16 +793,42 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
             ...(activeTab === 'requests' ? activeTabButtonStyle : {}),
           }}
         >
+          <button
+  type="button"
+  onClick={() => setActiveTab('team-dashboard')}
+  style={{
+    ...tabButtonStyle,
+    ...(activeTab === 'team-dashboard' ? activeTabButtonStyle : {}),
+  }}
+>
+  Team Dashboard
+</button>
           Supervisor Requests
         </button>
       </div>
 
       {activeTab === 'requests' ? (
-        <div style={{ marginTop: '24px' }}>
-          <SupervisorRequestsSupabase currentUser={currentUser} />
-        </div>
-      ) : (
-        <>
+  <div style={{ marginTop: '24px' }}>
+    <SupervisorRequestsSupabase currentUser={currentUser} />
+  </div>
+) : activeTab === 'team-dashboard' ? (
+  <div style={{ marginTop: '24px' }}>
+    <SupervisorTeamDashboard
+      currentTeam={currentUser.team as TeamName}
+      agents={teamAgents}
+      audits={audits}
+      feedbackItems={feedbackItems}
+      monitoringItems={monitoringItems}
+      records={records}
+      selectedAgent={selectedAgent}
+    />
+  </div>
+) : (
+  <>
+    ...existing overview content...
+  </>
+)}
+
           {errorMessage ? <div style={errorBanner}>{errorMessage}</div> : null}
 
           <div style={panelStyle}>
