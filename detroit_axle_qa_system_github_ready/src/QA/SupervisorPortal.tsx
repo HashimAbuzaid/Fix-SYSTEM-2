@@ -814,7 +814,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
                 onClick={() => setIsAgentPickerOpen((prev) => !prev)}
                 style={pickerButtonStyle}
               >
-                <span style={{ color: selectedAgent ? 'var(--da-title, #f8fafc)' : 'var(--da-subtle-text, #94a3b8)' }}>
+                <span style={{ color: selectedAgent ? 'var(--da-title, #a7cff7)' : 'var(--da-subtle-text, #94a3b8)' }}>
                   {selectedAgent
                     ? getAgentLabel(
                         selectedAgent.agent_id,

@@ -1134,13 +1134,8 @@ const evaluationProgressData = useMemo(() => {
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-  const maxEvaluations = Math.max(
-    1,
-    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
-  );
-
   const evaluationColumns = Array.from(
-    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    { length: MAX_PROGRESS_EVALS },
     (_, index) => {
       const group = PROGRESS_GROUPS.find(
         (item) => index >= item.start && index < item.end
@@ -1236,6 +1231,27 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
   return getEffectiveOffIndexesForAgent(row.agent_id, row.team, row.offToday);
 }
 
+function getDisplayedEvaluationsForRow(
+  row: (typeof evaluationProgressData.rows)[number]
+) {
+  const offIndexSet = new Set(getRowEffectiveOffIndexes(row));
+  const baseEvaluations = row.evaluations.slice(0, MAX_PROGRESS_EVALS);
+  const shiftedEvaluations: Array<ImportedEvaluation | null> = [];
+  let sourceIndex = 0;
+
+  for (let displayIndex = 0; displayIndex < MAX_PROGRESS_EVALS; displayIndex += 1) {
+    if (offIndexSet.has(displayIndex)) {
+      shiftedEvaluations.push(null);
+      continue;
+    }
+
+    shiftedEvaluations.push(baseEvaluations[sourceIndex] || null);
+    sourceIndex += 1;
+  }
+
+  return shiftedEvaluations;
+}
+
 
   function getOffEvalCellStyle(isSelectedTarget: boolean) {
     return {
@@ -1248,22 +1264,29 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     row: (typeof evaluationProgressData.rows)[number],
     column: ProgressColumn
   ) {
-    const evaluation = row.evaluations[column.index] || {
+    const rowOffIndexes = getRowEffectiveOffIndexes(row);
+    const displayedEvaluations = getDisplayedEvaluationsForRow(row);
+    const evaluation = displayedEvaluations[column.index] || {
       score: null,
       label: '',
     };
     const hasValue =
-      evaluation.score !== null && Number.isFinite(evaluation.score);
-    const rowOffIndexes = getRowEffectiveOffIndexes(row);
+      evaluation?.score !== null && evaluation?.score !== undefined && Number.isFinite(evaluation.score);
     const isOffCell = rowOffIndexes.includes(column.index);
     const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
     if (isOffCell) {
+      const shiftedIntoNextSlot = row.evaluations[column.index] || null;
+
       return (
         <div
           key={`${row.agent_id}-${row.team}-${column.index}`}
           style={getOffEvalCellStyle(isSelectedTarget)}
-          title={`OFF placed in ${column.label}`}
+          title={
+            shiftedIntoNextSlot?.score !== null && shiftedIntoNextSlot?.score !== undefined
+              ? `OFF placed in ${column.label}. ${Number(shiftedIntoNextSlot.score).toFixed(0)}% shifts to the next visible eval slot.`
+              : `OFF placed in ${column.label}`
+          }
         >
           OFF
         </div>
@@ -1979,7 +2002,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     </div>
 
     <div style={progressHintStyle}>
-      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days.
+      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days. When an OFF is placed on an eval slot, later scores shift to the next visible eval slot.
     </div>
 
     {evaluationProgressData.rows.length === 0 ? (
@@ -3059,7 +3082,7 @@ const progressTableWrapStyle = {
   background: 'var(--screen-panel-bg)',
 };
 const progressTableStyle = {
-  minWidth: '2560px',
+  minWidth: '3000px',
 };
 const progressGroupHeaderRowStyle = {
   display: 'grid',
