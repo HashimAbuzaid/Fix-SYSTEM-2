@@ -431,7 +431,7 @@ function SupervisorRequestsSupabase({
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Supervisor Requests</div>
-          <h2 style={{ marginBottom: '8px', color: 'var(--da-title, #0f172a)' }}>Supervisor Requests</h2>
+          <h2 style={{ marginBottom: '8px' }}>Supervisor Requests</h2>
         </div>
 
         <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
@@ -461,7 +461,7 @@ function SupervisorRequestsSupabase({
 
       {canCreate ? (
         <div style={panelStyle}>
-          <h3 style={{ marginTop: 0, marginBottom: '14px', color: 'var(--da-title, #0f172a)' }}>Create Request</h3>
+          <h3 style={{ marginTop: 0 }}>Create Request</h3>
 
           <div style={scopeInfoStyle}>
             <div>
@@ -642,9 +642,9 @@ function SupervisorRequestsSupabase({
         </div>
       ) : null}
 
-      <div style={savedRequestsSectionStyle}>
+      <div style={{ marginTop: '28px' }}>
         <div style={requestsHeaderStyle}>
-          <h3 style={{ margin: 0, color: 'var(--da-title, #0f172a)' }}>Saved Requests</h3>
+          <h3 style={{ margin: 0 }}>Saved Requests</h3>
           <div style={requestsFilterWrapStyle}>
             <input
               type="text"
@@ -827,11 +827,10 @@ const pageHeaderStyle = {
   alignItems: 'center',
   flexWrap: 'wrap' as const,
   marginBottom: '18px',
-  paddingBottom: '6px',
 };
 
 const sectionEyebrow = {
-  color: 'var(--da-accent-text, #2563eb)',
+  color: '#60a5fa',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.18em',
@@ -841,11 +840,11 @@ const sectionEyebrow = {
 
 const panelStyle = {
   background:
-    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  borderRadius: '20px',
-  padding: '20px',
-  boxShadow: 'var(--da-panel-shadow, 0 10px 30px rgba(0,0,0,0.08))',
+    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%))',
+  border: 'var(--da-panel-border, 1px solid rgba(203,213,225,0.94))',
+  borderRadius: '22px',
+  padding: '22px',
+  boxShadow: 'var(--da-panel-shadow, 0 12px 28px rgba(15,23,42,0.08))',
 };
 
 const formGridStyle = {
@@ -861,13 +860,13 @@ const scopeInfoStyle = {
   borderRadius: '12px',
   backgroundColor: 'var(--da-card-bg, rgba(15,23,42,0.5))',
   border: '1px solid rgba(148,163,184,0.12)',
-  color: 'var(--da-page-text, #334155)',
+  color: 'var(--da-page-text, #cbd5e1)',
 };
 
 const labelStyle = {
   display: 'block',
   marginBottom: '8px',
-  color: 'var(--da-muted-text, #334155)',
+  color: 'var(--da-muted-text, #475569)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -966,7 +965,7 @@ const infoCardStyle = {
   border: '1px solid rgba(148,163,184,0.12)',
   borderRadius: '12px',
   padding: '14px',
-  color: 'var(--da-page-text, #334155)',
+  color: 'var(--da-page-text, #e5eefb)',
 };
 
 const primaryButton = {
@@ -996,23 +995,12 @@ const requestsHeaderStyle = {
   justifyContent: 'space-between',
   alignItems: 'center',
   flexWrap: 'wrap' as const,
-  marginBottom: '4px',
 };
 
 const requestsFilterWrapStyle = {
   display: 'flex',
   gap: '10px',
   flexWrap: 'wrap' as const,
-};
-
-const savedRequestsSectionStyle = {
-  marginTop: '28px',
-  borderRadius: '20px',
-  padding: '18px',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.08))',
 };
 
 const countPillStyle = {
@@ -1023,23 +1011,23 @@ const countPillStyle = {
   borderRadius: '999px',
   backgroundColor: 'var(--da-secondary-bg, rgba(15,23,42,0.62))',
   border: 'var(--da-secondary-border, 1px solid rgba(148,163,184,0.14))',
-  color: 'var(--da-secondary-text, #334155)',
+  color: 'var(--da-secondary-text, #cbd5e1)',
   fontSize: '13px',
   fontWeight: 700,
 };
 
 const requestCardStyle = {
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  borderRadius: '16px',
-  padding: '16px',
+  border: 'var(--da-panel-border, 1px solid rgba(203,213,225,0.94))',
+  borderRadius: '18px',
+  padding: '18px',
   background:
-    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.08))',
+    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(15,23,42,0.08))',
 };
 
 const requestSummaryRowStyle = {
   display: 'flex',
-  gap: '16px',
+  gap: '18px',
   justifyContent: 'space-between',
   alignItems: 'center',
   flexWrap: 'wrap' as const,
@@ -1067,7 +1055,6 @@ const requestMetaStyle = {
   color: 'var(--da-subtle-text, #64748b)',
   fontSize: '13px',
   fontWeight: 600,
-  lineHeight: 1.5,
 };
 
 const pillStyle = {
@@ -1095,10 +1082,10 @@ const detailsGridStyle = {
 
 const noteBlockStyle = {
   padding: '14px',
-  borderRadius: '12px',
+  borderRadius: '14px',
   border: '1px solid rgba(148,163,184,0.12)',
-  backgroundColor: 'var(--da-card-bg, rgba(15,23,42,0.48))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(2,6,23,0.06))',
+  backgroundColor: 'var(--da-card-bg, rgba(255,255,255,0.99))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(15,23,42,0.06))',
 };
 
 const noteLabelStyle = {
@@ -1112,15 +1099,15 @@ const noteLabelStyle = {
 
 const noteTextStyle = {
   color: 'var(--da-page-text, #1f2937)',
-  lineHeight: 1.6,
+  lineHeight: 1.65,
 };
 
 const statusActionWrapStyle = {
   padding: '14px',
-  borderRadius: '12px',
+  borderRadius: '14px',
   border: '1px solid rgba(148,163,184,0.12)',
-  backgroundColor: 'var(--da-card-bg, rgba(15,23,42,0.48))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(2,6,23,0.06))',
+  backgroundColor: 'var(--da-card-bg, rgba(255,255,255,0.99))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(15,23,42,0.06))',
 };
 
 const miniButtonStyle = {

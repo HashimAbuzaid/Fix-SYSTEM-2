@@ -226,6 +226,7 @@ function openNativeDatePicker(target: HTMLInputElement) {
   input.showPicker?.();
 }
 
+
 function getSupervisorThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -244,48 +245,38 @@ function getSupervisorThemeVars(): Record<string, string> {
 
   return {
     '--da-page-text': isLight ? '#1f2937' : '#e5eefb',
-    '--da-title': isLight ? '#0f172a' : '#f8fafc',
+    '--da-title': isLight ? '#081225' : '#f8fafc',
     '--da-muted-text': isLight ? '#334155' : '#cbd5e1',
     '--da-subtle-text': isLight ? '#64748b' : '#94a3b8',
     '--da-accent-text': isLight ? '#2563eb' : '#60a5fa',
     '--da-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-    '--da-panel-border': isLight
-      ? '1px solid rgba(203,213,225,0.95)'
-      : '1px solid rgba(148,163,184,0.14)',
-    '--da-panel-shadow': isLight
-      ? '0 12px 28px rgba(15,23,42,0.08)'
-      : '0 18px 40px rgba(2,6,23,0.35)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
+    '--da-panel-border': isLight ? '1px solid rgba(203,213,225,0.94)' : '1px solid rgba(148,163,184,0.16)',
+    '--da-panel-shadow': isLight ? '0 16px 36px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
     '--da-surface-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.62)',
-    '--da-card-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.52)',
-    '--da-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(249,250,251,0.99) 100%)'
-      : 'rgba(15,23,42,0.74)',
-    '--da-field-border': isLight
-      ? '1px solid rgba(203,213,225,0.95)'
-      : '1px solid rgba(148,163,184,0.16)',
+    '--da-card-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.56)',
+    '--da-field-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)' : 'rgba(15,23,42,0.78)',
+    '--da-field-border': isLight ? '1px solid rgba(203,213,225,0.94)' : '1px solid rgba(148,163,184,0.18)',
     '--da-field-text': isLight ? '#0f172a' : '#e5eefb',
-    '--da-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.96)',
+    '--da-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
     '--da-option-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.60)',
     '--da-active-option-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
-    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
+    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
     '--da-secondary-text': isLight ? '#334155' : '#e5eefb',
-    '--da-secondary-border': isLight
-      ? '1px solid rgba(203,213,225,0.95)'
-      : '1px solid rgba(148,163,184,0.18)',
+    '--da-secondary-border': isLight ? '1px solid rgba(203,213,225,0.94)' : '1px solid rgba(148,163,184,0.18)',
     '--da-error-text': isLight ? '#b91c1c' : '#fecaca',
-
-    '--sd-critical-bg': isLight ? 'rgba(239,68,68,0.16)' : 'rgba(220,38,38,0.16)',
+    '--sd-critical-bg': isLight ? 'rgba(239,68,68,0.14)' : 'rgba(220,38,38,0.16)',
     '--sd-critical-text': isLight ? '#b91c1c' : '#fecaca',
-    '--sd-warning-bg': isLight ? 'rgba(245,158,11,0.16)' : 'rgba(245,158,11,0.16)',
+    '--sd-warning-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.16)',
     '--sd-warning-text': isLight ? '#b45309' : '#fde68a',
     '--sd-watch-bg': isLight ? 'rgba(59,130,246,0.14)' : 'rgba(59,130,246,0.14)',
     '--sd-watch-text': isLight ? '#1d4ed8' : '#bfdbfe',
-    '--sd-good-bg': isLight ? 'rgba(34,197,94,0.14)' : 'rgba(22,163,74,0.12)',
+    '--sd-good-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(22,163,74,0.12)',
     '--sd-good-text': isLight ? '#166534' : '#bbf7d0',
   };
 }
+
 
 function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   const [teamAgents, setTeamAgents] = useState<AgentProfile[]>([]);
@@ -818,7 +809,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       </div>
 
       {activeTab === 'requests' ? (
-        <div style={requestsTabShellStyle}>
+        <div style={{ marginTop: '24px' }}>
           <SupervisorRequestsSupabase currentUser={currentUser} />
         </div>
       ) : activeTab === 'team-dashboard' ? (
@@ -1531,47 +1522,31 @@ function SummaryCard({ title, value }: { title: string; value: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section style={sectionShellStyle}>
-      <div style={sectionHeaderWrapStyle}>
-        <div style={sectionHeaderEyebrowStyle}>Supervisor View</div>
-        <h3 style={sectionTitleStyle}>{title}</h3>
+    <section style={supervisorSectionShellStyle}>
+      <div style={supervisorSectionHeaderWrapStyle}>
+        <div style={supervisorSectionEyebrowStyle}>Supervisor Workspace</div>
+        <h3 style={supervisorSectionTitleStyle}>{title}</h3>
       </div>
       {children}
     </section>
   );
 }
 
-const sectionHeaderActionsStyle = {
-  display: 'flex',
-  justifyContent: 'flex-end',
-  marginBottom: '10px',
-};
 
-const requestsTabShellStyle = {
-  marginTop: '24px',
+const supervisorSectionShellStyle = {
+  marginTop: '32px',
   borderRadius: '24px',
   padding: '18px',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  boxShadow: 'var(--da-panel-shadow, 0 12px 28px rgba(15,23,42,0.08))',
+  background: 'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%))',
+  border: 'var(--da-panel-border, 1px solid rgba(203,213,225,0.94))',
+  boxShadow: 'var(--da-panel-shadow, 0 16px 36px rgba(15,23,42,0.08))',
 };
 
-const sectionShellStyle = {
-  marginTop: '32px',
-  borderRadius: '22px',
-  padding: '18px',
-  background:
-    'var(--da-panel-bg, linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(248,250,252,0.98) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
-  boxShadow: 'var(--da-panel-shadow, 0 12px 28px rgba(15,23,42,0.08))',
-};
-
-const sectionHeaderWrapStyle = {
+const supervisorSectionHeaderWrapStyle = {
   marginBottom: '14px',
 };
 
-const sectionHeaderEyebrowStyle = {
+const supervisorSectionEyebrowStyle = {
   color: 'var(--da-accent-text, #2563eb)',
   fontSize: '11px',
   fontWeight: 800,
@@ -1580,10 +1555,17 @@ const sectionHeaderEyebrowStyle = {
   marginBottom: '8px',
 };
 
-const sectionTitleStyle = {
+const supervisorSectionTitleStyle = {
   margin: 0,
-  color: 'var(--da-title, #0f172a)',
+  color: 'var(--da-title, #081225)',
   fontSize: '22px',
+};
+
+const sectionHeaderActionsStyle = {
+
+  display: 'flex',
+  justifyContent: 'flex-end',
+  marginBottom: '10px',
 };
 
 const collapsedMessageStyle = {
@@ -1878,7 +1860,7 @@ const recordsTableWrapStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background:
     'var(--da-panel-bg, linear-gradient(180deg, var(--da-field-bg, rgba(15, 23, 42, 0.82)) 0%, var(--da-surface-bg, rgba(15, 23, 42, 0.68)) 100%))',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.10))',
+  boxShadow: 'var(--da-panel-shadow, 0 8px 24px rgba(2,6,23,0.2))',
 };
 
 const recordsTableStyle = {
@@ -1892,20 +1874,18 @@ const recordsRowStyle = {
   alignItems: 'center',
   padding: '14px 16px',
   borderBottom: '1px solid rgba(148,163,184,0.1)',
-  background: 'transparent',
 };
 
 const recordsHeaderRowStyle = {
   position: 'sticky' as const,
   top: 0,
   zIndex: 1,
-  background: 'var(--da-menu-bg, rgba(15,23,42,0.96))',
+  background: 'rgba(2,6,23,0.92)',
   color: 'var(--da-accent-text, #93c5fd)',
   fontSize: '12px',
   fontWeight: 800,
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
-  boxShadow: 'inset 0 -1px 0 rgba(148,163,184,0.12)',
 };
 
 const recordsCellAgentStyle = {};
@@ -1916,15 +1896,15 @@ const recordsCellNotesStyle = {};
 
 const sectionIntroTextStyle = {
   marginTop: '0',
-  marginBottom: '14px',
+  marginBottom: '12px',
   color: 'var(--da-muted-text, #334155)',
-  lineHeight: 1.65,
+  lineHeight: 1.6,
   fontSize: '13px',
 };
 
 const auditHistoryStatsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: '10px',
   marginBottom: '12px',
 };
@@ -1934,26 +1914,24 @@ const auditHistoryStatCardStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   padding: '12px 14px',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 22px rgba(2,6,23,0.08))',
 };
 
 const auditHistoryListWrapStyle = {
   display: 'grid',
   gap: '10px',
-  maxHeight: '440px',
+  maxHeight: '420px',
   overflowY: 'auto' as const,
   paddingRight: '6px',
-  paddingBottom: '2px',
 };
 
 const auditHistoryCardStyle = {
   borderRadius: '18px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.10))',
-  padding: '12px 14px',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.14))',
+  padding: '10px 12px',
   display: 'grid',
-  gap: '10px',
+  gap: '8px',
 };
 
 const auditHistoryCardActiveStyle = {
@@ -1973,7 +1951,7 @@ const auditHistoryCommentStyle = {
   background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
   padding: '10px 12px',
   color: 'var(--da-page-text, #e5eefb)',
-  lineHeight: 1.6,
+  lineHeight: 1.55,
   whiteSpace: 'pre-wrap' as const,
   fontSize: '13px',
 };
@@ -1986,7 +1964,7 @@ const auditHistoryExpandedWrapStyle = {
 
 const coachingMetricsGridStyle = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
   gap: '10px',
   marginBottom: '12px',
 };
@@ -1996,7 +1974,6 @@ const coachingMetricCardStyle = {
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
   padding: '12px 14px',
-  boxShadow: 'var(--da-panel-shadow, 0 8px 20px rgba(2,6,23,0.08))',
 };
 
 const coachingFallbackNoticeStyle = {
@@ -2082,12 +2059,9 @@ const fullCommentTextStyle = {
 const supervisorFeedbackTableWrapStyle = {
   marginTop: '8px',
   overflowX: 'auto' as const,
-  maxHeight: '520px',
-  overflowY: 'auto' as const,
   borderRadius: '16px',
   border: 'var(--da-panel-border, 1px solid rgba(148,163,184,0.14))',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(2,6,23,0.08))',
 };
 
 const supervisorFeedbackTableStyle = {
@@ -2116,7 +2090,6 @@ const supervisorFeedbackHeaderRowStyle = {
   fontWeight: 800,
   textTransform: 'uppercase' as const,
   letterSpacing: '0.12em',
-  boxShadow: 'inset 0 -1px 0 rgba(148,163,184,0.12)',
 };
 
 const supervisorFeedbackCellTypeStyle = {};

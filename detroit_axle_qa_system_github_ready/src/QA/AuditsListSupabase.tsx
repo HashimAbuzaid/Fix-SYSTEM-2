@@ -263,6 +263,7 @@ const salesMetrics: Metric[] = [
   ISSUE_WAS_RESOLVED_QUESTION,
 ];
 
+
 function getThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -280,47 +281,49 @@ function getThemeVars(): Record<string, string> {
   const isLight = themeMode === 'light' || themeMode === 'white';
 
   return {
-    '--screen-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
-    '--screen-muted': isLight ? '#8a98b3' : '#94a3b8',
-    '--screen-subtle': isLight ? '#64748b' : '#64748b',
+    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
+    '--screen-heading': isLight ? '#081225' : '#f8fafc',
+    '--screen-muted': isLight ? '#475569' : '#94a3b8',
+    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
     '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
     '--screen-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
     '--screen-card-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
     '--screen-card-soft-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,248,253,0.96) 100%)'
-      : 'rgba(15,23,42,0.52)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)'
+      : 'rgba(15,23,42,0.58)',
     '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
-      : 'rgba(15,23,42,0.7)',
-    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
-    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
-    '--screen-table-head-bg': isLight ? 'rgba(13, 27, 57, 0.98)' : 'rgba(2,6,23,0.92)',
-    '--screen-pill-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
-    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)'
+      : 'rgba(15,23,42,0.78)',
+    '--screen-field-text': isLight ? '#0f172a' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.22)',
+    '--screen-table-head-bg': isLight
+      ? 'linear-gradient(180deg, rgba(241,245,255,1) 0%, rgba(235,241,252,0.98) 100%)'
+      : 'rgba(2,6,23,0.92)',
+    '--screen-pill-bg': isLight ? 'rgba(239,246,255,0.98)' : 'rgba(15,23,42,0.62)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
+    '--screen-secondary-btn-text': isLight ? '#334155' : '#e5eefb',
     '--screen-select-option-bg': isLight ? '#ffffff' : '#0f172a',
     '--screen-select-option-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15, 23, 42, 0.96)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.10)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.14)' : 'rgba(37,99,235,0.18)',
-    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.34)' : 'rgba(96,165,250,0.26)',
+    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
+    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.30)' : 'rgba(96,165,250,0.26)',
     '--screen-score-pill-text': isLight ? '#1d4ed8' : '#dbeafe',
     '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
     '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.52)',
+    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.56)',
     '--screen-highlight-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.98) 100%)'
-      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.5) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,247,255,0.98) 100%)'
+      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.52) 100%)',
     '--progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.16)',
     '--progress-strong-border': isLight ? 'rgba(34,197,94,0.24)' : 'rgba(134,239,172,0.20)',
     '--progress-strong-text': isLight ? '#166534' : '#bbf7d0',
-    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.12)' : 'rgba(245,158,11,0.16)',
+    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.16)',
     '--progress-medium-border': isLight ? 'rgba(245,158,11,0.24)' : 'rgba(252,211,77,0.20)',
     '--progress-medium-text': isLight ? '#92400e' : '#fde68a',
     '--progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.16)',
@@ -333,6 +336,7 @@ function getThemeVars(): Record<string, string> {
     '--progress-off-text': isLight ? '#6d28d9' : '#ddd6fe',
   };
 }
+
 
 function AuditsListSupabase() {
   const [audits, setAudits] = useState<AuditItem[]>([]);
@@ -1134,8 +1138,13 @@ const evaluationProgressData = useMemo(() => {
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
+  const maxEvaluations = Math.max(
+    1,
+    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
+  );
+
   const evaluationColumns = Array.from(
-    { length: MAX_PROGRESS_EVALS },
+    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
     (_, index) => {
       const group = PROGRESS_GROUPS.find(
         (item) => index >= item.start && index < item.end
@@ -1231,27 +1240,6 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
   return getEffectiveOffIndexesForAgent(row.agent_id, row.team, row.offToday);
 }
 
-function getDisplayedEvaluationsForRow(
-  row: (typeof evaluationProgressData.rows)[number]
-) {
-  const offIndexSet = new Set(getRowEffectiveOffIndexes(row));
-  const baseEvaluations = row.evaluations.slice(0, MAX_PROGRESS_EVALS);
-  const shiftedEvaluations: Array<ImportedEvaluation | null> = [];
-  let sourceIndex = 0;
-
-  for (let displayIndex = 0; displayIndex < MAX_PROGRESS_EVALS; displayIndex += 1) {
-    if (offIndexSet.has(displayIndex)) {
-      shiftedEvaluations.push(null);
-      continue;
-    }
-
-    shiftedEvaluations.push(baseEvaluations[sourceIndex] || null);
-    sourceIndex += 1;
-  }
-
-  return shiftedEvaluations;
-}
-
 
   function getOffEvalCellStyle(isSelectedTarget: boolean) {
     return {
@@ -1264,29 +1252,22 @@ function getDisplayedEvaluationsForRow(
     row: (typeof evaluationProgressData.rows)[number],
     column: ProgressColumn
   ) {
-    const rowOffIndexes = getRowEffectiveOffIndexes(row);
-    const displayedEvaluations = getDisplayedEvaluationsForRow(row);
-    const evaluation = displayedEvaluations[column.index] || {
+    const evaluation = row.evaluations[column.index] || {
       score: null,
       label: '',
     };
     const hasValue =
-      evaluation?.score !== null && evaluation?.score !== undefined && Number.isFinite(evaluation.score);
+      evaluation.score !== null && Number.isFinite(evaluation.score);
+    const rowOffIndexes = getRowEffectiveOffIndexes(row);
     const isOffCell = rowOffIndexes.includes(column.index);
     const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
     if (isOffCell) {
-      const shiftedIntoNextSlot = row.evaluations[column.index] || null;
-
       return (
         <div
           key={`${row.agent_id}-${row.team}-${column.index}`}
           style={getOffEvalCellStyle(isSelectedTarget)}
-          title={
-            shiftedIntoNextSlot?.score !== null && shiftedIntoNextSlot?.score !== undefined
-              ? `OFF placed in ${column.label}. ${Number(shiftedIntoNextSlot.score).toFixed(0)}% shifts to the next visible eval slot.`
-              : `OFF placed in ${column.label}`
-          }
+          title={`OFF placed in ${column.label}`}
         >
           OFF
         </div>
@@ -1694,7 +1675,7 @@ function getDisplayedEvaluationsForRow(
           {' '}
           <div style={sectionEyebrow}>Audit Management</div>{' '}
           <h2 style={{ marginBottom: '8px', color: 'var(--screen-heading)' }}>Audits List</h2>{' '}
-          <p style={{ margin: 0, color: 'var(--screen-muted)' }}>
+          <p style={{ margin: 0, color: 'var(--screen-muted, #475569)' }}>
             {' '}
             QA can view audits and score details. Only admin can edit, delete,
             or release audits.{' '}
@@ -1824,7 +1805,7 @@ function getDisplayedEvaluationsForRow(
             {' '}
             Weekly Release Controls{' '}
           </h3>{' '}
-          <p style={{ color: 'var(--screen-muted)' }}>
+          <p style={{ color: 'var(--screen-muted, #475569)' }}>
             {' '}
             Use the filters above to choose the week, team, or case type, then
             share or hide filtered audits, or hide all audits at once.{' '}
@@ -1897,7 +1878,7 @@ function getDisplayedEvaluationsForRow(
         <h3 style={{ margin: 0, color: 'var(--screen-heading)' }}>
           Team Progress Board
         </h3>
-        <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted)' }}>
+        <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted, #475569)' }}>
           This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
         </p>
       </div>
@@ -2002,7 +1983,7 @@ function getDisplayedEvaluationsForRow(
     </div>
 
     <div style={progressHintStyle}>
-      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days. When an OFF is placed on an eval slot, later scores shift to the next visible eval slot.
+      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days.
     </div>
 
     {evaluationProgressData.rows.length === 0 ? (
@@ -2176,7 +2157,7 @@ function getDisplayedEvaluationsForRow(
   </div>
 ) : null}
       {filteredAudits.length === 0 ? (
-        <p style={{ color: 'var(--screen-muted)', marginTop: '18px' }}>No audits found.</p>
+        <p style={{ color: 'var(--screen-muted, #475569)', marginTop: '18px' }}>No audits found.</p>
       ) : (
         <div style={auditTableWrapStyle}>
           {' '}
@@ -2739,7 +2720,7 @@ function getDisplayedEvaluationsForRow(
                                   </div>{' '}
                                   <div
                                     style={{
-                                      color: 'var(--screen-muted)',
+                                      color: 'var(--screen-muted, #475569)',
                                       fontSize: '12px',
                                       marginTop: '4px',
                                     }}
@@ -3032,7 +3013,7 @@ const progressControlsBlockStyle = {
   gap: '8px',
 };
 const progressControlsLabelStyle = {
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '12px',
   fontWeight: 800,
   textTransform: 'uppercase' as const,
@@ -3073,7 +3054,7 @@ const progressEmptyStateStyle = {
   borderRadius: '16px',
   border: '1px dashed var(--screen-border)',
   background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
 };
 const progressTableWrapStyle = {
   overflowX: 'auto' as const,
@@ -3082,7 +3063,7 @@ const progressTableWrapStyle = {
   background: 'var(--screen-panel-bg)',
 };
 const progressTableStyle = {
-  minWidth: '3000px',
+  minWidth: '2560px',
 };
 const progressGroupHeaderRowStyle = {
   display: 'grid',
@@ -3198,7 +3179,7 @@ const progressEvalCellStyle = {
 };
 const progressHintStyle = {
   marginBottom: '14px',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '13px',
   lineHeight: 1.6,
 };
@@ -3412,7 +3393,7 @@ const detailInfoCardStyle = {
   padding: '14px 16px',
 };
 const detailLabelStyle = {
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '12px',
   fontWeight: 700,
   textTransform: 'uppercase' as const,
@@ -3485,7 +3466,7 @@ const pickerInfoStyle = {
   padding: '12px',
   borderRadius: '12px',
   backgroundColor: 'var(--screen-soft-fill)',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
 };
 const pickerOptionStyle = {
   padding: '12px 14px',

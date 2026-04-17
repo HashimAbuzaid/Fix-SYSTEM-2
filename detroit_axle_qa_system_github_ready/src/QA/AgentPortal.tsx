@@ -244,6 +244,7 @@ function openNativeDatePicker(target: HTMLInputElement) {
   input.showPicker?.();
 }
 
+
 function getThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -261,44 +262,62 @@ function getThemeVars(): Record<string, string> {
   const isLight = themeMode === 'light' || themeMode === 'white';
 
   return {
-    '--screen-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
-    '--screen-muted': isLight ? '#64748b' : '#94a3b8',
-    '--screen-subtle': isLight ? '#64748b' : '#64748b',
+    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
+    '--screen-heading': isLight ? '#081225' : '#f8fafc',
+    '--screen-muted': isLight ? '#475569' : '#94a3b8',
+    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
     '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
     '--screen-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
     '--screen-card-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
     '--screen-card-soft-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,248,253,0.96) 100%)'
-      : 'rgba(15,23,42,0.52)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)'
+      : 'rgba(15,23,42,0.58)',
     '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
-      : 'rgba(15,23,42,0.7)',
-    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
-    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
-    '--screen-table-head-bg': isLight ? 'rgba(13, 27, 57, 0.98)' : 'rgba(2,6,23,0.92)',
-    '--screen-pill-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
-    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)'
+      : 'rgba(15,23,42,0.78)',
+    '--screen-field-text': isLight ? '#0f172a' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.22)',
+    '--screen-table-head-bg': isLight
+      ? 'linear-gradient(180deg, rgba(241,245,255,1) 0%, rgba(235,241,252,0.98) 100%)'
+      : 'rgba(2,6,23,0.92)',
+    '--screen-pill-bg': isLight ? 'rgba(239,246,255,0.98)' : 'rgba(15,23,42,0.62)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
+    '--screen-secondary-btn-text': isLight ? '#334155' : '#e5eefb',
     '--screen-select-option-bg': isLight ? '#ffffff' : '#0f172a',
     '--screen-select-option-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15, 23, 42, 0.96)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.10)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
-    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.24)' : 'rgba(96,165,250,0.26)',
+    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
+    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.30)' : 'rgba(96,165,250,0.26)',
+    '--screen-score-pill-text': isLight ? '#1d4ed8' : '#dbeafe',
     '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
     '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.52)',
+    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.56)',
     '--screen-highlight-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.98) 100%)'
-      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.5) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,247,255,0.98) 100%)'
+      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.52) 100%)',
+    '--progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.16)',
+    '--progress-strong-border': isLight ? 'rgba(34,197,94,0.24)' : 'rgba(134,239,172,0.20)',
+    '--progress-strong-text': isLight ? '#166534' : '#bbf7d0',
+    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.16)',
+    '--progress-medium-border': isLight ? 'rgba(245,158,11,0.24)' : 'rgba(252,211,77,0.20)',
+    '--progress-medium-text': isLight ? '#92400e' : '#fde68a',
+    '--progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.16)',
+    '--progress-weak-border': isLight ? 'rgba(239,68,68,0.24)' : 'rgba(252,165,165,0.20)',
+    '--progress-weak-text': isLight ? '#991b1b' : '#fecaca',
+    '--progress-empty-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.42)',
+    '--progress-empty-text': isLight ? '#64748b' : '#94a3b8',
+    '--progress-off-bg': isLight ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.18)',
+    '--progress-off-border': isLight ? 'rgba(124,58,237,0.24)' : 'rgba(196,181,253,0.22)',
+    '--progress-off-text': isLight ? '#6d28d9' : '#ddd6fe',
   };
 }
+
 
 function AgentPortal({ currentUser }: AgentPortalProps) {
   const [audits, setAudits] = useState<AuditItem[]>([]);
@@ -1347,7 +1366,7 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
                                     </div>
                                     <div
                                       style={{
-                                        color: 'var(--screen-muted)',
+                                        color: 'var(--screen-muted, #475569)',
                                         fontSize: '12px',
                                         marginTop: '4px',
                                       }}
@@ -1574,7 +1593,7 @@ function SummaryCard({
 }) {
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: '14px', color: 'var(--screen-muted)', marginBottom: '8px' }}>
+      <div style={{ fontSize: '14px', color: 'var(--screen-muted, #475569)', marginBottom: '8px' }}>
         {title}
       </div>
       <div style={{ fontSize: '28px', fontWeight: 'bold', color: 'var(--screen-heading)' }}>
@@ -1595,14 +1614,47 @@ function EmptyState({ text }: { text: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ marginTop: '35px' }}>
-      <h3>{title}</h3>
+    <section style={agentSectionShellStyle}>
+      <div style={agentSectionHeaderWrapStyle}>
+        <div style={agentSectionEyebrowStyle}>Agent Workspace</div>
+        <h3 style={agentSectionTitleStyle}>{title}</h3>
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
+
+const agentSectionShellStyle = {
+  marginTop: '35px',
+  borderRadius: '24px',
+  padding: '18px',
+  background: 'var(--screen-panel-bg, linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%))',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  boxShadow: 'var(--screen-shadow, 0 16px 36px rgba(15,23,42,0.08))',
+};
+
+const agentSectionHeaderWrapStyle = {
+  marginBottom: '14px',
+};
+
+const agentSectionEyebrowStyle = {
+  color: 'var(--screen-accent, #2563eb)',
+  fontSize: '11px',
+  fontWeight: 800,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase' as const,
+  marginBottom: '8px',
+};
+
+const agentSectionTitleStyle = {
+  margin: 0,
+  color: 'var(--screen-heading, #081225)',
+  fontSize: '22px',
+};
+
 const sectionHeaderActionsStyle = {
+
   display: 'flex',
   justifyContent: 'flex-end',
   marginBottom: '12px',
@@ -1616,7 +1668,7 @@ const collapsedMessageStyle = {
 
 const pageHeaderStyle = {
   display: 'flex',
-  gap: '16px',
+  gap: '18px',
   justifyContent: 'space-between',
   alignItems: 'center',
   flexWrap: 'wrap' as const,
@@ -1982,7 +2034,7 @@ const miniLabelStyle = {
 };
 
 const detailLabelStyle = {
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '12px',
   fontWeight: 700,
   textTransform: 'uppercase' as const,
@@ -2003,7 +2055,7 @@ const emptyStateStyle = {
   borderRadius: '16px',
   border: '1px solid var(--screen-border)',
   backgroundColor: 'var(--screen-card-bg)',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   textAlign: 'center' as const,
   fontWeight: 600,
 };
@@ -2021,7 +2073,7 @@ const headerMetaPillStyle = {
   borderRadius: '999px',
   border: '1px solid var(--screen-border)',
   backgroundColor: 'var(--screen-pill-bg)',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '13px',
   fontWeight: 700,
   textAlign: 'left' as const,

@@ -113,25 +113,6 @@ type RecurringIssue = {
   autoFailCount: number;
 };
 
-type ProcedureHotspot = {
-  caseType: string;
-  count: number;
-  borderlineCount: number;
-  failCount: number;
-  autoFailCount: number;
-};
-
-type ProcedureCaseItem = {
-  id: string;
-  auditDate: string;
-  agentName: string;
-  team: TeamName | string;
-  caseType: string;
-  qualityScore: number;
-  procedureResult: string;
-  metricComment: string | null;
-};
-
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
 
 
@@ -153,34 +134,34 @@ function getReportsThemeVars(): Record<string, string> {
   const isLight = themeMode === 'light' || themeMode === 'white';
 
   return {
-    '--screen-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
-    '--screen-muted': isLight ? '#64748b' : '#94a3b8',
+    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
+    '--screen-heading': isLight ? '#081225' : '#f8fafc',
+    '--screen-muted': isLight ? '#475569' : '#94a3b8',
     '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
     '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
     '--screen-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
     '--screen-card-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
     '--screen-card-soft-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,248,253,0.96) 100%)'
-      : 'rgba(15,23,42,0.52)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)'
+      : 'rgba(15,23,42,0.58)',
     '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
-      : 'rgba(15,23,42,0.70)',
-    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
-    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
-    '--screen-table-head-bg': isLight ? 'rgba(13,27,57,0.98)' : 'rgba(2,6,23,0.92)',
-    '--screen-pill-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.78)',
-    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
-    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.96)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.10)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
-    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.24)' : 'rgba(96,165,250,0.26)',
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)'
+      : 'rgba(15,23,42,0.78)',
+    '--screen-field-text': isLight ? '#0f172a' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.22)',
+    '--screen-table-head-bg': isLight
+      ? 'linear-gradient(180deg, rgba(241,245,255,1) 0%, rgba(235,241,252,0.98) 100%)'
+      : 'rgba(2,6,23,0.92)',
+    '--screen-pill-bg': isLight ? 'rgba(239,246,255,0.98)' : 'rgba(15,23,42,0.62)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
+    '--screen-secondary-btn-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
   };
 }
 
@@ -721,10 +702,7 @@ function ReportsSupabase() {
   }
 
   return (
-    <div
-      data-no-theme-invert="true"
-      style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
-    >
+    <div data-no-theme-invert="true" style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}>
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Reporting</div>
@@ -905,6 +883,7 @@ function ReportsSupabase() {
       <PerformanceTrendsSection
         audits={filteredAudits}
         allAudits={trendTeamAudits}
+        profiles={profiles}
         selectedAgent={selectedAgent}
         effectiveTeamFilter={trendTeamFilter}
       />
@@ -991,164 +970,133 @@ function ReportsSupabase() {
         </Section>
       )}
 
-<Section title="Recent Audits">
-  {filteredAudits.length === 0 ? (
-    <p style={emptyMessageStyle}>No audits in this range.</p>
-  ) : (
-    <div style={thinTableWrapStyle}>
-      <div style={thinTableStyle}>
-        <div style={{ ...recentAuditsRowGridStyle, ...thinHeaderRowStyle }}>
-          <div style={recentAuditDateCellStyle}>Date</div>
-          <div style={recentAuditAgentCellStyle}>Agent</div>
-          <div style={recentAuditCaseCellStyle}>Case Type</div>
-          <div style={recentAuditReferenceCellStyle}>Reference</div>
-          <div style={recentAuditScoreCellStyle}>Quality</div>
-        </div>
+      <Section title="Recent Audits">
+        {filteredAudits.length === 0 ? (
+          <p>No audits in this range.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {filteredAudits.slice(0, 10).map((item) => (
+              <div key={item.id} style={contentCardStyle}>
+                <p>
+                  <strong>Agent:</strong> {item.agent_name}
+                </p>
+                <p>
+                  <strong>Display Name:</strong>{' '}
+                  {getDisplayName(item.agent_id, item.agent_name, item.team) ||
+                    '-'}
+                </p>
+                <p>
+                  <strong>Team:</strong> {item.team}
+                </p>
+                <p>
+                  <strong>Case Type:</strong> {item.case_type}
+                </p>
+                <p>
+                  <strong>Date:</strong> {item.audit_date}
+                </p>
 
-        {filteredAudits.map((item) => (
-          <div key={item.id} style={recentAuditsRowGridStyle}>
-            <div style={recentAuditDateCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.audit_date}</div>
-              <div style={thinSecondaryTextStyle}>{item.team}</div>
-            </div>
+                {(item.team === 'Calls' || item.team === 'Sales') && (
+                  <>
+                    <p>
+                      <strong>Order Number:</strong> {item.order_number || '-'}
+                    </p>
+                    <p>
+                      <strong>Phone Number:</strong> {item.phone_number || '-'}
+                    </p>
+                  </>
+                )}
 
-            <div style={recentAuditAgentCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.agent_name}</div>
-              <div style={thinSecondaryTextStyle}>
-                {getDisplayName(item.agent_id, item.agent_name, item.team) || '-'}
+                {item.team === 'Tickets' && (
+                  <p>
+                    <strong>Ticket ID:</strong> {item.ticket_id || '-'}
+                  </p>
+                )}
+
+                <p>
+                  <strong>Quality:</strong>{' '}
+                  {Number(item.quality_score).toFixed(2)}%
+                </p>
               </div>
-            </div>
-
-            <div style={recentAuditCaseCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.case_type}</div>
-            </div>
-
-            <div style={recentAuditReferenceCellStyle}>
-              <div style={thinPrimaryTextStyle}>
-                {item.team === 'Tickets'
-                  ? `Ticket: ${item.ticket_id || '-'}`
-                  : `Order: ${item.order_number || '-'} • Phone: ${item.phone_number || '-'}`
-                }
-              </div>
-            </div>
-
-            <div style={recentAuditScoreCellStyle}>
-              <span style={scorePillStyle}>
-                {Number(item.quality_score).toFixed(2)}%
-              </span>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
-  )}
-</Section>
+        )}
+      </Section>
 
-<Section title="Recent Supervisor Requests">
-  {filteredRequests.length === 0 ? (
-    <p style={emptyMessageStyle}>No supervisor requests in this range.</p>
-  ) : (
-    <div style={thinTableWrapStyle}>
-      <div style={thinTableStyle}>
-        <div style={{ ...recentRequestsRowGridStyle, ...thinHeaderRowStyle }}>
-          <div style={recentRequestDateCellStyle}>Created</div>
-          <div style={recentRequestCaseRefCellStyle}>Case Ref</div>
-          <div style={recentRequestAgentCellStyle}>Agent</div>
-          <div style={recentRequestPriorityCellStyle}>Priority</div>
-          <div style={recentRequestStatusCellStyle}>Status</div>
-        </div>
-
-        {filteredRequests.map((item) => (
-          <div key={item.id} style={recentRequestsRowGridStyle}>
-            <div style={recentRequestDateCellStyle}>
-              <div style={thinPrimaryTextStyle}>
-                {new Date(item.created_at).toLocaleDateString()}
+      <Section title="Recent Supervisor Requests">
+        {filteredRequests.length === 0 ? (
+          <p>No supervisor requests in this range.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {filteredRequests.slice(0, 10).map((item) => (
+              <div key={item.id} style={contentCardStyle}>
+                <p>
+                  <strong>Case Ref:</strong> {item.case_reference}
+                </p>
+                <p>
+                  <strong>Agent:</strong> {item.agent_name || '-'}
+                </p>
+                <p>
+                  <strong>Display Name:</strong>{' '}
+                  {getDisplayName(
+                    item.agent_id || null,
+                    item.agent_name || null,
+                    item.team || null
+                  ) || '-'}
+                </p>
+                <p>
+                  <strong>Team:</strong> {item.team || '-'}
+                </p>
+                <p>
+                  <strong>Priority:</strong> {item.priority}
+                </p>
+                <p>
+                  <strong>Status:</strong> {item.status}
+                </p>
+                <p>
+                  <strong>Created:</strong>{' '}
+                  {new Date(item.created_at).toLocaleString()}
+                </p>
               </div>
-              <div style={thinSecondaryTextStyle}>{item.team || '-'}</div>
-            </div>
-
-            <div style={recentRequestCaseRefCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.case_reference}</div>
-              <div style={thinSecondaryTextStyle}>{item.case_type || '-'}</div>
-            </div>
-
-            <div style={recentRequestAgentCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.agent_name || '-'}</div>
-              <div style={thinSecondaryTextStyle}>
-                {getDisplayName(
-                  item.agent_id || null,
-                  item.agent_name || null,
-                  item.team || null
-                ) || '-'}
-              </div>
-            </div>
-
-            <div style={recentRequestPriorityCellStyle}>
-              <span style={pillStyle}>{item.priority}</span>
-            </div>
-
-            <div style={recentRequestStatusCellStyle}>
-              <span style={pillStyle}>{item.status}</span>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
-  )}
-</Section>
+        )}
+      </Section>
 
-<Section title="Recent Agent Feedback">
-  {filteredFeedback.length === 0 ? (
-    <p style={emptyMessageStyle}>No feedback items in this range.</p>
-  ) : (
-    <div style={thinTableWrapStyle}>
-      <div style={thinTableStyle}>
-        <div style={{ ...recentFeedbackRowGridStyle, ...thinHeaderRowStyle }}>
-          <div style={recentFeedbackDateCellStyle}>Created</div>
-          <div style={recentFeedbackAgentCellStyle}>Agent</div>
-          <div style={recentFeedbackTypeCellStyle}>Type</div>
-          <div style={recentFeedbackSubjectCellStyle}>Subject</div>
-          <div style={recentFeedbackStatusCellStyle}>Status</div>
-        </div>
-
-        {filteredFeedback.map((item) => (
-          <div key={item.id} style={recentFeedbackRowGridStyle}>
-            <div style={recentFeedbackDateCellStyle}>
-              <div style={thinPrimaryTextStyle}>
-                {new Date(item.created_at).toLocaleDateString()}
+      <Section title="Recent Agent Feedback">
+        {filteredFeedback.length === 0 ? (
+          <p>No feedback items in this range.</p>
+        ) : (
+          <div style={{ display: 'grid', gap: '12px' }}>
+            {filteredFeedback.slice(0, 10).map((item) => (
+              <div key={item.id} style={contentCardStyle}>
+                <p>
+                  <strong>Agent:</strong> {item.agent_name}
+                </p>
+                <p>
+                  <strong>Display Name:</strong>{' '}
+                  {getDisplayName(
+                    item.agent_id || null,
+                    item.agent_name || null,
+                    item.team || null
+                  ) || '-'}
+                </p>
+                <p>
+                  <strong>Team:</strong> {item.team}
+                </p>
+                <p>
+                  <strong>Type:</strong> {item.feedback_type}
+                </p>
+                <p>
+                  <strong>Subject:</strong> {item.subject}
+                </p>
+                <p>
+                  <strong>Status:</strong> {item.status}
+                </p>
               </div>
-              <div style={thinSecondaryTextStyle}>{item.team}</div>
-            </div>
-
-            <div style={recentFeedbackAgentCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.agent_name}</div>
-              <div style={thinSecondaryTextStyle}>
-                {getDisplayName(
-                  item.agent_id || null,
-                  item.agent_name || null,
-                  item.team || null
-                ) || '-'}
-              </div>
-            </div>
-
-            <div style={recentFeedbackTypeCellStyle}>
-              <span style={pillStyle}>{item.feedback_type}</span>
-            </div>
-
-            <div style={recentFeedbackSubjectCellStyle}>
-              <div style={thinPrimaryTextStyle}>{item.subject}</div>
-              <div style={thinSecondaryTextStyle}>{item.qa_name || '-'}</div>
-            </div>
-
-            <div style={recentFeedbackStatusCellStyle}>
-              <span style={pillStyle}>{item.status}</span>
-            </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
-  )}
-</Section>
+        )}
+      </Section>
     </div>
   );
 }
@@ -1156,11 +1104,13 @@ function ReportsSupabase() {
 function PerformanceTrendsSection({
   audits,
   allAudits,
+  profiles,
   selectedAgent,
   effectiveTeamFilter,
 }: {
   audits: AuditItem[];
   allAudits: AuditItem[];
+  profiles: AgentProfile[];
   selectedAgent: AgentProfile | null;
   effectiveTeamFilter: string;
 }) {
@@ -1172,14 +1122,6 @@ function PerformanceTrendsSection({
 
   const recurringIssues = useMemo(() => {
     return buildRecurringIssues(audits);
-  }, [audits]);
-
-  const procedureHotspots = useMemo(() => {
-    return buildProcedureHotspots(audits);
-  }, [audits]);
-
-  const procedureCases = useMemo(() => {
-    return buildProcedureFlaggedCases(audits);
   }, [audits]);
 
   const latestAverage =
@@ -1220,43 +1162,6 @@ function PerformanceTrendsSection({
     (sum, issue) => sum + issue.count,
     0
   );
-  const procedureTotal = procedureCases.length;
-  const topProcedureCaseType = procedureHotspots[0]?.caseType || 'None';
-
-  async function handleExportTrendWorkbook() {
-    try {
-      const baseFilename = `performance_trends_${sanitizeFilePart(subjectLabel)}_${periodMode}_${new Date()
-        .toISOString()
-        .slice(0, 10)}`;
-      const chartSvg = buildTrendChartSvg(trendPoints, subjectLabel, periodMode);
-      const chartPngBlob = await svgToPngBlob(chartSvg, 1400, 460);
-      const workbookXml = buildPerformanceTrendWorkbookXml({
-        subjectLabel,
-        periodMode,
-        latestAverage,
-        momentumDelta,
-        teamGap,
-        strongestIssue,
-        procedureTotal,
-        topProcedureCaseType,
-        trendPoints,
-        recurringIssues,
-        procedureHotspots,
-        procedureCases,
-        chartAssetName: `${baseFilename}_chart.png`,
-      });
-
-      await downloadTrendExportPackage({
-        baseFilename,
-        workbookXml,
-        chartSvg,
-        chartPngBlob,
-      });
-    } catch (error) {
-      console.error('Performance Trends export failed', error);
-      alert('Unable to export Performance Trends with chart right now.');
-    }
-  }
 
   return (
     <Section title="Performance Trends">
@@ -1264,45 +1169,35 @@ function PerformanceTrendsSection({
         <div>
           <div style={detailLabelStyle}>Trend Layer</div>
           <h3 style={trendTitleStyle}>
-            Quality movement, team baseline, recurring issues, and procedure risk
+            Quality movement, team baseline, and recurring issues
           </h3>
           <p style={trendSubtitleStyle}>
             Selected scope: <strong>{subjectLabel}</strong>
           </p>
         </div>
 
-        <div style={trendActionsWrapStyle}>
-          <div style={trendToggleWrapStyle}>
-            <button
-              type="button"
-              onClick={() => setPeriodMode('weekly')}
-              style={{
-                ...trendToggleButtonStyle,
-                ...(periodMode === 'weekly' ? trendToggleButtonActiveStyle : {}),
-              }}
-            >
-              Weekly
-            </button>
-            <button
-              type="button"
-              onClick={() => setPeriodMode('monthly')}
-              style={{
-                ...trendToggleButtonStyle,
-                ...(periodMode === 'monthly'
-                  ? trendToggleButtonActiveStyle
-                  : {}),
-              }}
-            >
-              Monthly
-            </button>
-          </div>
-
+        <div style={trendToggleWrapStyle}>
           <button
             type="button"
-            onClick={handleExportTrendWorkbook}
-            style={primaryButton}
+            onClick={() => setPeriodMode('weekly')}
+            style={{
+              ...trendToggleButtonStyle,
+              ...(periodMode === 'weekly' ? trendToggleButtonActiveStyle : {}),
+            }}
           >
-            Export Trends Excel + Chart
+            Weekly
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeriodMode('monthly')}
+            style={{
+              ...trendToggleButtonStyle,
+              ...(periodMode === 'monthly'
+                ? trendToggleButtonActiveStyle
+                : {}),
+            }}
+          >
+            Monthly
           </button>
         </div>
       </div>
@@ -1326,10 +1221,6 @@ function PerformanceTrendsSection({
           title="Top Recurring Issue"
           value={strongestIssue}
         />
-        <SummaryCard
-          title="Procedure Flags"
-          value={procedureTotal ? String(procedureTotal) : '-'}
-        />
       </div>
 
       <div style={trendHelperTextStyle}>
@@ -1338,7 +1229,7 @@ function PerformanceTrendsSection({
               2
             )} pts vs prior period`
           : 'Need at least 2 periods for momentum'}{' '}
-        • {totalIssueTouches} total issue hits in selection • Procedure hotspot: {topProcedureCaseType}
+        • {totalIssueTouches} total issue hits in selection
       </div>
 
       <MiniTrendChart points={trendPoints} />
@@ -1419,66 +1310,6 @@ function PerformanceTrendsSection({
         </div>
       </div>
 
-      <div style={trendProcedureGridStyle}>
-        <div style={detailCardStyle}>
-          <div style={detailLabelStyle}>Procedure Hotspots by Case Type</div>
-          {procedureHotspots.length === 0 ? (
-            <p>No procedure Borderline / Fail cases in this range.</p>
-          ) : (
-            <div style={{ display: 'grid', gap: '8px' }}>
-              <div style={{ ...procedureHotspotRowStyle, ...trendTableHeaderStyle }}>
-                <div>Case Type</div>
-                <div>Total</div>
-                <div>Borderline</div>
-                <div>Fail</div>
-                <div>Auto-Fail</div>
-              </div>
-
-              {procedureHotspots.slice(0, 8).map((item) => (
-                <div key={item.caseType} style={procedureHotspotRowStyle}>
-                  <div>{item.caseType}</div>
-                  <div>{item.count}</div>
-                  <div>{item.borderlineCount}</div>
-                  <div>{item.failCount}</div>
-                  <div>{item.autoFailCount}</div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={detailCardStyle}>
-          <div style={detailLabelStyle}>Recent Procedure Borderline / Fail Cases</div>
-          {procedureCases.length === 0 ? (
-            <p>No procedure-flagged cases in this range.</p>
-          ) : (
-            <div style={procedureCasesWrapStyle}>
-              <div style={procedureCasesTableStyle}>
-                <div style={{ ...procedureCasesRowStyle, ...thinHeaderRowStyle }}>
-                  <div>Date</div>
-                  <div>Agent</div>
-                  <div>Team</div>
-                  <div>Case Type</div>
-                  <div>Procedure</div>
-                  <div>Quality</div>
-                </div>
-
-                {procedureCases.slice(0, 16).map((item) => (
-                  <div key={item.id} style={procedureCasesRowStyle}>
-                    <div>{item.auditDate}</div>
-                    <div>{item.agentName}</div>
-                    <div>{item.team}</div>
-                    <div>{item.caseType}</div>
-                    <div>{item.procedureResult}</div>
-                    <div>{item.qualityScore.toFixed(2)}%</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
       {!selectedAgent && effectiveTeamFilter ? (
         <div style={trendHelperTextStyle}>
           Team trend is comparing the filtered team against itself. Once an
@@ -1492,6 +1323,10 @@ function PerformanceTrendsSection({
           selected scope and compares them to the same overall baseline.
         </div>
       ) : null}
+
+      <div style={{ display: 'none' }}>
+        {profiles.length}
+      </div>
     </Section>
   );
 }
@@ -1582,10 +1417,13 @@ function SummaryCard({ title, value }: { title: string; value: string }) {
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div style={{ marginTop: '35px' }}>
-      <h3 style={sectionTitleStyle}>{title}</h3>
+    <section style={reportSectionShellStyle}>
+      <div style={reportSectionHeaderWrapStyle}>
+        <div style={reportSectionEyebrowStyle}>Reporting Layer</div>
+        <h3 style={sectionTitleStyle}>{title}</h3>
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -1758,704 +1596,6 @@ function roundScore(value: number | null) {
   return Number(value.toFixed(2));
 }
 
-function getProcedureIssueDetail(audit: AuditItem) {
-  return (audit.score_details || []).find(
-    (detail) =>
-      String(detail.metric || '').trim() === 'Procedure' &&
-      ISSUE_RESULTS.has(String(detail.result || ''))
-  ) || null;
-}
-
-function buildProcedureHotspots(audits: AuditItem[]): ProcedureHotspot[] {
-  const counts = new Map<
-    string,
-    { count: number; borderlineCount: number; failCount: number; autoFailCount: number }
-  >();
-
-  audits.forEach((audit) => {
-    const detail = getProcedureIssueDetail(audit);
-    if (!detail) return;
-
-    const caseType = String(audit.case_type || 'Unknown').trim() || 'Unknown';
-    const current = counts.get(caseType) || {
-      count: 0,
-      borderlineCount: 0,
-      failCount: 0,
-      autoFailCount: 0,
-    };
-
-    current.count += 1;
-    if (detail.result === 'Borderline') current.borderlineCount += 1;
-    if (detail.result === 'Fail') current.failCount += 1;
-    if (detail.result === 'Auto-Fail') current.autoFailCount += 1;
-
-    counts.set(caseType, current);
-  });
-
-  return Array.from(counts.entries())
-    .map(([caseType, value]) => ({
-      caseType,
-      count: value.count,
-      borderlineCount: value.borderlineCount,
-      failCount: value.failCount,
-      autoFailCount: value.autoFailCount,
-    }))
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      if (b.failCount !== a.failCount) return b.failCount - a.failCount;
-      if (b.borderlineCount !== a.borderlineCount) return b.borderlineCount - a.borderlineCount;
-      return a.caseType.localeCompare(b.caseType);
-    });
-}
-
-function buildProcedureFlaggedCases(audits: AuditItem[]): ProcedureCaseItem[] {
-  return audits
-    .map((audit) => {
-      const detail = getProcedureIssueDetail(audit);
-      if (!detail) return null;
-
-      return {
-        id: audit.id,
-        auditDate: audit.audit_date,
-        agentName: audit.agent_name,
-        team: audit.team,
-        caseType: audit.case_type,
-        qualityScore: Number(audit.quality_score),
-        procedureResult: detail.result,
-        metricComment: detail.metric_comment || null,
-      } satisfies ProcedureCaseItem;
-    })
-    .filter((item): item is ProcedureCaseItem => item !== null)
-    .sort((a, b) => {
-      const dateCompare = String(b.auditDate || '').localeCompare(String(a.auditDate || ''));
-      if (dateCompare !== 0) return dateCompare;
-      return a.agentName.localeCompare(b.agentName);
-    });
-}
-
-type ExcelCell = {
-  value: string | number | null;
-  type?: 'String' | 'Number';
-  styleId?: string;
-};
-
-type ExcelSheet = {
-  name: string;
-  columnWidths?: number[];
-  rows: ExcelCell[][];
-};
-
-function escapeExcelXml(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function makeExcelCell(
-  value: string | number | null | undefined,
-  styleId = 'Body',
-  type?: 'String' | 'Number'
-): ExcelCell {
-  if (value == null || value === '') {
-    return { value: '', styleId, type: 'String' };
-  }
-
-  if (type) {
-    return { value, styleId, type };
-  }
-
-  return typeof value === 'number'
-    ? { value, styleId, type: 'Number' }
-    : { value: String(value), styleId, type: 'String' };
-}
-
-function buildExcelWorkbookXml(sheets: ExcelSheet[]) {
-  const stylesXml = `
-    <Styles>
-      <Style ss:ID="Default" ss:Name="Normal">
-        <Alignment ss:Vertical="Center"/>
-        <Borders/>
-        <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#1F2937"/>
-        <Interior/>
-        <NumberFormat/>
-        <Protection/>
-      </Style>
-      <Style ss:ID="Title">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="16" ss:Color="#0F172A"/>
-        <Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/>
-        <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
-      </Style>
-      <Style ss:ID="Section">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="11" ss:Color="#1D4ED8"/>
-        <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
-      </Style>
-      <Style ss:ID="Header">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#FFFFFF"/>
-        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
-        <Interior ss:Color="#0F172A" ss:Pattern="Solid"/>
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
-        </Borders>
-      </Style>
-      <Style ss:ID="Body">
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-        </Borders>
-      </Style>
-      <Style ss:ID="Number">
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-        </Borders>
-        <NumberFormat ss:Format="0.00"/>
-      </Style>
-      <Style ss:ID="Count">
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
-        </Borders>
-        <NumberFormat ss:Format="0"/>
-      </Style>
-      <Style ss:ID="Good">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#166534"/>
-        <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
-        </Borders>
-      </Style>
-      <Style ss:ID="Warning">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#92400E"/>
-        <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
-        </Borders>
-      </Style>
-      <Style ss:ID="Bad">
-        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#991B1B"/>
-        <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
-        <Borders>
-          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
-          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
-          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
-          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
-        </Borders>
-      </Style>
-    </Styles>
-  `.trim();
-
-  const worksheetsXml = sheets
-    .map((sheet) => {
-      const columnsXml = (sheet.columnWidths || [])
-        .map((width) => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`)
-        .join('');
-
-      const rowsXml = sheet.rows
-        .map((row) => {
-          const cellsXml = row
-            .map((cell) => {
-              const styleAttr = cell.styleId ? ` ss:StyleID="${cell.styleId}"` : '';
-              const type = cell.type || (typeof cell.value === 'number' ? 'Number' : 'String');
-              const value =
-                cell.value == null
-                  ? ''
-                  : type === 'Number'
-                  ? String(cell.value)
-                  : escapeExcelXml(String(cell.value));
-
-              return `<Cell${styleAttr}><Data ss:Type="${type}">${value}</Data></Cell>`;
-            })
-            .join('');
-
-          return `<Row>${cellsXml}</Row>`;
-        })
-        .join('');
-
-      return `
-        <Worksheet ss:Name="${escapeExcelXml(sheet.name.slice(0, 31))}">
-          <Table>
-            ${columnsXml}
-            ${rowsXml}
-          </Table>
-        </Worksheet>
-      `.trim();
-    })
-    .join('');
-
-  return `<?xml version="1.0"?>
-<Workbook
-  xmlns="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:o="urn:schemas-microsoft-com:office:office"
-  xmlns:x="urn:schemas-microsoft-com:office:excel"
-  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
-  xmlns:html="http://www.w3.org/TR/REC-html40">
-  ${stylesXml}
-  ${worksheetsXml}
-</Workbook>`;
-}
-
-function downloadBlob(filename: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function sanitizeFilePart(value: string) {
-  return String(value || 'trends')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 50) || 'trends';
-}
-
-function getProcedureResultStyleId(result: string | null | undefined) {
-  if (result === 'Borderline') return 'Warning';
-  if (result === 'Fail' || result === 'Auto-Fail') return 'Bad';
-  return 'Body';
-}
-
-function buildPerformanceTrendWorkbookXml(params: {
-  subjectLabel: string;
-  periodMode: PeriodMode;
-  latestAverage: number | null;
-  momentumDelta: number | null;
-  teamGap: number | null;
-  strongestIssue: string;
-  procedureTotal: number;
-  topProcedureCaseType: string;
-  trendPoints: TrendPoint[];
-  recurringIssues: RecurringIssue[];
-  procedureHotspots: ProcedureHotspot[];
-  procedureCases: ProcedureCaseItem[];
-  chartAssetName: string;
-}) {
-  const {
-    subjectLabel,
-    periodMode,
-    latestAverage,
-    momentumDelta,
-    teamGap,
-    strongestIssue,
-    procedureTotal,
-    topProcedureCaseType,
-    trendPoints,
-    recurringIssues,
-    procedureHotspots,
-    procedureCases,
-    chartAssetName,
-  } = params;
-
-  return buildExcelWorkbookXml([
-    {
-      name: 'Overview',
-      columnWidths: [200, 200, 180, 180],
-      rows: [
-        [makeExcelCell('Performance Trends Export', 'Title')],
-        [makeExcelCell('Generated', 'Section'), makeExcelCell(new Date().toLocaleString(), 'Body')],
-        [makeExcelCell('Scope', 'Section'), makeExcelCell(subjectLabel, 'Body')],
-        [makeExcelCell('Period Mode', 'Section'), makeExcelCell(periodMode === 'weekly' ? 'Weekly' : 'Monthly', 'Body')],
-        [makeExcelCell('Current Average', 'Header'), makeExcelCell(latestAverage ?? '', latestAverage == null ? 'Body' : 'Number', latestAverage == null ? 'String' : 'Number')],
-        [makeExcelCell('Momentum (pts)', 'Header'), makeExcelCell(momentumDelta ?? '', momentumDelta == null ? 'Body' : getProcedureResultStyleId(momentumDelta < 0 ? 'Fail' : momentumDelta > 0 ? 'Borderline' : ''), momentumDelta == null ? 'String' : 'Number')],
-        [makeExcelCell('Vs Team Average (pts)', 'Header'), makeExcelCell(teamGap ?? '', teamGap == null ? 'Body' : getProcedureResultStyleId(teamGap < 0 ? 'Fail' : teamGap > 0 ? 'Borderline' : ''), teamGap == null ? 'String' : 'Number')],
-        [makeExcelCell('Top Recurring Issue', 'Header'), makeExcelCell(strongestIssue, 'Body')],
-        [makeExcelCell('Procedure Flagged Cases', 'Header'), makeExcelCell(procedureTotal, 'Count', 'Number')],
-        [makeExcelCell('Top Procedure Case Type', 'Header'), makeExcelCell(topProcedureCaseType, 'Body')],
-        [makeExcelCell('Chart Asset in ZIP', 'Header'), makeExcelCell(chartAssetName, 'Body')],
-      ],
-    },
-    {
-      name: 'Chart Data',
-      columnWidths: [160, 130, 130],
-      rows: [
-        [
-          makeExcelCell('Period', 'Header'),
-          makeExcelCell('Selected Scope Avg', 'Header'),
-          makeExcelCell('Team Avg', 'Header'),
-        ],
-        ...trendPoints.map((point) => [
-          makeExcelCell(point.label, 'Body'),
-          makeExcelCell(point.subjectAverage ?? '', point.subjectAverage == null ? 'Body' : 'Number', point.subjectAverage == null ? 'String' : 'Number'),
-          makeExcelCell(point.teamAverage ?? '', point.teamAverage == null ? 'Body' : 'Number', point.teamAverage == null ? 'String' : 'Number'),
-        ]),
-      ],
-    },
-    {
-      name: 'Trend Breakdown',
-      columnWidths: [130, 170, 130, 130, 120],
-      rows: [
-        [
-          makeExcelCell('Period', 'Header'),
-          makeExcelCell('Selected Scope Avg', 'Header'),
-          makeExcelCell('Team Avg', 'Header'),
-          makeExcelCell('Scoped Audits', 'Header'),
-          makeExcelCell('Team Audits', 'Header'),
-        ],
-        ...trendPoints.map((point) => [
-          makeExcelCell(point.label, 'Body'),
-          makeExcelCell(point.subjectAverage ?? '', point.subjectAverage == null ? 'Body' : 'Number', point.subjectAverage == null ? 'String' : 'Number'),
-          makeExcelCell(point.teamAverage ?? '', point.teamAverage == null ? 'Body' : 'Number', point.teamAverage == null ? 'String' : 'Number'),
-          makeExcelCell(point.auditCount, 'Count', 'Number'),
-          makeExcelCell(point.teamAuditCount, 'Count', 'Number'),
-        ]),
-      ],
-    },
-    {
-      name: 'Recurring Issues',
-      columnWidths: [180, 100, 100, 100, 100],
-      rows: [
-        [
-          makeExcelCell('Metric', 'Header'),
-          makeExcelCell('Total', 'Header'),
-          makeExcelCell('Borderline', 'Header'),
-          makeExcelCell('Fail', 'Header'),
-          makeExcelCell('Auto-Fail', 'Header'),
-        ],
-        ...recurringIssues.map((issue) => [
-          makeExcelCell(issue.metric, 'Body'),
-          makeExcelCell(issue.count, 'Count', 'Number'),
-          makeExcelCell(issue.borderlineCount, 'Count', 'Number'),
-          makeExcelCell(issue.failCount, 'Count', 'Number'),
-          makeExcelCell(issue.autoFailCount, 'Count', 'Number'),
-        ]),
-      ],
-    },
-    {
-      name: 'Procedure Hotspots',
-      columnWidths: [180, 100, 100, 100, 100],
-      rows: [
-        [
-          makeExcelCell('Case Type', 'Header'),
-          makeExcelCell('Total', 'Header'),
-          makeExcelCell('Borderline', 'Header'),
-          makeExcelCell('Fail', 'Header'),
-          makeExcelCell('Auto-Fail', 'Header'),
-        ],
-        ...procedureHotspots.map((item) => [
-          makeExcelCell(item.caseType, 'Body'),
-          makeExcelCell(item.count, 'Count', 'Number'),
-          makeExcelCell(item.borderlineCount, 'Count', 'Number'),
-          makeExcelCell(item.failCount, 'Count', 'Number'),
-          makeExcelCell(item.autoFailCount, 'Count', 'Number'),
-        ]),
-      ],
-    },
-    {
-      name: 'Procedure Cases',
-      columnWidths: [90, 140, 90, 140, 120, 110, 240],
-      rows: [
-        [
-          makeExcelCell('Audit Date', 'Header'),
-          makeExcelCell('Agent', 'Header'),
-          makeExcelCell('Team', 'Header'),
-          makeExcelCell('Case Type', 'Header'),
-          makeExcelCell('Procedure Result', 'Header'),
-          makeExcelCell('Quality Score', 'Header'),
-          makeExcelCell('QA Note', 'Header'),
-        ],
-        ...procedureCases.map((item) => [
-          makeExcelCell(item.auditDate, 'Body'),
-          makeExcelCell(item.agentName, 'Body'),
-          makeExcelCell(item.team, 'Body'),
-          makeExcelCell(item.caseType, 'Body'),
-          makeExcelCell(item.procedureResult, getProcedureResultStyleId(item.procedureResult)),
-          makeExcelCell(item.qualityScore, 'Number', 'Number'),
-          makeExcelCell(item.metricComment || '', 'Body'),
-        ]),
-      ],
-    },
-  ]);
-}
-
-function buildTrendChartSvg(
-  points: TrendPoint[],
-  subjectLabel: string,
-  periodMode: PeriodMode
-) {
-  const width = 1400;
-  const height = 460;
-  const chartLeft = 80;
-  const chartRight = 40;
-  const chartTop = 72;
-  const chartBottom = 94;
-  const plotWidth = width - chartLeft - chartRight;
-  const plotHeight = height - chartTop - chartBottom;
-
-  const subjectValues = points.map((point) => point.subjectAverage);
-  const teamValues = points.map((point) => point.teamAverage);
-  const allValues = [...subjectValues, ...teamValues].filter(
-    (value): value is number => value != null
-  );
-
-  const minValue = allValues.length ? Math.min(...allValues) : 0;
-  const maxValue = allValues.length ? Math.max(...allValues) : 100;
-  const paddedMin = Math.max(0, Math.floor((minValue - 2) / 5) * 5);
-  const paddedMax = Math.min(100, Math.ceil((maxValue + 2) / 5) * 5);
-  const valueRange = Math.max(paddedMax - paddedMin, 1);
-
-  const getPolyline = (values: Array<number | null>, stroke: string, strokeWidth: number) => {
-    const pointsText = values
-      .map((value, index) => {
-        if (value == null) return null;
-        const x =
-          chartLeft +
-          (index * plotWidth) / Math.max(values.length - 1, 1);
-        const y =
-          chartTop +
-          plotHeight -
-          ((value - paddedMin) / valueRange) * plotHeight;
-        return `${x},${y}`;
-      })
-      .filter(Boolean)
-      .join(' ');
-
-    return pointsText
-      ? `<polyline points="${pointsText}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" stroke-linecap="round" />`
-      : '';
-  };
-
-  const gridLines = [0, 0.25, 0.5, 0.75, 1]
-    .map((step) => {
-      const y = chartTop + plotHeight - step * plotHeight;
-      const value = paddedMin + step * valueRange;
-      return `
-        <line x1="${chartLeft}" y1="${y}" x2="${width - chartRight}" y2="${y}" stroke="#D7DFEA" stroke-width="1" />
-        <text x="${chartLeft - 12}" y="${y + 4}" font-size="12" text-anchor="end" fill="#64748B">${value.toFixed(0)}%</text>
-      `;
-    })
-    .join('');
-
-  const xLabels = points
-    .map((point, index) => {
-      const x =
-        chartLeft +
-        (index * plotWidth) / Math.max(points.length - 1, 1);
-      return `<text x="${x}" y="${height - 36}" font-size="12" text-anchor="middle" fill="#64748B">${point.shortLabel}</text>`;
-    })
-    .join('');
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  <rect x="0" y="0" width="${width}" height="${height}" rx="24" fill="#FFFFFF" />
-  <text x="36" y="38" font-size="24" font-weight="700" fill="#0F172A">Performance Trends</text>
-  <text x="36" y="60" font-size="13" fill="#64748B">${subjectLabel} • ${periodMode === 'weekly' ? 'Weekly' : 'Monthly'} view</text>
-
-  ${gridLines}
-
-  <line x1="${chartLeft}" y1="${chartTop + plotHeight}" x2="${width - chartRight}" y2="${chartTop + plotHeight}" stroke="#94A3B8" stroke-width="1.2" />
-
-  ${getPolyline(teamValues, "#94A3B8", 4)}
-  ${getPolyline(subjectValues, "#2563EB", 5)}
-
-  <circle cx="${chartLeft + 4}" cy="26" r="6" fill="#2563EB" />
-  <text x="${chartLeft + 18}" y="30" font-size="13" fill="#334155">Selected Scope</text>
-  <circle cx="${chartLeft + 150}" cy="26" r="6" fill="#94A3B8" />
-  <text x="${chartLeft + 164}" y="30" font-size="13" fill="#334155">Team Average</text>
-
-  ${xLabels}
-</svg>`;
-}
-
-function svgToPngBlob(svgMarkup: string, width: number, height: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const svgBlob = new Blob([svgMarkup], {
-      type: 'image/svg+xml;charset=utf-8;',
-    });
-    const svgUrl = URL.createObjectURL(svgBlob);
-    const image = new Image();
-
-    image.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const context = canvas.getContext('2d');
-
-        if (!context) {
-          URL.revokeObjectURL(svgUrl);
-          reject(new Error('Canvas context is unavailable.'));
-          return;
-        }
-
-        context.fillStyle = '#FFFFFF';
-        context.fillRect(0, 0, width, height);
-        context.drawImage(image, 0, 0, width, height);
-
-        canvas.toBlob((blob) => {
-          URL.revokeObjectURL(svgUrl);
-
-          if (!blob) {
-            reject(new Error('Unable to create chart PNG.'));
-            return;
-          }
-
-          resolve(blob);
-        }, 'image/png');
-      } catch (error) {
-        URL.revokeObjectURL(svgUrl);
-        reject(error instanceof Error ? error : new Error('Unable to draw chart PNG.'));
-      }
-    };
-
-    image.onerror = () => {
-      URL.revokeObjectURL(svgUrl);
-      reject(new Error('Unable to load chart SVG.'));
-    };
-
-    image.src = svgUrl;
-  });
-}
-
-function crc32(bytes: Uint8Array) {
-  let crc = 0 ^ -1;
-
-  for (let i = 0; i < bytes.length; i += 1) {
-    crc ^= bytes[i];
-    for (let j = 0; j < 8; j += 1) {
-      const mask = -(crc & 1);
-      crc = (crc >>> 1) ^ (0xedb88320 & mask);
-    }
-  }
-
-  return (crc ^ -1) >>> 0;
-}
-
-function toZipArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(
-    bytes.byteOffset,
-    bytes.byteOffset + bytes.byteLength
-  ) as ArrayBuffer;
-}
-
-function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
-  const nameEncoder = new TextEncoder();
-  const localParts: ArrayBuffer[] = [];
-  const centralParts: ArrayBuffer[] = [];
-  let offset = 0;
-
-  entries.forEach((entry) => {
-    const nameBytes = nameEncoder.encode(entry.name);
-    const data = entry.data;
-    const checksum = crc32(data);
-
-    const localHeader = new Uint8Array(30 + nameBytes.length);
-    const localView = new DataView(localHeader.buffer);
-    localView.setUint32(0, 0x04034b50, true);
-    localView.setUint16(4, 20, true);
-    localView.setUint16(6, 0, true);
-    localView.setUint16(8, 0, true);
-    localView.setUint16(10, 0, true);
-    localView.setUint16(12, 0, true);
-    localView.setUint32(14, checksum, true);
-    localView.setUint32(18, data.length, true);
-    localView.setUint32(22, data.length, true);
-    localView.setUint16(26, nameBytes.length, true);
-    localView.setUint16(28, 0, true);
-    localHeader.set(nameBytes, 30);
-
-    localParts.push(toZipArrayBuffer(localHeader), toZipArrayBuffer(data));
-
-    const centralHeader = new Uint8Array(46 + nameBytes.length);
-    const centralView = new DataView(centralHeader.buffer);
-    centralView.setUint32(0, 0x02014b50, true);
-    centralView.setUint16(4, 20, true);
-    centralView.setUint16(6, 20, true);
-    centralView.setUint16(8, 0, true);
-    centralView.setUint16(10, 0, true);
-    centralView.setUint16(12, 0, true);
-    centralView.setUint16(14, 0, true);
-    centralView.setUint32(16, checksum, true);
-    centralView.setUint32(20, data.length, true);
-    centralView.setUint32(24, data.length, true);
-    centralView.setUint16(28, nameBytes.length, true);
-    centralView.setUint16(30, 0, true);
-    centralView.setUint16(32, 0, true);
-    centralView.setUint16(34, 0, true);
-    centralView.setUint16(36, 0, true);
-    centralView.setUint32(38, 0, true);
-    centralView.setUint32(42, offset, true);
-    centralHeader.set(nameBytes, 46);
-
-    centralParts.push(toZipArrayBuffer(centralHeader));
-    offset += localHeader.length + data.length;
-  });
-
-  const centralDirectoryOffset = offset;
-  const centralDirectorySize = centralParts.reduce(
-    (sum, part) => sum + part.byteLength,
-    0
-  );
-
-  const endRecord = new Uint8Array(22);
-  const endView = new DataView(endRecord.buffer);
-  endView.setUint32(0, 0x06054b50, true);
-  endView.setUint16(4, 0, true);
-  endView.setUint16(6, 0, true);
-  endView.setUint16(8, entries.length, true);
-  endView.setUint16(10, entries.length, true);
-  endView.setUint32(12, centralDirectorySize, true);
-  endView.setUint32(16, centralDirectoryOffset, true);
-  endView.setUint16(20, 0, true);
-
-  return new Blob([...localParts, ...centralParts, toZipArrayBuffer(endRecord)], {
-    type: 'application/zip',
-  });
-}
-
-async function downloadTrendExportPackage(params: {
-  baseFilename: string;
-  workbookXml: string;
-  chartSvg: string;
-  chartPngBlob: Blob;
-}) {
-  const { baseFilename, workbookXml, chartSvg, chartPngBlob } = params;
-  const encoder = new TextEncoder();
-  const workbookName = `${baseFilename}.xls`;
-  const chartSvgName = `${baseFilename}_chart.svg`;
-  const chartPngName = `${baseFilename}_chart.png`;
-  const readmeName = `${baseFilename}_README.txt`;
-
-  const readmeText = [
-    'Performance Trends export package',
-    '',
-    `Workbook: ${workbookName}`,
-    `Chart PNG: ${chartPngName}`,
-    `Chart SVG: ${chartSvgName}`,
-    '',
-    'The workbook contains the Overview, Chart Data, Trend Breakdown, Recurring Issues, Procedure Hotspots, and Procedure Cases sheets.',
-    'The chart image matches the line chart shown on the Performance Trends panel at export time.',
-  ].join('\\n');
-
-  const zipBlob = createZipBlob([
-    { name: workbookName, data: encoder.encode(workbookXml) },
-    { name: chartSvgName, data: encoder.encode(chartSvg) },
-    { name: chartPngName, data: new Uint8Array(await chartPngBlob.arrayBuffer()) },
-    { name: readmeName, data: encoder.encode(readmeText) },
-  ]);
-
-  downloadBlob(`${baseFilename}.zip`, zipBlob);
-}
-
 function getMomentumLabel(value: number | null) {
   if (value == null) return 'Not enough data';
   if (value >= 2) return 'Rising';
@@ -2497,7 +1637,7 @@ const pageHeaderStyle = {
 };
 
 const sectionEyebrow = {
-  color: 'var(--screen-accent)',
+  color: '#60a5fa',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.18em',
@@ -2506,12 +1646,12 @@ const sectionEyebrow = {
 };
 
 const filterPanelStyle = {
-  background: 'var(--screen-panel-bg)',
-  border: '1px solid var(--screen-border)',
+  background:
+    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+  border: '1px solid rgba(148,163,184,0.14)',
   borderRadius: '20px',
   padding: '20px',
   marginBottom: '22px',
-  boxShadow: 'var(--screen-shadow)',
 };
 
 const filterGridStyle = {
@@ -2523,7 +1663,7 @@ const filterGridStyle = {
 const labelStyle = {
   display: 'block',
   marginBottom: '8px',
-  color: 'var(--screen-muted)',
+  color: '#cbd5e1',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -2532,23 +1672,23 @@ const fieldStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-field-text)',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  background: 'rgba(15,23,42,0.7)',
+  color: 'var(--screen-text, #1f2937)',
 };
 
 const pickerButtonStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  background: 'rgba(15,23,42,0.7)',
   textAlign: 'left' as const,
   cursor: 'pointer',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  color: 'var(--screen-field-text)',
+  color: 'var(--screen-text, #1f2937)',
 };
 
 const pickerMenuStyle = {
@@ -2556,10 +1696,10 @@ const pickerMenuStyle = {
   top: 'calc(100% + 8px)',
   left: 0,
   right: 0,
-  background: 'var(--screen-menu-bg)',
-  border: '1px solid var(--screen-border-strong)',
+  background: 'rgba(15,23,42,0.96)',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
   borderRadius: '16px',
-  boxShadow: 'var(--screen-shadow)',
+  boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
   zIndex: 20,
   overflow: 'hidden',
 };
@@ -2575,19 +1715,19 @@ const pickerListStyle = {
 const pickerInfoStyle = {
   padding: '12px',
   borderRadius: '8px',
-  backgroundColor: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-muted)',
+  backgroundColor: 'var(--screen-card-bg, rgba(255,255,255,0.995))',
+  color: 'var(--screen-muted, #475569)',
 };
 
 const pickerOptionStyle = {
   padding: '12px',
   borderRadius: '8px',
-  border: '1px solid var(--screen-border)',
-  backgroundColor: 'var(--screen-card-soft-bg)',
+  border: '1px solid rgba(148,163,184,0.12)',
+  backgroundColor: 'var(--screen-card-soft-bg, rgba(255,255,255,0.99))',
   textAlign: 'left' as const,
   cursor: 'pointer',
   fontWeight: 500,
-  color: 'var(--screen-text)',
+  color: 'var(--screen-text, #1f2937)',
 };
 
 const pickerOptionActiveStyle = {
@@ -2612,7 +1752,7 @@ const buttonRowStyle = {
 const primaryButton = {
   padding: '10px 14px',
   background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: 'white',
+  color: 'var(--screen-secondary-btn-text, #334155)',
   border: 'none',
   borderRadius: '10px',
   cursor: 'pointer',
@@ -2621,15 +1761,39 @@ const primaryButton = {
 
 const secondaryButton = {
   padding: '10px 14px',
-  backgroundColor: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  border: '1px solid var(--screen-border-strong)',
+  backgroundColor: 'var(--screen-secondary-btn-bg, rgba(255,255,255,0.99))',
+  color: 'var(--screen-secondary-btn-text, #334155)',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
   borderRadius: '10px',
   cursor: 'pointer',
   fontWeight: 700,
 };
 
+
+const reportSectionShellStyle = {
+  marginTop: '35px',
+  borderRadius: '24px',
+  padding: '18px',
+  background: 'var(--screen-panel-bg, linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%))',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  boxShadow: 'var(--screen-shadow, 0 16px 36px rgba(15,23,42,0.08))',
+};
+
+const reportSectionHeaderWrapStyle = {
+  marginBottom: '14px',
+};
+
+const reportSectionEyebrowStyle = {
+  color: 'var(--screen-accent, #2563eb)',
+  fontSize: '11px',
+  fontWeight: 800,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase' as const,
+  marginBottom: '8px',
+};
+
 const summaryGridStyle = {
+
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
   gap: '16px',
@@ -2638,28 +1802,29 @@ const summaryGridStyle = {
 };
 
 const summaryCardStyle = {
-  background: 'var(--screen-card-bg)',
-  border: '1px solid var(--screen-border)',
-  borderRadius: '16px',
+  background: 'var(--screen-card-bg, linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%))',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  borderRadius: '18px',
   padding: '20px',
-  boxShadow: 'var(--screen-shadow)',
+  boxShadow: 'var(--screen-shadow, 0 12px 28px rgba(15,23,42,0.08))',
 };
 
 const summaryCardTitleStyle = {
   fontSize: '14px',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   marginBottom: '8px',
 };
 
 const summaryCardValueStyle = {
   fontSize: '28px',
   fontWeight: 800,
-  color: 'var(--screen-heading)',
+  color: '#f8fafc',
 };
 
 const sectionTitleStyle = {
-  color: 'var(--screen-heading)',
-  marginBottom: '14px',
+  color: 'var(--screen-heading, #081225)',
+  marginBottom: '0',
+  fontSize: '22px',
 };
 
 const detailGridStyle = {
@@ -2670,16 +1835,16 @@ const detailGridStyle = {
 };
 
 const detailCardStyle = {
-  background: 'var(--screen-card-bg)',
-  border: '1px solid var(--screen-border)',
-  borderRadius: '16px',
+  background: 'var(--screen-card-bg, linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%))',
+  border: '1px solid var(--screen-border, rgba(203,213,225,0.94))',
+  borderRadius: '18px',
   padding: '18px',
-  color: 'var(--screen-text)',
-  boxShadow: 'var(--screen-shadow)',
+  color: 'var(--screen-text, #1f2937)',
+  boxShadow: 'var(--screen-shadow, 0 12px 28px rgba(15,23,42,0.08))',
 };
 
 const detailLabelStyle = {
-  color: 'var(--screen-accent)',
+  color: '#93c5fd',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.12em',
@@ -2687,6 +1852,14 @@ const detailLabelStyle = {
   marginBottom: '12px',
 };
 
+const contentCardStyle = {
+  background:
+    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+  border: '1px solid rgba(148,163,184,0.14)',
+  borderRadius: '16px',
+  padding: '18px',
+  color: 'var(--screen-text, #1f2937)',
+};
 
 const trendHeaderRowStyle = {
   display: 'flex',
@@ -2698,13 +1871,13 @@ const trendHeaderRowStyle = {
 
 const trendTitleStyle = {
   margin: '8px 0 6px 0',
-  color: 'var(--screen-heading)',
+  color: '#f8fafc',
   fontSize: '24px',
 };
 
 const trendSubtitleStyle = {
   margin: 0,
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
 };
 
 const trendToggleWrapStyle = {
@@ -2712,14 +1885,14 @@ const trendToggleWrapStyle = {
   gap: '8px',
   padding: '6px',
   borderRadius: '18px',
-  background: 'var(--screen-card-soft-bg)',
-  border: '1px solid var(--screen-border)',
+  background: 'rgba(15,23,42,0.52)',
+  border: '1px solid rgba(148,163,184,0.14)',
 };
 
 const trendToggleButtonStyle = {
   border: 'none',
   background: 'transparent',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   padding: '10px 14px',
   borderRadius: '12px',
   fontWeight: 800,
@@ -2728,70 +1901,24 @@ const trendToggleButtonStyle = {
 
 const trendToggleButtonActiveStyle = {
   background: 'rgba(37,99,235,0.16)',
-  color: 'var(--screen-heading)',
+  color: '#f8fafc',
 };
 
 const trendHelperTextStyle = {
   marginTop: '-12px',
   marginBottom: '18px',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '13px',
   lineHeight: 1.6,
-};
-
-const trendActionsWrapStyle = {
-  display: 'flex',
-  gap: '10px',
-  alignItems: 'center',
-  flexWrap: 'wrap' as const,
-};
-
-const trendProcedureGridStyle = {
-  marginTop: '18px',
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
-  gap: '14px',
-};
-
-const procedureHotspotRowStyle = {
-  display: 'grid',
-  gridTemplateColumns: '1.4fr 0.6fr 0.8fr 0.6fr 0.7fr',
-  gap: '12px',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-text)',
-  alignItems: 'center',
-};
-
-const procedureCasesWrapStyle = {
-  maxHeight: '360px',
-  overflowY: 'auto' as const,
-  borderRadius: '16px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-};
-
-const procedureCasesTableStyle = {
-  minWidth: '100%',
-};
-
-const procedureCasesRowStyle = {
-  display: 'grid',
-  gridTemplateColumns: '0.9fr 1.2fr 0.7fr 1.1fr 0.9fr 0.8fr',
-  gap: '12px',
-  padding: '12px 14px',
-  borderBottom: '1px solid var(--screen-border)',
-  alignItems: 'center',
-  color: 'var(--screen-text)',
 };
 
 const trendChartShellStyle = {
   marginTop: '18px',
   borderRadius: '22px',
   padding: '18px',
-  background: 'var(--screen-card-bg)',
-  border: '1px solid var(--screen-border)',
+  background:
+    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+  border: '1px solid rgba(148,163,184,0.14)',
 };
 
 const trendChartSvgStyle = {
@@ -2816,7 +1943,7 @@ const trendLegendItemStyle = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '8px',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -2836,7 +1963,7 @@ const trendChartLabelsStyle = {
 };
 
 const trendChartLabelStyle = {
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '12px',
   textAlign: 'center' as const,
 };
@@ -2854,13 +1981,13 @@ const trendTableRowStyle = {
   gap: '12px',
   padding: '12px 14px',
   borderRadius: '14px',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-text)',
+  background: 'rgba(15,23,42,0.52)',
+  color: 'var(--screen-text, #1f2937)',
   alignItems: 'center',
 };
 
 const trendTableHeaderStyle = {
-  color: 'var(--screen-accent)',
+  color: '#93c5fd',
   textTransform: 'uppercase' as const,
   letterSpacing: '0.1em',
   fontWeight: 800,
@@ -2870,8 +1997,8 @@ const trendTableHeaderStyle = {
 const trendIssueCardStyle = {
   padding: '14px',
   borderRadius: '16px',
-  background: 'var(--screen-card-soft-bg)',
-  border: '1px solid var(--screen-border)',
+  background: 'rgba(15,23,42,0.52)',
+  border: '1px solid rgba(148,163,184,0.14)',
 };
 
 const trendIssueHeaderStyle = {
@@ -2882,7 +2009,7 @@ const trendIssueHeaderStyle = {
 };
 
 const trendIssueMetricStyle = {
-  color: 'var(--screen-heading)',
+  color: '#f8fafc',
   fontWeight: 800,
 };
 
@@ -2895,13 +2022,13 @@ const trendIssueCountPillStyle = {
   alignItems: 'center',
   justifyContent: 'center',
   background: 'rgba(37,99,235,0.16)',
-  color: 'var(--screen-heading)',
+  color: '#f8fafc',
   fontWeight: 900,
 };
 
 const trendIssueMetaStyle = {
   marginTop: '8px',
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '13px',
 };
 
@@ -2922,175 +2049,9 @@ const trendIssueBarFillStyle = {
 };
 
 const trendEmptyStateStyle = {
-  color: 'var(--screen-muted)',
+  color: 'var(--screen-muted, #475569)',
   fontSize: '14px',
   lineHeight: 1.6,
-};
-
-const thinTableWrapStyle = {
-  maxHeight: '340px',
-  overflowY: 'auto' as const,
-  borderRadius: '18px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-bg)',
-  boxShadow: 'var(--screen-shadow)',
-};
-
-const thinTableStyle = {
-  minWidth: '100%',
-};
-
-const thinRowStyle = {
-  display: 'grid',
-  gap: '12px',
-  padding: '12px 16px',
-  alignItems: 'center',
-  borderBottom: '1px solid var(--screen-border)',
-  color: 'var(--screen-text)',
-  background: 'transparent',
-};
-
-const thinHeaderRowStyle = {
-  position: 'sticky' as const,
-  top: 0,
-  zIndex: 2,
-  background: 'var(--screen-table-head-bg)',
-  color: 'var(--screen-accent)',
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.08em',
-  fontWeight: 800,
-  fontSize: '12px',
-};
-
-const thinPrimaryTextStyle = {
-  color: 'var(--screen-heading)',
-  fontWeight: 700,
-  fontSize: '13px',
-  lineHeight: 1.35,
-};
-
-const thinSecondaryTextStyle = {
-  color: 'var(--screen-muted)',
-  fontSize: '12px',
-  marginTop: '3px',
-  lineHeight: 1.35,
-};
-
-const pillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '28px',
-  padding: '0 10px',
-  borderRadius: '999px',
-  background: 'var(--screen-pill-bg)',
-  border: '1px solid var(--screen-border)',
-  color: 'var(--screen-heading)',
-  fontSize: '12px',
-  fontWeight: 800,
-};
-
-const scorePillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '30px',
-  padding: '0 12px',
-  borderRadius: '999px',
-  background: 'var(--screen-score-pill-bg)',
-  border: '1px solid var(--screen-score-pill-border)',
-  color: 'var(--screen-heading)',
-  fontSize: '12px',
-  fontWeight: 900,
-};
-
-const recentAuditsRowGridStyle = {
-  ...thinRowStyle,
-  gridTemplateColumns: '1.05fr 1.35fr 1.05fr 1.8fr 0.7fr',
-};
-
-const recentRequestsRowGridStyle = {
-  ...thinRowStyle,
-  gridTemplateColumns: '0.9fr 1.2fr 1.3fr 0.8fr 0.8fr',
-};
-
-const recentFeedbackRowGridStyle = {
-  ...thinRowStyle,
-  gridTemplateColumns: '0.9fr 1.25fr 0.9fr 1.6fr 0.8fr',
-};
-
-const recentAuditDateCellStyle = {
-  minWidth: 0,
-};
-
-const recentAuditAgentCellStyle = {
-  minWidth: 0,
-};
-
-const recentAuditCaseCellStyle = {
-  minWidth: 0,
-};
-
-const recentAuditReferenceCellStyle = {
-  minWidth: 0,
-};
-
-const recentAuditScoreCellStyle = {
-  minWidth: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const recentRequestDateCellStyle = {
-  minWidth: 0,
-};
-
-const recentRequestCaseRefCellStyle = {
-  minWidth: 0,
-};
-
-const recentRequestAgentCellStyle = {
-  minWidth: 0,
-};
-
-const recentRequestPriorityCellStyle = {
-  minWidth: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const recentRequestStatusCellStyle = {
-  minWidth: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const recentFeedbackDateCellStyle = {
-  minWidth: 0,
-};
-
-const recentFeedbackAgentCellStyle = {
-  minWidth: 0,
-};
-
-const recentFeedbackTypeCellStyle = {
-  minWidth: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const recentFeedbackSubjectCellStyle = {
-  minWidth: 0,
-};
-
-const recentFeedbackStatusCellStyle = {
-  minWidth: 0,
-  display: 'flex',
-  alignItems: 'center',
-};
-
-const emptyMessageStyle = {
-  color: 'var(--screen-muted)',
 };
 
 export default ReportsSupabase;

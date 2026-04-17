@@ -43,6 +43,10 @@ const ROUTES = {
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
 
+function getActiveRouteLabel(pathname: string, items: Array<{ path: RoutePath; label: string }>) {
+  return items.find((item) => item.path === pathname)?.label || 'Workspace';
+}
+
 function buildNavItems(profile: UserProfile) {
   const isAdmin = profile.role === 'admin';
   const isStaff = isAdmin || profile.role === 'qa';
@@ -232,6 +236,7 @@ function AppShell() {
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
   const navItems = buildNavItems(profile);
+  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
@@ -262,6 +267,7 @@ function AppShell() {
             </div>
             <div style={styles.metaStrip}>
               <div style={styles.metaPill}>Role: {profile.role}</div>
+              <div style={styles.metaPill}>Workspace: {activeRouteLabel}</div>
               <div style={styles.metaPill}>User: {profileLabel}</div>
               <div style={styles.metaPill}>Email: {profile.email}</div>
             </div>
@@ -313,6 +319,10 @@ function AppShell() {
                   <p style={styles.sidebarText}>
                     Jump between operations, audits, uploads, reports, and people workflows.
                   </p>
+                  <div style={styles.metaStrip}>
+                    <div style={styles.metaPill}>Active View: {activeRouteLabel}</div>
+                    <div style={styles.metaPill}>{navItems.length} tools</div>
+                  </div>
                   {navItems.map((item) => (
                     <button
                       key={item.path}
