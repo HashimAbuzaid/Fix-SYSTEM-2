@@ -2340,14 +2340,21 @@ function crc32(bytes: Uint8Array) {
   return (crc ^ -1) >>> 0;
 }
 
+function toZipArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength
+  ) as ArrayBuffer;
+}
+
 function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
-  const encoder = new TextEncoder();
-  const localParts: Uint8Array[] = [];
-  const centralParts: Uint8Array[] = [];
+  const nameEncoder = new TextEncoder();
+  const localParts: ArrayBuffer[] = [];
+  const centralParts: ArrayBuffer[] = [];
   let offset = 0;
 
   entries.forEach((entry) => {
-    const nameBytes = encoder.encode(entry.name);
+    const nameBytes = nameEncoder.encode(entry.name);
     const data = entry.data;
     const checksum = crc32(data);
 
@@ -2366,7 +2373,7 @@ function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
     localView.setUint16(28, 0, true);
     localHeader.set(nameBytes, 30);
 
-    localParts.push(localHeader, data);
+    localParts.push(toZipArrayBuffer(localHeader), toZipArrayBuffer(data));
 
     const centralHeader = new Uint8Array(46 + nameBytes.length);
     const centralView = new DataView(centralHeader.buffer);
@@ -2389,12 +2396,15 @@ function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
     centralView.setUint32(42, offset, true);
     centralHeader.set(nameBytes, 46);
 
-    centralParts.push(centralHeader);
+    centralParts.push(toZipArrayBuffer(centralHeader));
     offset += localHeader.length + data.length;
   });
 
   const centralDirectoryOffset = offset;
-  const centralDirectorySize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const centralDirectorySize = centralParts.reduce(
+    (sum, part) => sum + part.byteLength,
+    0
+  );
 
   const endRecord = new Uint8Array(22);
   const endView = new DataView(endRecord.buffer);
@@ -2407,7 +2417,7 @@ function createZipBlob(entries: Array<{ name: string; data: Uint8Array }>) {
   endView.setUint32(16, centralDirectoryOffset, true);
   endView.setUint16(20, 0, true);
 
-  return new Blob([...localParts, ...centralParts, endRecord], {
+  return new Blob([...localParts, ...centralParts, toZipArrayBuffer(endRecord)], {
     type: 'application/zip',
   });
 }
