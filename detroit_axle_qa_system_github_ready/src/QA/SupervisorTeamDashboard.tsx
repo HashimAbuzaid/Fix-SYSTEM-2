@@ -141,13 +141,6 @@ type RiskFlagRow = {
   activeMonitoring: number;
 };
 
-type ProcedureHotspot = {
-  caseType: string;
-  count: number;
-  borderlineCount: number;
-  failCount: number;
-  autoFailCount: number;
-};
 
 type Props = {
   currentTeam: TeamName;
@@ -192,15 +185,6 @@ function getAgentLabel(profile: AgentProfile) {
     : `${profile.agent_name} - ${profile.agent_id || '-'}`;
 }
 
-function getAuditAgentLabel(audit: AuditItem, profiles: AgentProfile[]) {
-  const key = buildAgentKey(audit.agent_id, audit.agent_name);
-  const profile = profiles.find(
-    (item) => buildAgentKey(item.agent_id, item.agent_name) === key
-  );
-
-  return profile ? getAgentLabel(profile) : `${audit.agent_name} - ${audit.agent_id || '-'}`;
-}
-
 function getTodayStart() {
   const today = new Date();
   return new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -225,11 +209,6 @@ function roundScore(value: number | null) {
   return Number(value.toFixed(2));
 }
 
-function getResultTone(result: string) {
-  if (result === 'Auto-Fail' || result === 'Fail') return 'var(--sd-critical-bg, rgba(220,38,38,0.16))';
-  if (result === 'Borderline') return 'var(--sd-warning-bg, rgba(245,158,11,0.16))';
-  return 'var(--sd-good-bg, rgba(22,163,74,0.16))';
-}
 
 function getMetricLabel(detail: ScoreDetail) {
   return String(detail.metric || '').trim() || 'Unknown';
@@ -655,35 +634,35 @@ export default function SupervisorTeamDashboard({
   }, [teamAgents, agentAuditMap, agentFeedbackMap, agentMonitoringMap, agentWorkloadMap]);
 
   const overdueCoaching = useMemo<OverdueCoachingRow[]>(() => {
-    return currentTeamFeedback
-      .map((item) => {
-        if (item.status === 'Closed') return null;
-        const parsed = parseCoachingPlan(item.action_plan);
-        const daysOverdue = getDaysOverdue(item.due_date);
-        const needsSupervisorReview =
-          parsed.reviewStage === 'Agent Responded' &&
-          !parsed.supervisorReview.trim();
+    return currentTeamFeedback.flatMap((item) => {
+      if (item.status === 'Closed') return [];
 
-        if ((daysOverdue == null || daysOverdue <= 0) && !needsSupervisorReview) {
-          return null;
-        }
+      const parsed = parseCoachingPlan(item.action_plan);
+      const daysOverdue = getDaysOverdue(item.due_date);
+      const needsSupervisorReview =
+        parsed.reviewStage === 'Agent Responded' &&
+        !parsed.supervisorReview.trim();
 
-        return {
-          id: item.id,
-          label: getFeedbackAgentLabel(item, teamAgents),
-          subject: item.subject,
-          dueDate: item.due_date,
-          daysOverdue: Math.max(daysOverdue || 0, needsSupervisorReview ? 1 : 0),
-          reviewStage: parsed.reviewStage,
-          status: item.status,
-          acknowledged: Boolean(item.acknowledged_by_agent),
-        } satisfies OverdueCoachingRow;
-      })
-      .filter((item): item is OverdueCoachingRow => item !== null)
-      .sort((a, b) => {
-        if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
-        return a.label.localeCompare(b.label);
-      });
+      if ((daysOverdue == null || daysOverdue <= 0) && !needsSupervisorReview) {
+        return [];
+      }
+
+      const row: OverdueCoachingRow = {
+        id: item.id,
+        label: getFeedbackAgentLabel(item, teamAgents),
+        subject: item.subject,
+        dueDate: item.due_date,
+        daysOverdue: Math.max(daysOverdue || 0, needsSupervisorReview ? 1 : 0),
+        reviewStage: parsed.reviewStage,
+        status: item.status,
+        acknowledged: Boolean(item.acknowledged_by_agent),
+      };
+
+      return [row];
+    }).sort((a, b) => {
+      if (b.daysOverdue !== a.daysOverdue) return b.daysOverdue - a.daysOverdue;
+      return a.label.localeCompare(b.label);
+    });
   }, [currentTeamFeedback, teamAgents]);
 
   const riskFlags = useMemo<RiskFlagRow[]>(() => {
@@ -1377,35 +1356,9 @@ const reasonPillStyle: CSSProperties = {
   fontWeight: 700,
 };
 
-const procedureCasesWrapStyle: CSSProperties = {
-  overflowX: 'auto',
-  borderRadius: '16px',
-  border: '1px solid rgba(148,163,184,0.12)',
-  background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
-};
 
-const procedureCasesTableStyle: CSSProperties = {
-  minWidth: '840px',
-};
 
-const procedureCasesRowStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '110px 1.25fr 0.7fr 1fr 0.8fr 0.75fr',
-  gap: '12px',
-  alignItems: 'center',
-  padding: '12px 14px',
-  borderBottom: '1px solid rgba(148,163,184,0.08)',
-};
 
-const procedureHotspotRowStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1.5fr 0.7fr 0.8fr 0.7fr 0.8fr',
-  gap: '12px',
-  alignItems: 'center',
-  padding: '12px 14px',
-  borderRadius: '12px',
-  background: 'var(--da-surface-bg, rgba(15,23,42,0.62))',
-};
 
 const progressTrackStyle: CSSProperties = {
   marginTop: '10px',
