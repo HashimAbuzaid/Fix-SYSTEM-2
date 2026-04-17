@@ -113,6 +113,25 @@ type RecurringIssue = {
   autoFailCount: number;
 };
 
+type ProcedureHotspot = {
+  caseType: string;
+  count: number;
+  borderlineCount: number;
+  failCount: number;
+  autoFailCount: number;
+};
+
+type ProcedureCaseItem = {
+  id: string;
+  auditDate: string;
+  agentName: string;
+  team: TeamName | string;
+  caseType: string;
+  qualityScore: number;
+  procedureResult: string;
+  metricComment: string | null;
+};
+
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
 
 
@@ -1155,6 +1174,14 @@ function PerformanceTrendsSection({
     return buildRecurringIssues(audits);
   }, [audits]);
 
+  const procedureHotspots = useMemo(() => {
+    return buildProcedureHotspots(audits);
+  }, [audits]);
+
+  const procedureCases = useMemo(() => {
+    return buildProcedureFlaggedCases(audits);
+  }, [audits]);
+
   const latestAverage =
     trendPoints.length > 0
       ? trendPoints[trendPoints.length - 1].subjectAverage
@@ -1193,6 +1220,32 @@ function PerformanceTrendsSection({
     (sum, issue) => sum + issue.count,
     0
   );
+  const procedureTotal = procedureCases.length;
+  const topProcedureCaseType = procedureHotspots[0]?.caseType || 'None';
+
+  function handleExportTrendWorkbook() {
+    const workbookXml = buildPerformanceTrendWorkbookXml({
+      subjectLabel,
+      periodMode,
+      latestAverage,
+      momentumDelta,
+      teamGap,
+      strongestIssue,
+      procedureTotal,
+      topProcedureCaseType,
+      trendPoints,
+      recurringIssues,
+      procedureHotspots,
+      procedureCases,
+    });
+
+    downloadExcelWorkbook(
+      `performance_trends_${sanitizeFilePart(subjectLabel)}_${periodMode}_${new Date()
+        .toISOString()
+        .slice(0, 10)}.xls`,
+      workbookXml
+    );
+  }
 
   return (
     <Section title="Performance Trends">
@@ -1200,35 +1253,45 @@ function PerformanceTrendsSection({
         <div>
           <div style={detailLabelStyle}>Trend Layer</div>
           <h3 style={trendTitleStyle}>
-            Quality movement, team baseline, and recurring issues
+            Quality movement, team baseline, recurring issues, and procedure risk
           </h3>
           <p style={trendSubtitleStyle}>
             Selected scope: <strong>{subjectLabel}</strong>
           </p>
         </div>
 
-        <div style={trendToggleWrapStyle}>
+        <div style={trendActionsWrapStyle}>
+          <div style={trendToggleWrapStyle}>
+            <button
+              type="button"
+              onClick={() => setPeriodMode('weekly')}
+              style={{
+                ...trendToggleButtonStyle,
+                ...(periodMode === 'weekly' ? trendToggleButtonActiveStyle : {}),
+              }}
+            >
+              Weekly
+            </button>
+            <button
+              type="button"
+              onClick={() => setPeriodMode('monthly')}
+              style={{
+                ...trendToggleButtonStyle,
+                ...(periodMode === 'monthly'
+                  ? trendToggleButtonActiveStyle
+                  : {}),
+              }}
+            >
+              Monthly
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setPeriodMode('weekly')}
-            style={{
-              ...trendToggleButtonStyle,
-              ...(periodMode === 'weekly' ? trendToggleButtonActiveStyle : {}),
-            }}
+            onClick={handleExportTrendWorkbook}
+            style={primaryButton}
           >
-            Weekly
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeriodMode('monthly')}
-            style={{
-              ...trendToggleButtonStyle,
-              ...(periodMode === 'monthly'
-                ? trendToggleButtonActiveStyle
-                : {}),
-            }}
-          >
-            Monthly
+            Export Trends Excel
           </button>
         </div>
       </div>
@@ -1252,6 +1315,10 @@ function PerformanceTrendsSection({
           title="Top Recurring Issue"
           value={strongestIssue}
         />
+        <SummaryCard
+          title="Procedure Flags"
+          value={procedureTotal ? String(procedureTotal) : '-'}
+        />
       </div>
 
       <div style={trendHelperTextStyle}>
@@ -1260,7 +1327,7 @@ function PerformanceTrendsSection({
               2
             )} pts vs prior period`
           : 'Need at least 2 periods for momentum'}{' '}
-        • {totalIssueTouches} total issue hits in selection
+        • {totalIssueTouches} total issue hits in selection • Procedure hotspot: {topProcedureCaseType}
       </div>
 
       <MiniTrendChart points={trendPoints} />
@@ -1336,6 +1403,66 @@ function PerformanceTrendsSection({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={trendProcedureGridStyle}>
+        <div style={detailCardStyle}>
+          <div style={detailLabelStyle}>Procedure Hotspots by Case Type</div>
+          {procedureHotspots.length === 0 ? (
+            <p>No procedure Borderline / Fail cases in this range.</p>
+          ) : (
+            <div style={{ display: 'grid', gap: '8px' }}>
+              <div style={{ ...procedureHotspotRowStyle, ...trendTableHeaderStyle }}>
+                <div>Case Type</div>
+                <div>Total</div>
+                <div>Borderline</div>
+                <div>Fail</div>
+                <div>Auto-Fail</div>
+              </div>
+
+              {procedureHotspots.slice(0, 8).map((item) => (
+                <div key={item.caseType} style={procedureHotspotRowStyle}>
+                  <div>{item.caseType}</div>
+                  <div>{item.count}</div>
+                  <div>{item.borderlineCount}</div>
+                  <div>{item.failCount}</div>
+                  <div>{item.autoFailCount}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={detailCardStyle}>
+          <div style={detailLabelStyle}>Recent Procedure Borderline / Fail Cases</div>
+          {procedureCases.length === 0 ? (
+            <p>No procedure-flagged cases in this range.</p>
+          ) : (
+            <div style={procedureCasesWrapStyle}>
+              <div style={procedureCasesTableStyle}>
+                <div style={{ ...procedureCasesRowStyle, ...thinHeaderRowStyle }}>
+                  <div>Date</div>
+                  <div>Agent</div>
+                  <div>Team</div>
+                  <div>Case Type</div>
+                  <div>Procedure</div>
+                  <div>Quality</div>
+                </div>
+
+                {procedureCases.slice(0, 16).map((item) => (
+                  <div key={item.id} style={procedureCasesRowStyle}>
+                    <div>{item.auditDate}</div>
+                    <div>{item.agentName}</div>
+                    <div>{item.team}</div>
+                    <div>{item.caseType}</div>
+                    <div>{item.procedureResult}</div>
+                    <div>{item.qualityScore.toFixed(2)}%</div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -1620,6 +1747,420 @@ function roundScore(value: number | null) {
   return Number(value.toFixed(2));
 }
 
+function getProcedureIssueDetail(audit: AuditItem) {
+  return (audit.score_details || []).find(
+    (detail) =>
+      String(detail.metric || '').trim() === 'Procedure' &&
+      ISSUE_RESULTS.has(String(detail.result || ''))
+  ) || null;
+}
+
+function buildProcedureHotspots(audits: AuditItem[]): ProcedureHotspot[] {
+  const counts = new Map<
+    string,
+    { count: number; borderlineCount: number; failCount: number; autoFailCount: number }
+  >();
+
+  audits.forEach((audit) => {
+    const detail = getProcedureIssueDetail(audit);
+    if (!detail) return;
+
+    const caseType = String(audit.case_type || 'Unknown').trim() || 'Unknown';
+    const current = counts.get(caseType) || {
+      count: 0,
+      borderlineCount: 0,
+      failCount: 0,
+      autoFailCount: 0,
+    };
+
+    current.count += 1;
+    if (detail.result === 'Borderline') current.borderlineCount += 1;
+    if (detail.result === 'Fail') current.failCount += 1;
+    if (detail.result === 'Auto-Fail') current.autoFailCount += 1;
+
+    counts.set(caseType, current);
+  });
+
+  return Array.from(counts.entries())
+    .map(([caseType, value]) => ({
+      caseType,
+      count: value.count,
+      borderlineCount: value.borderlineCount,
+      failCount: value.failCount,
+      autoFailCount: value.autoFailCount,
+    }))
+    .sort((a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      if (b.failCount !== a.failCount) return b.failCount - a.failCount;
+      if (b.borderlineCount !== a.borderlineCount) return b.borderlineCount - a.borderlineCount;
+      return a.caseType.localeCompare(b.caseType);
+    });
+}
+
+function buildProcedureFlaggedCases(audits: AuditItem[]): ProcedureCaseItem[] {
+  return audits
+    .map((audit) => {
+      const detail = getProcedureIssueDetail(audit);
+      if (!detail) return null;
+
+      return {
+        id: audit.id,
+        auditDate: audit.audit_date,
+        agentName: audit.agent_name,
+        team: audit.team,
+        caseType: audit.case_type,
+        qualityScore: Number(audit.quality_score),
+        procedureResult: detail.result,
+        metricComment: detail.metric_comment || null,
+      } satisfies ProcedureCaseItem;
+    })
+    .filter((item): item is ProcedureCaseItem => item !== null)
+    .sort((a, b) => {
+      const dateCompare = String(b.auditDate || '').localeCompare(String(a.auditDate || ''));
+      if (dateCompare !== 0) return dateCompare;
+      return a.agentName.localeCompare(b.agentName);
+    });
+}
+
+type ExcelCell = {
+  value: string | number | null;
+  type?: 'String' | 'Number';
+  styleId?: string;
+};
+
+type ExcelSheet = {
+  name: string;
+  columnWidths?: number[];
+  rows: ExcelCell[][];
+};
+
+function escapeExcelXml(value: string) {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function makeExcelCell(
+  value: string | number | null | undefined,
+  styleId = 'Body',
+  type?: 'String' | 'Number'
+): ExcelCell {
+  if (value == null || value === '') {
+    return { value: '', styleId, type: 'String' };
+  }
+
+  if (type) {
+    return { value, styleId, type };
+  }
+
+  return typeof value === 'number'
+    ? { value, styleId, type: 'Number' }
+    : { value: String(value), styleId, type: 'String' };
+}
+
+function buildExcelWorkbookXml(sheets: ExcelSheet[]) {
+  const stylesXml = `
+    <Styles>
+      <Style ss:ID="Default" ss:Name="Normal">
+        <Alignment ss:Vertical="Center"/>
+        <Borders/>
+        <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#1F2937"/>
+        <Interior/>
+        <NumberFormat/>
+        <Protection/>
+      </Style>
+      <Style ss:ID="Title">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="16" ss:Color="#0F172A"/>
+        <Interior ss:Color="#DBEAFE" ss:Pattern="Solid"/>
+        <Alignment ss:Horizontal="Left" ss:Vertical="Center"/>
+      </Style>
+      <Style ss:ID="Section">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Size="11" ss:Color="#1D4ED8"/>
+        <Interior ss:Color="#EFF6FF" ss:Pattern="Solid"/>
+      </Style>
+      <Style ss:ID="Header">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#FFFFFF"/>
+        <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+        <Interior ss:Color="#0F172A" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#CBD5E1"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Body">
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Number">
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+        </Borders>
+        <NumberFormat ss:Format="0.00"/>
+      </Style>
+      <Style ss:ID="Count">
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#E2E8F0"/>
+        </Borders>
+        <NumberFormat ss:Format="0"/>
+      </Style>
+      <Style ss:ID="Good">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#166534"/>
+        <Interior ss:Color="#DCFCE7" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#BBF7D0"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Warning">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#92400E"/>
+        <Interior ss:Color="#FEF3C7" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FDE68A"/>
+        </Borders>
+      </Style>
+      <Style ss:ID="Bad">
+        <Font ss:FontName="Calibri" ss:Bold="1" ss:Color="#991B1B"/>
+        <Interior ss:Color="#FEE2E2" ss:Pattern="Solid"/>
+        <Borders>
+          <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
+          <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
+          <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
+          <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#FCA5A5"/>
+        </Borders>
+      </Style>
+    </Styles>
+  `.trim();
+
+  const worksheetsXml = sheets
+    .map((sheet) => {
+      const columnsXml = (sheet.columnWidths || [])
+        .map((width) => `<Column ss:AutoFitWidth="0" ss:Width="${width}"/>`)
+        .join('');
+
+      const rowsXml = sheet.rows
+        .map((row) => {
+          const cellsXml = row
+            .map((cell) => {
+              const styleAttr = cell.styleId ? ` ss:StyleID="${cell.styleId}"` : '';
+              const type = cell.type || (typeof cell.value === 'number' ? 'Number' : 'String');
+              const value =
+                cell.value == null
+                  ? ''
+                  : type === 'Number'
+                  ? String(cell.value)
+                  : escapeExcelXml(String(cell.value));
+
+              return `<Cell${styleAttr}><Data ss:Type="${type}">${value}</Data></Cell>`;
+            })
+            .join('');
+
+          return `<Row>${cellsXml}</Row>`;
+        })
+        .join('');
+
+      return `
+        <Worksheet ss:Name="${escapeExcelXml(sheet.name.slice(0, 31))}">
+          <Table>
+            ${columnsXml}
+            ${rowsXml}
+          </Table>
+        </Worksheet>
+      `.trim();
+    })
+    .join('');
+
+  return `<?xml version="1.0"?>
+<Workbook
+  xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:x="urn:schemas-microsoft-com:office:excel"
+  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+  xmlns:html="http://www.w3.org/TR/REC-html40">
+  ${stylesXml}
+  ${worksheetsXml}
+</Workbook>`;
+}
+
+function downloadExcelWorkbook(filename: string, xml: string) {
+  const blob = new Blob([xml], {
+    type: 'application/vnd.ms-excel;charset=utf-8;',
+  });
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function sanitizeFilePart(value: string) {
+  return String(value || 'trends')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 50) || 'trends';
+}
+
+function getProcedureResultStyleId(result: string | null | undefined) {
+  if (result === 'Borderline') return 'Warning';
+  if (result === 'Fail' || result === 'Auto-Fail') return 'Bad';
+  return 'Body';
+}
+
+function buildPerformanceTrendWorkbookXml(params: {
+  subjectLabel: string;
+  periodMode: PeriodMode;
+  latestAverage: number | null;
+  momentumDelta: number | null;
+  teamGap: number | null;
+  strongestIssue: string;
+  procedureTotal: number;
+  topProcedureCaseType: string;
+  trendPoints: TrendPoint[];
+  recurringIssues: RecurringIssue[];
+  procedureHotspots: ProcedureHotspot[];
+  procedureCases: ProcedureCaseItem[];
+}) {
+  const {
+    subjectLabel,
+    periodMode,
+    latestAverage,
+    momentumDelta,
+    teamGap,
+    strongestIssue,
+    procedureTotal,
+    topProcedureCaseType,
+    trendPoints,
+    recurringIssues,
+    procedureHotspots,
+    procedureCases,
+  } = params;
+
+  return buildExcelWorkbookXml([
+    {
+      name: 'Overview',
+      columnWidths: [200, 200, 180, 180],
+      rows: [
+        [makeExcelCell('Performance Trends Export', 'Title')],
+        [makeExcelCell('Generated', 'Section'), makeExcelCell(new Date().toLocaleString(), 'Body')],
+        [makeExcelCell('Scope', 'Section'), makeExcelCell(subjectLabel, 'Body')],
+        [makeExcelCell('Period Mode', 'Section'), makeExcelCell(periodMode === 'weekly' ? 'Weekly' : 'Monthly', 'Body')],
+        [makeExcelCell('Current Average', 'Header'), makeExcelCell(latestAverage ?? '', latestAverage == null ? 'Body' : 'Number', latestAverage == null ? 'String' : 'Number')],
+        [makeExcelCell('Momentum (pts)', 'Header'), makeExcelCell(momentumDelta ?? '', momentumDelta == null ? 'Body' : getProcedureResultStyleId(momentumDelta < 0 ? 'Fail' : momentumDelta > 0 ? 'Borderline' : ''), momentumDelta == null ? 'String' : 'Number')],
+        [makeExcelCell('Vs Team Average (pts)', 'Header'), makeExcelCell(teamGap ?? '', teamGap == null ? 'Body' : getProcedureResultStyleId(teamGap < 0 ? 'Fail' : teamGap > 0 ? 'Borderline' : ''), teamGap == null ? 'String' : 'Number')],
+        [makeExcelCell('Top Recurring Issue', 'Header'), makeExcelCell(strongestIssue, 'Body')],
+        [makeExcelCell('Procedure Flagged Cases', 'Header'), makeExcelCell(procedureTotal, 'Count', 'Number')],
+        [makeExcelCell('Top Procedure Case Type', 'Header'), makeExcelCell(topProcedureCaseType, 'Body')],
+      ],
+    },
+    {
+      name: 'Trend Breakdown',
+      columnWidths: [130, 170, 130, 130, 120],
+      rows: [
+        [
+          makeExcelCell('Period', 'Header'),
+          makeExcelCell('Selected Scope Avg', 'Header'),
+          makeExcelCell('Team Avg', 'Header'),
+          makeExcelCell('Scoped Audits', 'Header'),
+          makeExcelCell('Team Audits', 'Header'),
+        ],
+        ...trendPoints.map((point) => [
+          makeExcelCell(point.label, 'Body'),
+          makeExcelCell(point.subjectAverage ?? '', point.subjectAverage == null ? 'Body' : 'Number', point.subjectAverage == null ? 'String' : 'Number'),
+          makeExcelCell(point.teamAverage ?? '', point.teamAverage == null ? 'Body' : 'Number', point.teamAverage == null ? 'String' : 'Number'),
+          makeExcelCell(point.auditCount, 'Count', 'Number'),
+          makeExcelCell(point.teamAuditCount, 'Count', 'Number'),
+        ]),
+      ],
+    },
+    {
+      name: 'Recurring Issues',
+      columnWidths: [180, 100, 100, 100, 100],
+      rows: [
+        [
+          makeExcelCell('Metric', 'Header'),
+          makeExcelCell('Total', 'Header'),
+          makeExcelCell('Borderline', 'Header'),
+          makeExcelCell('Fail', 'Header'),
+          makeExcelCell('Auto-Fail', 'Header'),
+        ],
+        ...recurringIssues.map((issue) => [
+          makeExcelCell(issue.metric, 'Body'),
+          makeExcelCell(issue.count, 'Count', 'Number'),
+          makeExcelCell(issue.borderlineCount, 'Count', 'Number'),
+          makeExcelCell(issue.failCount, 'Count', 'Number'),
+          makeExcelCell(issue.autoFailCount, 'Count', 'Number'),
+        ]),
+      ],
+    },
+    {
+      name: 'Procedure Hotspots',
+      columnWidths: [180, 100, 100, 100, 100],
+      rows: [
+        [
+          makeExcelCell('Case Type', 'Header'),
+          makeExcelCell('Total', 'Header'),
+          makeExcelCell('Borderline', 'Header'),
+          makeExcelCell('Fail', 'Header'),
+          makeExcelCell('Auto-Fail', 'Header'),
+        ],
+        ...procedureHotspots.map((item) => [
+          makeExcelCell(item.caseType, 'Body'),
+          makeExcelCell(item.count, 'Count', 'Number'),
+          makeExcelCell(item.borderlineCount, 'Count', 'Number'),
+          makeExcelCell(item.failCount, 'Count', 'Number'),
+          makeExcelCell(item.autoFailCount, 'Count', 'Number'),
+        ]),
+      ],
+    },
+    {
+      name: 'Procedure Cases',
+      columnWidths: [90, 140, 90, 140, 120, 110, 240],
+      rows: [
+        [
+          makeExcelCell('Audit Date', 'Header'),
+          makeExcelCell('Agent', 'Header'),
+          makeExcelCell('Team', 'Header'),
+          makeExcelCell('Case Type', 'Header'),
+          makeExcelCell('Procedure Result', 'Header'),
+          makeExcelCell('Quality Score', 'Header'),
+          makeExcelCell('QA Note', 'Header'),
+        ],
+        ...procedureCases.map((item) => [
+          makeExcelCell(item.auditDate, 'Body'),
+          makeExcelCell(item.agentName, 'Body'),
+          makeExcelCell(item.team, 'Body'),
+          makeExcelCell(item.caseType, 'Body'),
+          makeExcelCell(item.procedureResult, getProcedureResultStyleId(item.procedureResult)),
+          makeExcelCell(item.qualityScore, 'Number', 'Number'),
+          makeExcelCell(item.metricComment || '', 'Body'),
+        ]),
+      ],
+    },
+  ]);
+}
+
 function getMomentumLabel(value: number | null) {
   if (value == null) return 'Not enough data';
   if (value >= 2) return 'Rising';
@@ -1901,6 +2442,53 @@ const trendHelperTextStyle = {
   color: 'var(--screen-muted)',
   fontSize: '13px',
   lineHeight: 1.6,
+};
+
+const trendActionsWrapStyle = {
+  display: 'flex',
+  gap: '10px',
+  alignItems: 'center',
+  flexWrap: 'wrap' as const,
+};
+
+const trendProcedureGridStyle = {
+  marginTop: '18px',
+  display: 'grid',
+  gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.2fr)',
+  gap: '14px',
+};
+
+const procedureHotspotRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '1.4fr 0.6fr 0.8fr 0.6fr 0.7fr',
+  gap: '12px',
+  padding: '12px 14px',
+  borderRadius: '14px',
+  background: 'var(--screen-card-soft-bg)',
+  color: 'var(--screen-text)',
+  alignItems: 'center',
+};
+
+const procedureCasesWrapStyle = {
+  maxHeight: '360px',
+  overflowY: 'auto' as const,
+  borderRadius: '16px',
+  border: '1px solid var(--screen-border)',
+  background: 'var(--screen-card-soft-bg)',
+};
+
+const procedureCasesTableStyle = {
+  minWidth: '100%',
+};
+
+const procedureCasesRowStyle = {
+  display: 'grid',
+  gridTemplateColumns: '0.9fr 1.2fr 0.7fr 1.1fr 0.9fr 0.8fr',
+  gap: '12px',
+  padding: '12px 14px',
+  borderBottom: '1px solid var(--screen-border)',
+  alignItems: 'center',
+  color: 'var(--screen-text)',
 };
 
 const trendChartShellStyle = {
