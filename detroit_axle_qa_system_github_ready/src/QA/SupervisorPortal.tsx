@@ -697,8 +697,13 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
     setErrorMessage('');
 
     const parsed = parseCoachingPlan(item.action_plan);
-    const nextStage = reviewStageDrafts[item.id] || parsed.reviewStage;
-    const nextReview = String(supervisorReviewDrafts[item.id] ?? parsed.supervisorReview).trim();
+    const nextReview = String(
+      supervisorReviewDrafts[item.id] ?? parsed.supervisorReview
+    ).trim();
+
+    const nextStage: ReviewStage = nextReview
+      ? 'Supervisor Reviewed'
+      : reviewStageDrafts[item.id] || parsed.reviewStage;
 
     const nextActionPlan = composeCoachingPlan({
       priority: parsed.priority,
@@ -711,10 +716,12 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
       resolutionNote: parsed.resolutionNote,
     });
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('agent_feedback')
       .update({ action_plan: nextActionPlan || null })
-      .eq('id', item.id);
+      .eq('id', item.id)
+      .select('*')
+      .single();
 
     if (error) {
       setErrorMessage(error.message);
@@ -723,9 +730,23 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
 
     setFeedbackItems((prev) =>
       prev.map((entry) =>
-        entry.id === item.id ? { ...entry, action_plan: nextActionPlan || null } : entry
+        entry.id === item.id ? (data as AgentFeedback) : entry
       )
     );
+
+    setSupervisorReviewDrafts((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+
+    setReviewStageDrafts((prev) => {
+      const next = { ...prev };
+      delete next[item.id];
+      return next;
+    });
+
+    void loadTeamData(true);
   }
 
   if (loading) {
