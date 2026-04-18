@@ -13,6 +13,7 @@ type EvidenceCase = {
   ticket_text: string | null;
   agent_reply_text: string | null;
   internal_notes: string | null;
+  review_status?: 'new' | 'queued' | 'in_review' | 'completed';
   created_at: string;
 };
 
@@ -71,11 +72,12 @@ function TicketAIReviewQueueSupabase() {
       if (casesResult.error) throw casesResult.error;
       if (evaluationsResult.error) throw evaluationsResult.error;
 
-      setCases((casesResult.data || []) as EvidenceCase[]);
+      const nextCases = (casesResult.data || []) as EvidenceCase[];
+      setCases(nextCases);
       setEvaluations((evaluationsResult.data || []) as EvaluationRow[]);
 
-      if (!selectedEvidenceId && (casesResult.data || []).length > 0) {
-        setSelectedEvidenceId((casesResult.data || [])[0].id);
+      if (nextCases.length > 0) {
+        setSelectedEvidenceId((prev) => prev || nextCases[0].id);
       }
     } catch (error) {
       setErrorMessage(
@@ -139,52 +141,6 @@ function TicketAIReviewQueueSupabase() {
     return { total, draftReady, needsDraft };
   }, [cases, latestEvaluationByCaseId]);
 
-  function buildMockDraft(caseItem: EvidenceCase) {
-    const combinedText = `${caseItem.ticket_text || ''} ${caseItem.agent_reply_text || ''}`.toLowerCase();
-
-    const scoreDetails = [
-      { metric: 'Procedure', result: combinedText.includes('return') ? 'Borderline' : 'Pass' },
-      { metric: 'Accuracy', result: combinedText.includes('wrong') ? 'Fail' : 'Pass' },
-      { metric: 'Notes', result: 'Pass' },
-      { metric: 'Friendliness', result: combinedText.includes('sorry') ? 'Pass' : 'Borderline' },
-      { metric: 'A-form', result: 'Pass' },
-    ];
-
-    const flaggedCount = scoreDetails.filter((item) => item.result !== 'Pass').length;
-    const suggestedQualityScore = Math.max(72, 100 - flaggedCount * 9);
-
-    const summaryParts = [
-      `Ticket ${caseItem.external_case_id} for ${caseItem.agent_name}`,
-      caseItem.case_type ? `Case type: ${caseItem.case_type}` : null,
-      flaggedCount > 0
-        ? `${flaggedCount} metric(s) need QA attention before final audit save`
-        : 'No obvious metric pressure found in the first-pass draft',
-    ].filter(Boolean);
-
-    const comments = flaggedCount > 0
-      ? 'AI draft detected potential process and communication risks. Review the reply for final QA scoring before saving to audits.'
-      : 'AI draft found a generally stable reply, but QA should still confirm procedure and tone manually.';
-
-    const confidenceNotes =
-      'This is a phase-2 placeholder draft built from ticket evidence only. Final model integration will replace this with real LLM output.';
-
-    return {
-      summary: summaryParts.join(' • '),
-      suggested_score_details: scoreDetails,
-      suggested_quality_score: suggestedQualityScore,
-      suggested_comments: comments,
-      confidence_notes: confidenceNotes,
-      model_name: 'phase-2-placeholder-draft',
-      status: 'draft',
-      output_payload: {
-        source: 'ticket-evidence-review-queue',
-        phase: 'phase-2',
-        rubric_scope: 'tickets',
-        coaching_focus: flaggedCount > 0 ? ['Procedure follow-through', 'Reply clarity'] : ['Maintain consistency'],
-      },
-    };
-  }
-
   async function handleGenerateDraft() {
     if (!selectedCase) {
       setErrorMessage('Please choose a ticket evidence item first.');
@@ -198,30 +154,21 @@ function TicketAIReviewQueueSupabase() {
     try {
       const currentUser = await supabase.auth.getUser();
       const createdByUserId = currentUser.data.user?.id || null;
-      const draftPayload = buildMockDraft(selectedCase);
 
-      const { data, error } = await supabase
-        .from('qa_ai_evaluations')
-        .insert({
-          evidence_case_id: selectedCase.id,
-          generation_type: 'ticket_eval_draft',
-          model_name: draftPayload.model_name,
-          summary: draftPayload.summary,
-          suggested_score_details: draftPayload.suggested_score_details,
-          suggested_quality_score: draftPayload.suggested_quality_score,
-          suggested_comments: draftPayload.suggested_comments,
-          confidence_notes: draftPayload.confidence_notes,
-          output_payload: draftPayload.output_payload,
-          status: draftPayload.status,
-          created_by_user_id: createdByUserId,
-        })
-        .select('*')
-        .single();
+      const { data, error } = await supabase.functions.invoke('generate-ticket-ai-draft', {
+        body: {
+          evidenceCaseId: selectedCase.id,
+          createdByUserId,
+        },
+      });
 
       if (error) throw error;
+      if (!data?.evaluation) {
+        throw new Error('The edge function did not return an evaluation row.');
+      }
 
-      setEvaluations((prev) => [data as EvaluationRow, ...prev]);
-      setSuccessMessage('Ticket AI draft generated and saved.');
+      await loadQueue();
+      setSuccessMessage('Real ticket AI draft generated and saved.');
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Could not generate the ticket AI draft.'
@@ -273,7 +220,7 @@ function TicketAIReviewQueueSupabase() {
           <div style={sectionEyebrow}>AI Review Workflow</div>
           <h2 style={{ margin: 0, fontSize: '30px' }}>Ticket AI Review Queue</h2>
           <p style={{ margin: '10px 0 0 0', color: 'var(--da-subtle-text, #94a3b8)' }}>
-            Review saved ticket evidence, generate phase-2 draft outputs, and prepare the queue for real LLM scoring.
+            Review saved ticket evidence and generate real LLM draft outputs through the edge function.
           </p>
         </div>
 
