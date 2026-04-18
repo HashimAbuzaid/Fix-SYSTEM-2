@@ -16,7 +16,6 @@ import {
   parseAiMetricDetails,
   parseRetrievedExamples,
   parseStringArray,
-  type AiMetricDetail,
   type ConfidenceLevel,
   type EvaluationRow,
   type ReviewLabelRow,
