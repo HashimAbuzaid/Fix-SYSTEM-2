@@ -17,6 +17,7 @@ import AuditsImportSupabase from './QA/AuditsImportSupabase';
 import CallsUploadSupabase from './QA/CallsUploadSupabase';
 import TicketsUploadSupabase from './QA/TicketsUploadSupabase';
 import TicketEvidenceUploadSupabase from './QA/TicketEvidenceUploadSupabase';
+import TicketAIReviewQueueSupabase from './QA/TicketAIReviewQueueSupabase';
 import SalesUploadSupabase from './QA/SalesUploadSupabase';
 import AuditsListSupabase from './QA/AuditsListSupabase';
 import AccountsSupabase from './QA/AccountsSupabase';
@@ -34,6 +35,7 @@ const ROUTES = {
   callsUpload: '/calls-upload',
   ticketsUpload: '/tickets-upload',
   ticketEvidence: '/ticket-evidence',
+  ticketAiReview: '/ticket-ai-review',
   salesUpload: '/sales-upload',
   agentFeedback: '/agent-feedback',
   monitoring: '/monitoring',
@@ -63,6 +65,7 @@ function buildNavItems(profile: UserProfile) {
     { path: ROUTES.callsUpload, label: 'Calls Upload' },
     { path: ROUTES.ticketsUpload, label: 'Tickets Upload' },
     { path: ROUTES.ticketEvidence, label: 'Ticket Evidence' },
+    { path: ROUTES.ticketAiReview, label: 'Ticket AI Review' },
     { path: ROUTES.salesUpload, label: 'Sales Upload' },
     { path: ROUTES.agentFeedback, label: 'Agent Feedback' },
     { path: ROUTES.monitoring, label: 'Monitoring' },
@@ -121,6 +124,7 @@ function StaffRoutes({
       <Route path={ROUTES.callsUpload} element={<CallsUploadSupabase />} />
       <Route path={ROUTES.ticketsUpload} element={<TicketsUploadSupabase />} />
       <Route path={ROUTES.ticketEvidence} element={<TicketEvidenceUploadSupabase />} />
+      <Route path={ROUTES.ticketAiReview} element={<TicketAIReviewQueueSupabase />} />
       <Route path={ROUTES.salesUpload} element={<SalesUploadSupabase />} />
       <Route path={ROUTES.agentFeedback} element={<AgentFeedbackSupabase />} />
       <Route path={ROUTES.monitoring} element={<MonitoringSupabase />} />
