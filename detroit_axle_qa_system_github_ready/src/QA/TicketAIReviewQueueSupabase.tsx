@@ -32,6 +32,7 @@ type EvaluationRow = {
 };
 
 type QueueFilter = 'all' | 'needs_draft' | 'draft_ready';
+type Provider = 'gemini' | 'groq';
 
 function TicketAIReviewQueueSupabase() {
   const [loading, setLoading] = useState(true);
@@ -41,6 +42,7 @@ function TicketAIReviewQueueSupabase() {
   const [filter, setFilter] = useState<QueueFilter>('all');
   const [search, setSearch] = useState('');
   const [selectedEvidenceId, setSelectedEvidenceId] = useState('');
+  const [provider, setProvider] = useState<Provider>('gemini');
   const [cases, setCases] = useState<EvidenceCase[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationRow[]>([]);
 
@@ -154,8 +156,12 @@ function TicketAIReviewQueueSupabase() {
     try {
       const currentUser = await supabase.auth.getUser();
       const createdByUserId = currentUser.data.user?.id || null;
+      const functionName =
+        provider === 'gemini'
+          ? 'generate-ticket-ai-draft-gemini'
+          : 'generate-ticket-ai-draft-groq';
 
-      const { data, error } = await supabase.functions.invoke('generate-ticket-ai-draft', {
+      const { data, error } = await supabase.functions.invoke(functionName, {
         body: {
           evidenceCaseId: selectedCase.id,
           createdByUserId,
@@ -168,7 +174,11 @@ function TicketAIReviewQueueSupabase() {
       }
 
       await loadQueue();
-      setSuccessMessage('Real ticket AI draft generated and saved.');
+      setSuccessMessage(
+        provider === 'gemini'
+          ? 'Gemini ticket draft generated and saved.'
+          : 'Groq ticket draft generated and saved.'
+      );
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Could not generate the ticket AI draft.'
@@ -220,11 +230,23 @@ function TicketAIReviewQueueSupabase() {
           <div style={sectionEyebrow}>AI Review Workflow</div>
           <h2 style={{ margin: 0, fontSize: '30px' }}>Ticket AI Review Queue</h2>
           <p style={{ margin: '10px 0 0 0', color: 'var(--da-subtle-text, #94a3b8)' }}>
-            Review saved ticket evidence and generate real LLM draft outputs through the edge function.
+            Review saved ticket evidence and generate real LLM draft outputs through Gemini or Groq.
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ minWidth: '180px' }}>
+            <label style={labelStyle}>AI Provider</label>
+            <select
+              value={provider}
+              onChange={(event) => setProvider(event.target.value as Provider)}
+              style={fieldStyle}
+            >
+              <option value="gemini">Gemini</option>
+              <option value="groq">Groq</option>
+            </select>
+          </div>
+
           <button type="button" onClick={() => void loadQueue()} style={secondaryButton}>
             Refresh Queue
           </button>
@@ -234,7 +256,7 @@ function TicketAIReviewQueueSupabase() {
             disabled={!selectedCase || savingDraft}
             style={primaryButton}
           >
-            {savingDraft ? 'Generating Draft...' : 'Generate Ticket Draft'}
+            {savingDraft ? 'Generating Draft...' : `Generate ${provider === 'gemini' ? 'Gemini' : 'Groq'} Draft`}
           </button>
         </div>
       </div>
