@@ -25,7 +25,9 @@ export function useAuthState() {
   const [profileStatus, setProfileStatus] = useState<ProfileStatus>('idle');
   const [profileError, setProfileError] = useState('');
   const [recoveryMode, setRecoveryMode] = useState(false);
+
   const recoveryModeRef = useRef(false);
+  const profileRequestIdRef = useRef(0);
 
   useEffect(() => {
     recoveryModeRef.current = recoveryMode;
@@ -34,7 +36,9 @@ export function useAuthState() {
   useEffect(() => {
     void loadInitialSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
 
       const shouldStayInRecovery =
@@ -44,15 +48,19 @@ export function useAuthState() {
 
       if (shouldStayInRecovery && newSession?.user) {
         setRecoveryMode(true);
+        setProfile(null);
         setProfileStatus('idle');
+        setProfileError('');
         setLoading(false);
         return;
       }
 
       if (newSession?.user) {
         setRecoveryMode(false);
+        setLoading(true);
         void loadProfile(newSession.user.id);
       } else {
+        profileRequestIdRef.current += 1;
         setProfile(null);
         setProfileStatus('idle');
         setProfileError('');
@@ -69,6 +77,7 @@ export function useAuthState() {
     if (recoveryActive) setRecoveryMode(true);
 
     const { data, error } = await supabase.auth.getSession();
+
     if (error) {
       setLoading(false);
       return;
@@ -82,13 +91,19 @@ export function useAuthState() {
     }
 
     if (data.session?.user) {
+      setLoading(true);
       await loadProfile(data.session.user.id);
     } else {
+      setProfile(null);
+      setProfileStatus('idle');
+      setProfileError('');
       setLoading(false);
     }
   }
 
   async function loadProfile(userId: string) {
+    const requestId = ++profileRequestIdRef.current;
+
     setProfileStatus('loading');
     setProfileError('');
 
@@ -97,6 +112,10 @@ export function useAuthState() {
       .select('*')
       .eq('id', userId)
       .maybeSingle();
+
+    if (requestId !== profileRequestIdRef.current) {
+      return;
+    }
 
     if (error) {
       setProfile(null);
@@ -119,6 +138,7 @@ export function useAuthState() {
   }
 
   async function logout() {
+    profileRequestIdRef.current += 1;
     await supabase.auth.signOut();
     clearRecoveryUrlState();
     setSession(null);
@@ -126,13 +146,17 @@ export function useAuthState() {
     setProfileStatus('idle');
     setProfileError('');
     setRecoveryMode(false);
+    setLoading(false);
   }
 
   function handleRecoveryComplete() {
     clearRecoveryUrlState();
     setRecoveryMode(false);
     setProfileStatus('idle');
+    setProfileError('');
+
     if (session?.user?.id) {
+      setLoading(true);
       void loadProfile(session.user.id);
     }
   }
