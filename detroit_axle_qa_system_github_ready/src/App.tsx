@@ -45,11 +45,16 @@ const ROUTES = {
 } as const;
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
-
 type NavItem = { path: RoutePath; label: string };
 
 const LOGO_MARK_SRC = '/detroit-axle-mark.png';
 const LOGO_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
+const SIDEBAR_COLLAPSED_WIDTH = 88;
+const SIDEBAR_EXPANDED_WIDTH = 272;
+const SIDEBAR_ITEM_HEIGHT = 56;
+const SIDEBAR_ITEM_GAP = 8;
+const SIDEBAR_TRACK_TOP = 6;
+const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
 
 function getActiveRouteLabel(pathname: string, items: NavItem[]) {
   return items.find((item) => item.path === pathname)?.label || 'Workspace';
@@ -225,14 +230,8 @@ function AppShell() {
     if (isCompactLayout) {
       setIsSidebarExpanded(false);
       setHoveredPath(null);
-      return;
     }
-    setIsSidebarExpanded(true);
-    const collapseTimer = window.setTimeout(() => {
-      setIsSidebarExpanded(false);
-    }, 900);
-    return () => window.clearTimeout(collapseTimer);
-  }, [location.pathname, isCompactLayout]);
+  }, [isCompactLayout]);
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
@@ -289,66 +288,80 @@ function AppShell() {
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
   const activeIndicatorPath = (hoveredPath ?? location.pathname) as RoutePath;
+  const activeIndicatorIndex = Math.max(
+    0,
+    navItems.findIndex((item) => item.path === activeIndicatorPath)
+  );
 
   const desktopShellStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: `${expandedSidebar ? 266 : 94}px minmax(0, 1fr)`,
+    gridTemplateColumns: `${SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)`,
     gap: '22px',
     alignItems: 'start',
-    transition: 'grid-template-columns 0.28s ease',
   };
 
-  const sidebarShellStyle: CSSProperties = {
+  const sidebarDockStyle: CSSProperties = {
     position: 'sticky',
     top: '128px',
     alignSelf: 'start',
-    width: expandedSidebar ? '266px' : '94px',
-    padding: expandedSidebar ? '14px 12px' : '14px 10px',
+    width: `${SIDEBAR_COLLAPSED_WIDTH}px`,
+    height: 'calc(100vh - 156px)',
+    minHeight: '540px',
+    zIndex: 10,
+  };
+
+  const sidebarPanelStyle: CSSProperties = {
+    position: 'relative',
+    width: expandedSidebar ? `${SIDEBAR_EXPANDED_WIDTH}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
+    minHeight: '100%',
+    padding: expandedSidebar ? '12px 12px 14px 12px' : '12px 8px 14px 8px',
     borderRadius: '30px',
     border: theme.panelBorder,
     background:
       themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(243,247,255,0.94) 100%)'
-        : 'linear-gradient(180deg, rgba(8,18,38,0.94) 0%, rgba(9,17,34,0.90) 100%)',
-    boxShadow: theme.panelShadow,
-    backdropFilter: 'blur(18px)',
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(243,247,255,0.96) 100%)'
+        : 'linear-gradient(180deg, rgba(8,18,38,0.98) 0%, rgba(9,17,34,0.96) 100%)',
+    boxShadow: expandedSidebar
+      ? '0 26px 52px rgba(2,6,23,0.22)'
+      : '0 18px 36px rgba(2,6,23,0.16)',
     display: 'grid',
     gridTemplateRows: 'auto 1fr',
     gap: '12px',
     overflow: 'hidden',
-    transition: 'width 0.28s ease, padding 0.28s ease, box-shadow 0.28s ease, background 0.28s ease',
+    willChange: 'width, box-shadow',
+    transform: 'translateZ(0)',
+    backfaceVisibility: 'hidden',
+    transition: `width ${EXPAND_EASE}, padding ${EXPAND_EASE}, box-shadow 180ms ease`,
   };
 
   const railHeaderStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: expandedSidebar ? '52px minmax(0, 1fr)' : '1fr',
+    gridTemplateColumns: expandedSidebar ? '48px minmax(0, 1fr)' : '1fr',
     gap: expandedSidebar ? '12px' : '8px',
     alignItems: 'center',
-    padding: expandedSidebar ? '8px 8px 10px 8px' : '8px 4px 10px 4px',
-    transition: 'grid-template-columns 0.28s ease, gap 0.28s ease, padding 0.28s ease',
-    borderBottom: themeMode === 'light'
-      ? '1px solid rgba(148,163,184,0.18)'
-      : '1px solid rgba(148,163,184,0.12)',
+    padding: expandedSidebar ? '6px 6px 12px 6px' : '6px 2px 12px 2px',
+    borderBottom:
+      themeMode === 'light'
+        ? '1px solid rgba(148,163,184,0.16)'
+        : '1px solid rgba(148,163,184,0.10)',
+    transition: `grid-template-columns ${EXPAND_EASE}, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
   };
 
   const railLogoWrapStyle: CSSProperties = {
-    width: expandedSidebar ? '52px' : '46px',
-    height: expandedSidebar ? '52px' : '46px',
+    width: expandedSidebar ? '48px' : '44px',
+    height: expandedSidebar ? '48px' : '44px',
     justifySelf: 'center',
     borderRadius: expandedSidebar ? '16px' : '14px',
     padding: '5px',
     background:
       themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,255,0.95) 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,248,255,0.96) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
     border: theme.metaBorder,
     display: 'grid',
     placeItems: 'center',
-    boxShadow: expandedSidebar
-      ? '0 14px 28px rgba(2,6,23,0.18)'
-      : '0 10px 20px rgba(2,6,23,0.14)',
     overflow: 'hidden',
-    transition: 'width 0.28s ease, height 0.28s ease, border-radius 0.28s ease, box-shadow 0.28s ease',
+    transition: `width ${EXPAND_EASE}, height ${EXPAND_EASE}, border-radius ${EXPAND_EASE}`,
   };
 
   const railBrandTextStyle: CSSProperties = {
@@ -356,14 +369,14 @@ function AppShell() {
     gap: '6px',
     minWidth: 0,
     opacity: expandedSidebar ? 1 : 0,
-    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-12px)',
-    transition: 'opacity 0.18s ease, transform 0.24s ease',
+    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-10px)',
+    transition: 'opacity 140ms ease, transform 180ms ease',
     pointerEvents: expandedSidebar ? 'auto' : 'none',
   };
 
   const railWordmarkStyle: CSSProperties = {
-    width: '132px',
-    height: '26px',
+    width: '126px',
+    height: '24px',
     objectFit: 'contain',
     objectPosition: 'left center',
   };
@@ -371,24 +384,27 @@ function AppShell() {
   const navRailStyle: CSSProperties = {
     position: 'relative',
     display: 'grid',
-    gap: '8px',
+    gap: `${SIDEBAR_ITEM_GAP}px`,
     alignContent: 'start',
-    padding: '6px 2px 4px 2px',
+    padding: '6px 0 4px 0',
+    contain: 'layout paint style',
   };
 
   const navTrackStyle: CSSProperties = {
     position: 'absolute',
     left: expandedSidebar ? '6px' : '4px',
-    top: `${navItems.findIndex((item) => item.path === activeIndicatorPath) * 60 + 6}px`,
+    top: `${SIDEBAR_TRACK_TOP}px`,
     width: expandedSidebar ? 'calc(100% - 12px)' : 'calc(100% - 8px)',
-    height: '52px',
+    height: `${SIDEBAR_ITEM_HEIGHT}px`,
     borderRadius: '18px',
     background: theme.navButtonActiveBackground,
     border: theme.navButtonActiveBorder,
     boxShadow: theme.navButtonActiveShadow,
-    transition: 'top 0.26s ease, width 0.28s ease, left 0.28s ease, opacity 0.22s ease',
-    opacity: navItems.length > 0 ? 1 : 0,
+    transform: `translate3d(0, ${(SIDEBAR_ITEM_HEIGHT + SIDEBAR_ITEM_GAP) * activeIndicatorIndex}px, 0)`,
+    transition: `transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), width ${EXPAND_EASE}, left ${EXPAND_EASE}`,
+    willChange: 'transform, width',
     zIndex: 0,
+    pointerEvents: 'none',
   };
 
   const navButtonDesktopStyle = (active: boolean): CSSProperties => ({
@@ -396,26 +412,26 @@ function AppShell() {
     position: 'relative',
     zIndex: 1,
     display: 'grid',
-    gridTemplateColumns: expandedSidebar ? '36px minmax(0, 1fr)' : '1fr',
+    gridTemplateColumns: '40px minmax(0, 1fr)',
     alignItems: 'center',
-    justifyItems: expandedSidebar ? 'stretch' : 'center',
+    justifyItems: 'stretch',
     gap: expandedSidebar ? '12px' : '0',
-    minHeight: '52px',
+    minHeight: `${SIDEBAR_ITEM_HEIGHT}px`,
     textAlign: 'left',
     borderRadius: '18px',
-    padding: expandedSidebar ? '10px 12px' : '8px 0',
+    padding: expandedSidebar ? '8px 12px' : '8px 0',
     border: '1px solid transparent',
     background: 'transparent',
     color: active ? '#ffffff' : theme.navButtonText,
     boxShadow: 'none',
     overflow: 'hidden',
-    transition: 'color 0.18s ease, padding 0.28s ease, grid-template-columns 0.28s ease, gap 0.28s ease, transform 0.18s ease',
+    transition: `color 140ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, transform 120ms ease`,
   });
 
   const navIconBubbleStyle = (active: boolean): CSSProperties => ({
-    width: '36px',
-    height: '36px',
-    borderRadius: '12px',
+    width: '40px',
+    height: '40px',
+    borderRadius: '14px',
     display: 'grid',
     placeItems: 'center',
     fontSize: '15px',
@@ -426,19 +442,21 @@ function AppShell() {
       : themeMode === 'light'
       ? 'rgba(37,99,235,0.08)'
       : 'rgba(148,163,184,0.10)',
-    transition: 'background 0.18s ease, color 0.18s ease, transform 0.18s ease',
+    transition: 'background 140ms ease, color 140ms ease',
+    flexShrink: 0,
   });
 
   const navLabelWrapStyle = (active: boolean): CSSProperties => ({
     display: 'grid',
     gap: '2px',
     minWidth: 0,
+    maxWidth: expandedSidebar ? '180px' : '0px',
     opacity: expandedSidebar ? 1 : 0,
-    width: expandedSidebar ? 'auto' : 0,
-    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-16px)',
-    transition: 'opacity 0.18s ease, transform 0.24s ease, width 0.28s ease',
+    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-8px)',
+    transition: 'max-width 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease, transform 160ms ease',
     pointerEvents: expandedSidebar ? 'auto' : 'none',
     overflow: 'hidden',
+    whiteSpace: 'nowrap',
     color: active ? '#ffffff' : theme.navButtonText,
   });
 
@@ -540,7 +558,7 @@ function AppShell() {
             ) : (
               <div style={desktopShellStyle}>
                 <aside
-                  style={sidebarShellStyle}
+                  style={sidebarDockStyle}
                   onMouseEnter={() => setIsSidebarExpanded(true)}
                   onMouseLeave={() => {
                     setIsSidebarExpanded(false);
@@ -555,44 +573,46 @@ function AppShell() {
                     }
                   }}
                 >
-                  <div style={railHeaderStyle}>
-                    <div style={railLogoWrapStyle}>
-                      <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div style={railBrandTextStyle}>
-                      <div style={{ color: theme.brandEyebrow, fontSize: '10px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                        Detroit Axle Workspace
+                  <div style={sidebarPanelStyle}>
+                    <div style={railHeaderStyle}>
+                      <div style={railLogoWrapStyle}>
+                        <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                       </div>
-                      <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={railWordmarkStyle} />
+                      <div style={railBrandTextStyle}>
+                        <div style={{ color: theme.brandEyebrow, fontSize: '10px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
+                          Detroit Axle Workspace
+                        </div>
+                        <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={railWordmarkStyle} />
+                      </div>
                     </div>
-                  </div>
 
-                  <div style={navRailStyle}>
-                    <div style={navTrackStyle} />
-                    {navItems.map((item) => {
-                      const active = location.pathname === item.path;
-                      return (
-                        <button
-                          key={item.path}
-                          type="button"
-                          onClick={() => navigate(item.path)}
-                          onMouseEnter={() => setHoveredPath(item.path)}
-                          onMouseLeave={() => setHoveredPath(null)}
-                          style={navButtonDesktopStyle(active)}
-                          title={expandedSidebar ? undefined : item.label}
-                        >
-                          <span style={navIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
-                          <span style={navLabelWrapStyle(active)}>
-                            <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {item.label}
+                    <div style={navRailStyle}>
+                      <div style={navTrackStyle} />
+                      {navItems.map((item) => {
+                        const active = location.pathname === item.path;
+                        return (
+                          <button
+                            key={item.path}
+                            type="button"
+                            onClick={() => navigate(item.path)}
+                            onMouseEnter={() => setHoveredPath(item.path)}
+                            onMouseLeave={() => setHoveredPath(null)}
+                            style={navButtonDesktopStyle(active)}
+                            title={expandedSidebar ? undefined : item.label}
+                          >
+                            <span style={navIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
+                            <span style={navLabelWrapStyle(active)}>
+                              <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {item.label}
+                              </span>
+                              <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.82)' : theme.metaText, opacity: 0.9 }}>
+                                {active ? 'Current view' : 'Open'}
+                              </span>
                             </span>
-                            <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.82)' : theme.metaText, opacity: 0.9 }}>
-                              {active ? 'Current view' : 'Open'}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                    })}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </aside>
                 <div style={styles.contentInner}>
