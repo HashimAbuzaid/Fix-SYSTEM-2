@@ -119,6 +119,9 @@ type ReviewStage = 'QA Shared' | 'Acknowledged' | 'Agent Responded' | 'Superviso
 type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
 type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
 
+const MONITORING_VIEW_OFFSET = 224;
+const MONITORING_VIEW_GAP = 16;
+
 const COACHING_PLAN_SECTION_LABELS = [
   'Priority',
   'Action Plan',
@@ -629,22 +632,28 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
   );
 
   function handleMonitoringWidgetClick() {
-    setMonitoringOpen(true);
-
     if (selectedAgent) {
       setMonitoringAgentFilter(selectedAgent.agent_id || '');
     } else {
       setMonitoringAgentFilter('');
     }
 
-    if (pageRootRef.current) {
-      pageRootRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
+    if (typeof window !== 'undefined') {
+      const isCompact = window.innerWidth < 900;
+      const resolvedOffset = isCompact ? 0 : MONITORING_VIEW_OFFSET;
+      const top = pageRootRef.current
+        ? Math.max(
+            0,
+            window.scrollY +
+              pageRootRef.current.getBoundingClientRect().top -
+              (resolvedOffset + MONITORING_VIEW_GAP)
+          )
+        : 0;
+
+      window.scrollTo({ top, behavior: 'smooth' });
     }
 
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    setMonitoringOpen(true);
   }
 
   const selectedAgentFeedbackItems = useMemo(() => {
@@ -768,7 +777,15 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
   }
 
   return (
-    <div ref={pageRootRef} data-no-theme-invert="true" style={{ color: 'var(--da-page-text, #e5eefb)', ...(themeVars as any) }}>
+    <div
+      ref={pageRootRef}
+      data-no-theme-invert="true"
+      style={{
+        color: 'var(--da-page-text, #e5eefb)',
+        scrollMarginTop: `${MONITORING_VIEW_OFFSET + MONITORING_VIEW_GAP}px`,
+        ...(themeVars as any),
+      }}
+    >
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Supervisor Portal</div>
@@ -1505,6 +1522,7 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
             onClose={() => setMonitoringOpen(false)}
             items={monitoringItems}
             mode="supervisor"
+            topOffset={MONITORING_VIEW_OFFSET}
             selectedAgentId={monitoringAgentFilter}
             onSelectAgentId={setMonitoringAgentFilter}
             agentOptions={teamAgents.map((item) => ({

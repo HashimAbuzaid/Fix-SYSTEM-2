@@ -24,6 +24,7 @@ import SupervisorRequestsSupabase from './QA/SupervisorRequestsSupabase';
 import AgentFeedbackSupabase from './QA/AgentFeedbackSupabase';
 import ReportsSupabase from './QA/ReportsSupabase';
 import MonitoringSupabase from './QA/MonitoringSupabase';
+import TeamHeatmapSupabase from './QA/TeamHeatmapSupabase';
 import type { UserProfile } from './context/AuthContext';
 
 const ROUTES = {
@@ -41,6 +42,7 @@ const ROUTES = {
   accounts: '/accounts',
   supervisorRequests: '/supervisor-requests',
   reports: '/reports',
+  teamHeatmap: '/team-heatmap',
   profile: '/profile',
   supervisorOverview: '/supervisor',
   supervisorTeamDashboard: '/supervisor/team-dashboard',
@@ -92,6 +94,7 @@ function buildNavItems(profile: UserProfile): NavItem[] {
     { path: ROUTES.salesUpload, label: 'Sales Upload' },
     { path: ROUTES.agentFeedback, label: 'Agent Feedback' },
     { path: ROUTES.monitoring, label: 'Monitoring' },
+    { path: ROUTES.teamHeatmap, label: 'Team Heatmap' },
   ];
 
   if (isAdmin) {
@@ -122,6 +125,7 @@ function getNavIcon(label: string) {
     'Sales Upload': '$',
     'Agent Feedback': '☰',
     Monitoring: '⦿',
+    'Team Heatmap': '▦',
     Accounts: '◎',
     'Supervisor Requests': '↗',
     Reports: '▤',
@@ -177,6 +181,7 @@ function StaffRoutes({
       <Route path={ROUTES.salesUpload} element={<SalesUploadSupabase />} />
       <Route path={ROUTES.agentFeedback} element={<AgentFeedbackSupabase />} />
       <Route path={ROUTES.monitoring} element={<MonitoringSupabase />} />
+      <Route path={ROUTES.teamHeatmap} element={<TeamHeatmapSupabase currentUser={profile} />} />
       {isAdmin && <Route path={ROUTES.accounts} element={<AccountsSupabase />} />}
       {isAdmin && (
         <Route
@@ -200,7 +205,6 @@ function StaffRoutes({
     </Routes>
   );
 }
-
 
 function ProfilePanel({
   title,
@@ -347,8 +351,6 @@ function AppShell() {
   const navItems = buildNavItems(profile);
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
-  // The sliding indicator always tracks the REAL active route — never hover.
-  // Hover only changes button visual styling (icon tint, label color).
   const activeIndicatorIndex = Math.max(
     0,
     navItems.findIndex((item) => item.path === location.pathname)

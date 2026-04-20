@@ -36,16 +36,18 @@ type MonitoringDrawerProps = {
   themeMode?: 'dark' | 'light';
   selectedAgentId?: string;
   onSelectAgentId?: (value: string) => void;
+  topOffset?: number;
   agentOptions?: AgentOption[];
   onItemUpdated?: () => Promise<void> | void;
 };
 
 function getDrawerThemeVars(
   themeMode: 'dark' | 'light' = 'dark',
+  topOffset = 224,
 ): Record<string, string> {
   const isLight = themeMode === 'light';
   const isCompact = typeof window !== 'undefined' ? window.innerWidth < 900 : false;
-  const topOffset = isCompact ? 0 : 224;
+  const resolvedTopOffset = isCompact ? 0 : topOffset;
 
   return {
     '--md-overlay': isLight ? 'rgba(15,23,42,0.16)' : 'rgba(2,6,23,0.56)',
@@ -67,8 +69,8 @@ function getDrawerThemeVars(
       : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.66) 100%)',
     '--md-empty-bg': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.52)',
     '--md-shadow': isLight ? '-20px 0 48px rgba(15,23,42,0.14)' : '-20px 0 48px rgba(2,6,23,0.42)',
-    '--md-top': `${topOffset}px`,
-    '--md-height': isCompact ? '100vh' : `calc(100vh - ${topOffset}px)`,
+    '--md-top': `${resolvedTopOffset}px`,
+    '--md-height': isCompact ? '100vh' : `calc(100vh - ${resolvedTopOffset}px)`,
     '--md-radius': isCompact ? '0px' : '28px 0 0 28px',
   };
 }
@@ -81,12 +83,13 @@ function MonitoringDrawer({
   themeMode = 'dark',
   selectedAgentId = '',
   onSelectAgentId,
+  topOffset = 224,
   agentOptions = [],
   onItemUpdated,
 }: MonitoringDrawerProps) {
   const [workingId, setWorkingId] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const themeVars = getDrawerThemeVars(themeMode);
+  const themeVars = getDrawerThemeVars(themeMode, topOffset);
 
   const filteredItems = useMemo(() => {
     if (mode !== 'supervisor' || !selectedAgentId) return items;
@@ -234,7 +237,7 @@ const overlayStyle = {
   position: 'fixed' as const,
   inset: 'var(--md-top, 146px) 0 0 0',
   background: 'var(--md-overlay, rgba(2,6,23,0.56))',
-  zIndex: 70,
+  zIndex: 180,
 };
 
 const drawerStyle = {
@@ -244,7 +247,7 @@ const drawerStyle = {
   width: '420px',
   maxWidth: '100vw',
   height: 'var(--md-height, calc(100vh - 146px))',
-  zIndex: 71,
+  zIndex: 181,
   background: 'var(--md-bg)',
   borderLeft: '1px solid var(--md-border)',
   borderTop: '1px solid var(--md-border)',
