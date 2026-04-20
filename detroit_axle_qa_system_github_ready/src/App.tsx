@@ -260,6 +260,33 @@ function AppShell() {
     return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
   }
 
+  const isAdmin = profile?.role === 'admin';
+  const isQA = profile?.role === 'qa';
+  const isSupervisor = profile?.role === 'supervisor';
+  const isStaff = Boolean(isAdmin || isQA);
+  const navItems = profile ? buildNavItems(profile) : [];
+  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
+  const activeNavPath = location.pathname as RoutePath;
+
+  useEffect(() => {
+    if (!profile || isCompactLayout || !isStaff) {
+      setNavHighlight((current) => ({ ...current, opacity: 0 }));
+      return;
+    }
+
+    const targetPath = hoveredNavPath || activeNavPath;
+    const button = targetPath ? navButtonRefs.current[targetPath] : null;
+
+    if (!button) {
+      setNavHighlight((current) => ({ ...current, opacity: 0 }));
+      return;
+    }
+
+    const top = button.offsetTop;
+    const height = button.offsetHeight;
+    setNavHighlight({ top, height, opacity: 1 });
+  }, [profile, activeNavPath, hoveredNavPath, isCompactLayout, isStaff, navItems.length, viewportWidth]);
+
   if (!auth.session) return <Login />;
 
   if (!profile) {
@@ -279,30 +306,6 @@ function AppShell() {
       </div>
     );
   }
-
-  const isAdmin = profile.role === 'admin';
-  const isQA = profile.role === 'qa';
-  const isSupervisor = profile.role === 'supervisor';
-  const isStaff = isAdmin || isQA;
-  const navItems = buildNavItems(profile);
-  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
-  const activeNavPath = location.pathname as RoutePath;
-
-  useEffect(() => {
-    if (isCompactLayout || !isStaff) return;
-    const targetPath = hoveredNavPath || activeNavPath;
-    const button = targetPath ? navButtonRefs.current[targetPath] : null;
-    const railBody = navRailBodyRef.current;
-
-    if (!button || !railBody) {
-      setNavHighlight((current) => ({ ...current, opacity: 0 }));
-      return;
-    }
-
-    const top = button.offsetTop;
-    const height = button.offsetHeight;
-    setNavHighlight({ top, height, opacity: 1 });
-  }, [activeNavPath, hoveredNavPath, isCompactLayout, isStaff, navItems.length, viewportWidth]);
 
   const desktopShellStyle: CSSProperties = {
     ...styles.workspaceShell,
