@@ -633,6 +633,17 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
 
     if (selectedAgent) {
       setMonitoringAgentFilter(selectedAgent.agent_id || '');
+    } else {
+      setMonitoringAgentFilter('');
+    }
+
+    if (pageRootRef.current) {
+      pageRootRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
