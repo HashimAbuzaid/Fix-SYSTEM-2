@@ -165,10 +165,10 @@ const sharedPanel: CSSProperties = {
   backdropFilter: 'blur(18px)',
 };
 const brandPanelStyle: CSSProperties = { ...sharedPanel, background: 'linear-gradient(180deg, rgba(15,23,42,0.92) 0%, rgba(15,23,42,0.72) 100%)', padding: '32px', color: '#e5eefb', display: 'grid', alignContent: 'start', gap: '18px' };
-const brandHeaderStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr)', gap: '16px', alignItems: 'center' };
-const logoWrapStyle: CSSProperties = { width: '84px', height: '84px', borderRadius: '26px', background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)', border: '1px solid rgba(148,163,184,0.16)', display: 'grid', placeItems: 'center', boxShadow: '0 18px 44px rgba(2,6,23,0.32)', padding: '6px' };
-const logoInnerStyle: CSSProperties = { width: '100%', height: '100%', borderRadius: '16px', display: 'grid', placeItems: 'center', background: 'linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.03) 100%)', overflow: 'hidden' };
-const logoStyle: CSSProperties = { width: '100%', height: '100%', objectFit: 'contain' };
+const brandHeaderStyle: CSSProperties = { display: 'grid', gridTemplateColumns: '96px minmax(0, 1fr)', gap: '16px', alignItems: 'center' };
+const logoWrapStyle: CSSProperties = { width: '96px', height: '96px', borderRadius: '28px', background: 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)', border: '1px solid rgba(148,163,184,0.16)', display: 'grid', placeItems: 'center', boxShadow: '0 18px 44px rgba(2,6,23,0.32)', padding: '4px' };
+const logoInnerStyle: CSSProperties = { width: '100%', height: '100%', borderRadius: '20px', display: 'grid', placeItems: 'center', background: 'linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.04) 100%)', overflow: 'hidden' };
+const logoStyle: CSSProperties = { width: '100%', height: '100%', objectFit: 'cover', transform: 'scale(1.08)' };
 const brandHeaderTextStyle: CSSProperties = { display: 'grid', gap: '8px', minWidth: 0 };
 const wordmarkStyle: CSSProperties = { width: '100%', maxWidth: '360px', height: '48px', objectFit: 'contain', objectPosition: 'left center' };
 const eyebrowStyle: CSSProperties = { color: '#93c5fd', fontSize: '12px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase' };
