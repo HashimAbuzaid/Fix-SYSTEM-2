@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useMemo, useState, useEffect, type CSSProperties } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -55,7 +55,6 @@ const SIDEBAR_ITEM_HEIGHT = 56;
 const SIDEBAR_ITEM_GAP = 8;
 const SIDEBAR_TRACK_TOP = 6;
 const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
-const SIDEBAR_SCROLL_KEY = 'detroit-axle-sidebar-scroll-top';
 
 function getActiveRouteLabel(pathname: string, items: NavItem[]) {
   return items.find((item) => item.path === pathname)?.label || 'Workspace';
@@ -204,7 +203,6 @@ function AppShell() {
   );
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [hoveredPath, setHoveredPath] = useState<RoutePath | null>(null);
-  const sidebarNavScrollRef = useRef<HTMLDivElement | null>(null);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -237,39 +235,12 @@ function AppShell() {
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
-  const navItems = useMemo(() => (profile ? buildNavItems(profile) : []), [profile]);
-  const activeRouteLabel = useMemo(
-    () => getActiveRouteLabel(location.pathname as RoutePath, navItems),
-    [location.pathname, navItems]
-  );
-
   const profileLabel = useMemo(() => {
     if (!profile) return '';
     return profile.display_name
       ? `${profile.agent_name} - ${profile.display_name}`
       : profile.agent_name;
   }, [profile]);
-
-  useEffect(() => {
-    if (isCompactLayout) return;
-    if (typeof window === 'undefined') return;
-    const node = sidebarNavScrollRef.current;
-    if (!node) return;
-
-    const stored = window.sessionStorage.getItem(SIDEBAR_SCROLL_KEY);
-    if (!stored) return;
-
-    const nextScrollTop = Number(stored);
-    if (!Number.isFinite(nextScrollTop)) return;
-
-    const frame = window.requestAnimationFrame(() => {
-      if (sidebarNavScrollRef.current) {
-        sidebarNavScrollRef.current.scrollTop = nextScrollTop;
-      }
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [isCompactLayout, location.pathname, navItems.length]);
 
   if (loading) {
     return (
@@ -313,11 +284,14 @@ function AppShell() {
   const isQA = profile.role === 'qa';
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
+  const navItems = buildNavItems(profile);
+  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
-  const activeIndicatorPath = (hoveredPath ?? location.pathname) as RoutePath;
+  // The sliding indicator always tracks the REAL active route — never hover.
+  // Hover only changes button visual styling (icon tint, label color).
   const activeIndicatorIndex = Math.max(
     0,
-    navItems.findIndex((item) => item.path === activeIndicatorPath)
+    navItems.findIndex((item) => item.path === location.pathname)
   );
 
   const desktopShellStyle: CSSProperties = {
@@ -408,17 +382,6 @@ function AppShell() {
     objectPosition: 'left center',
   };
 
-  const navScrollViewportStyle: CSSProperties = {
-    position: 'relative',
-    minHeight: 0,
-    height: '100%',
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    paddingRight: expandedSidebar ? '2px' : '0',
-    scrollbarGutter: 'stable',
-    overscrollBehavior: 'contain',
-  };
-
   const navRailStyle: CSSProperties = {
     position: 'relative',
     display: 'grid',
@@ -426,7 +389,6 @@ function AppShell() {
     alignContent: 'start',
     padding: '6px 0 4px 0',
     contain: 'layout paint style',
-    minHeight: 'max-content',
   };
 
   const navTrackStyle: CSSProperties = {
@@ -446,7 +408,7 @@ function AppShell() {
     pointerEvents: 'none',
   };
 
-  const navButtonDesktopStyle = (active: boolean): CSSProperties => ({
+  const navButtonDesktopStyle = (active: boolean, hovered: boolean): CSSProperties => ({
     ...styles.navButton,
     position: 'relative',
     zIndex: 1,
@@ -460,14 +422,18 @@ function AppShell() {
     borderRadius: '18px',
     padding: expandedSidebar ? '8px 12px' : '8px 0',
     border: '1px solid transparent',
-    background: 'transparent',
-    color: active ? '#ffffff' : theme.navButtonText,
+    background: !active && hovered
+      ? themeMode === 'light'
+        ? 'rgba(37,99,235,0.07)'
+        : 'rgba(148,163,184,0.10)'
+      : 'transparent',
+    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
     boxShadow: 'none',
     overflow: 'hidden',
-    transition: `color 140ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, transform 120ms ease`,
+    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
   });
 
-  const navIconBubbleStyle = (active: boolean): CSSProperties => ({
+  const navIconBubbleStyle = (active: boolean, hovered: boolean): CSSProperties => ({
     width: '40px',
     height: '40px',
     borderRadius: '14px',
@@ -475,9 +441,13 @@ function AppShell() {
     placeItems: 'center',
     fontSize: '15px',
     fontWeight: 900,
-    color: active ? '#ffffff' : theme.navButtonText,
+    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
     background: active
       ? 'rgba(255,255,255,0.16)'
+      : hovered
+      ? themeMode === 'light'
+        ? 'rgba(37,99,235,0.14)'
+        : 'rgba(148,163,184,0.18)'
       : themeMode === 'light'
       ? 'rgba(37,99,235,0.08)'
       : 'rgba(148,163,184,0.10)',
@@ -485,7 +455,7 @@ function AppShell() {
     flexShrink: 0,
   });
 
-  const navLabelWrapStyle = (active: boolean): CSSProperties => ({
+  const navLabelWrapStyle = (active: boolean, hovered: boolean): CSSProperties => ({
     display: 'grid',
     gap: '2px',
     minWidth: 0,
@@ -496,7 +466,7 @@ function AppShell() {
     pointerEvents: expandedSidebar ? 'auto' : 'none',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    color: active ? '#ffffff' : theme.navButtonText,
+    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
   });
 
   const headerBrandLogoWrapStyle: CSSProperties = {
@@ -522,16 +492,6 @@ function AppShell() {
         ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,249,255,0.94) 100%)'
         : 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
     overflow: 'hidden',
-  };
-
-  const handleSidebarNavigate = (path: RoutePath) => {
-    if (typeof window !== 'undefined' && sidebarNavScrollRef.current) {
-      window.sessionStorage.setItem(
-        SIDEBAR_SCROLL_KEY,
-        String(sidebarNavScrollRef.current.scrollTop || 0)
-      );
-    }
-    navigate(path);
   };
 
   return (
@@ -589,7 +549,7 @@ function AppShell() {
                       <button
                         key={item.path}
                         type="button"
-                        onClick={() => handleSidebarNavigate(item.path)}
+                        onClick={() => navigate(item.path)}
                         style={{
                           ...styles.navButton,
                           ...(location.pathname === item.path ? styles.activeNavButton : {}),
@@ -635,33 +595,23 @@ function AppShell() {
                       </div>
                     </div>
 
-                    <div
-                      ref={sidebarNavScrollRef}
-                      style={navScrollViewportStyle}
-                      onScroll={(event) => {
-                        if (typeof window === 'undefined') return;
-                        window.sessionStorage.setItem(
-                          SIDEBAR_SCROLL_KEY,
-                          String(event.currentTarget.scrollTop || 0)
-                        );
-                      }}
-                    >
-                      <div style={navRailStyle}>
-                        <div style={navTrackStyle} />
-                        {navItems.map((item) => {
+                    <div style={navRailStyle}>
+                      <div style={navTrackStyle} />
+                      {navItems.map((item) => {
                         const active = location.pathname === item.path;
+                        const hovered = hoveredPath === item.path;
                         return (
                           <button
                             key={item.path}
                             type="button"
-                            onClick={() => handleSidebarNavigate(item.path)}
+                            onClick={() => navigate(item.path)}
                             onMouseEnter={() => setHoveredPath(item.path)}
                             onMouseLeave={() => setHoveredPath(null)}
-                            style={navButtonDesktopStyle(active)}
+                            style={navButtonDesktopStyle(active, hovered)}
                             title={expandedSidebar ? undefined : item.label}
                           >
-                            <span style={navIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
-                            <span style={navLabelWrapStyle(active)}>
+                            <span style={navIconBubbleStyle(active, hovered)}>{getNavIcon(item.label)}</span>
+                            <span style={navLabelWrapStyle(active, hovered)}>
                               <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {item.label}
                               </span>
@@ -672,7 +622,6 @@ function AppShell() {
                           </button>
                         );
                       })}
-                      </div>
                     </div>
                   </div>
                 </aside>
