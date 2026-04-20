@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type CSSProperties } from 'react';
+import { useMemo, useState, useEffect, useRef, type CSSProperties } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -45,6 +45,7 @@ const ROUTES = {
 } as const;
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
+
 type NavItem = { path: RoutePath; label: string };
 
 const LOGO_MARK_SRC = '/detroit-axle-mark.png';
@@ -195,6 +196,15 @@ function AppShell() {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth
   );
+  const [hoveredNavPath, setHoveredNavPath] = useState<RoutePath | null>(null);
+  const [sidebarReady, setSidebarReady] = useState(false);
+  const [navHighlight, setNavHighlight] = useState<{ top: number; height: number; opacity: number }>({
+    top: 0,
+    height: 0,
+    opacity: 0,
+  });
+  const navButtonRefs = useRef<Partial<Record<RoutePath, HTMLButtonElement | null>>>({});
+  const navRailBodyRef = useRef<HTMLDivElement | null>(null);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -217,6 +227,11 @@ function AppShell() {
     document.body.style.color = theme.bodyColor;
     applyThemeCssVariables(themeMode);
   }, [themeMode, theme.bodyBackground, theme.bodyColor]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setSidebarReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
@@ -271,79 +286,193 @@ function AppShell() {
   const isStaff = isAdmin || isQA;
   const navItems = buildNavItems(profile);
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
+  const activeNavPath = location.pathname as RoutePath;
+
+  useEffect(() => {
+    if (isCompactLayout || !isStaff) return;
+    const targetPath = hoveredNavPath || activeNavPath;
+    const button = targetPath ? navButtonRefs.current[targetPath] : null;
+    const railBody = navRailBodyRef.current;
+
+    if (!button || !railBody) {
+      setNavHighlight((current) => ({ ...current, opacity: 0 }));
+      return;
+    }
+
+    const top = button.offsetTop;
+    const height = button.offsetHeight;
+    setNavHighlight({ top, height, opacity: 1 });
+  }, [activeNavPath, hoveredNavPath, isCompactLayout, isStaff, navItems.length, viewportWidth]);
 
   const desktopShellStyle: CSSProperties = {
     ...styles.workspaceShell,
-    gridTemplateColumns: '268px minmax(0, 1fr)',
-    gap: '22px',
+    gridTemplateColumns: '214px minmax(0, 1fr)',
+    gap: '18px',
     alignItems: 'start',
   };
 
-  const sidebarPanelStyle: CSSProperties = {
+  const sidebarShellStyle: CSSProperties = {
     ...styles.sidebarPanel,
-    top: '136px',
-    padding: '18px 14px',
+    top: '118px',
+    padding: '14px 12px',
     display: 'grid',
     gap: '14px',
     alignContent: 'start',
-    borderRadius: '28px',
+    borderRadius: '26px',
     background:
       themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(245,249,255,0.94) 100%)'
-        : 'linear-gradient(180deg, rgba(10,18,34,0.96) 0%, rgba(12,18,34,0.92) 100%)',
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,255,0.96) 100%)'
+        : 'linear-gradient(180deg, rgba(7,18,38,0.96) 0%, rgba(10,21,41,0.92) 100%)',
+    boxShadow:
+      themeMode === 'light'
+        ? '0 22px 48px rgba(15,23,42,0.08)'
+        : '0 24px 54px rgba(2,6,23,0.34)',
+    transform: sidebarReady ? 'translateX(0)' : 'translateX(-10px)',
+    opacity: sidebarReady ? 1 : 0,
+    transition: 'transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 220ms ease',
   };
 
-  const sidebarMiniBrandStyle: CSSProperties = {
+  const railHeaderStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '46px minmax(0, 1fr)',
+    gap: '10px',
+    padding: '4px 6px 2px 6px',
+  };
+
+  const railLogoRowStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '40px minmax(0, 1fr)',
     gap: '10px',
     alignItems: 'center',
-    padding: '4px 4px 8px 4px',
+    minWidth: 0,
   };
 
-  const sidebarLogoShellStyle: CSSProperties = {
-    width: '46px',
-    height: '46px',
+  const railLogoWrapStyle: CSSProperties = {
+    width: '40px',
+    height: '40px',
     borderRadius: '14px',
-    overflow: 'hidden',
-    display: 'grid',
-    placeItems: 'center',
+    padding: '5px',
     background:
       themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(243,247,255,0.94) 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 100%)',
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(242,247,255,0.94) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
     border: theme.metaBorder,
-    boxShadow: theme.headerShadow,
-    padding: '4px',
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 10px 20px rgba(2,6,23,0.16)',
+    display: 'grid',
+    placeItems: 'center',
   };
 
-  const sidebarIconBubbleStyle = (active: boolean): CSSProperties => ({
-    width: '32px',
-    height: '32px',
-    borderRadius: '12px',
+  const railWordmarkStyle: CSSProperties = {
+    width: '100%',
+    maxWidth: '110px',
+    height: '24px',
+    objectFit: 'contain',
+    objectPosition: 'left center',
+  };
+
+  const navRailBodyStyle: CSSProperties = {
+    position: 'relative',
+    display: 'grid',
+    gap: '8px',
+    padding: '4px',
+    borderRadius: '20px',
+  };
+
+  const navHighlightStyle: CSSProperties = {
+    position: 'absolute',
+    left: '4px',
+    right: '4px',
+    top: navHighlight.top,
+    height: navHighlight.height,
+    opacity: navHighlight.opacity,
+    borderRadius: '18px',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(135deg, rgba(37,99,235,0.96) 0%, rgba(59,130,246,0.94) 100%)'
+        : 'linear-gradient(135deg, rgba(37,99,235,0.94) 0%, rgba(59,130,246,0.88) 100%)',
+    boxShadow:
+      themeMode === 'light'
+        ? '0 16px 30px rgba(37,99,235,0.22)'
+        : '0 16px 32px rgba(37,99,235,0.26)',
+    transition:
+      'top 260ms cubic-bezier(0.22, 1, 0.36, 1), height 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease',
+    pointerEvents: 'none',
+    zIndex: 0,
+  };
+
+  const navButtonDesktopStyle = (active: boolean): CSSProperties => ({
+    ...styles.navButton,
+    position: 'relative',
+    zIndex: 1,
+    display: 'grid',
+    gridTemplateColumns: '30px minmax(0, 1fr)',
+    alignItems: 'center',
+    gap: '12px',
+    minHeight: '50px',
+    textAlign: 'left',
+    borderRadius: '18px',
+    padding: '10px 12px',
+    background: 'transparent',
+    border: active
+      ? '1px solid transparent'
+      : themeMode === 'light'
+      ? '1px solid rgba(148,163,184,0.14)'
+      : '1px solid rgba(148,163,184,0.10)',
+    color: active ? '#ffffff' : theme.navButtonText,
+    boxShadow: 'none',
+    transform: active ? 'translateX(0)' : 'translateX(0)',
+    transition:
+      'transform 180ms ease, color 180ms ease, border-color 180ms ease, background-color 180ms ease',
+  });
+
+  const navIconBubbleStyle = (active: boolean): CSSProperties => ({
+    width: '30px',
+    height: '30px',
+    borderRadius: '10px',
     display: 'grid',
     placeItems: 'center',
     fontSize: '14px',
     fontWeight: 900,
     color: active ? '#ffffff' : theme.navButtonText,
     background: active
-      ? 'rgba(255,255,255,0.18)'
+      ? 'rgba(255,255,255,0.16)'
       : themeMode === 'light'
       ? 'rgba(37,99,235,0.08)'
       : 'rgba(148,163,184,0.10)',
+    transition: 'background-color 180ms ease, color 180ms ease, transform 180ms ease',
   });
 
-  const desktopNavButtonStyle: CSSProperties = {
-    ...styles.navButton,
+  const sectionTagStyle: CSSProperties = {
+    color: theme.brandEyebrow,
+    fontSize: '10px',
+    fontWeight: 800,
+    letterSpacing: '0.18em',
+    textTransform: 'uppercase',
+    marginBottom: '2px',
+  };
+
+  const headerBrandLogoWrapStyle: CSSProperties = {
+    ...styles.brandLogoWrap,
+    width: '86px',
+    height: '86px',
+    borderRadius: '28px',
+    padding: '7px',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,255,0.95) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
+  };
+
+  const headerBrandInnerStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    borderRadius: '22px',
     display: 'grid',
-    gridTemplateColumns: '32px minmax(0, 1fr)',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '10px 12px',
-    minHeight: '48px',
-    textAlign: 'left',
-    borderRadius: '16px',
-    boxShadow: 'none',
+    placeItems: 'center',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,249,255,0.94) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
+    overflow: 'hidden',
   };
 
   return (
@@ -355,18 +484,16 @@ function AppShell() {
         <header style={styles.headerShell}>
           <div style={styles.headerLeft}>
             <div style={styles.brandWrap}>
-              <div style={styles.brandLogoWrap}>
-                <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <div style={headerBrandLogoWrapStyle}>
+                <div style={headerBrandInnerStyle}>
+                  <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
               </div>
-              <div style={styles.brandAccent} />
-              <div style={{ minWidth: 0 }}>
+              <div style={{ ...styles.brandAccent, height: '84px', width: '12px' }} />
+              <div style={{ display: 'grid', gap: '8px', minWidth: 0 }}>
                 <div style={styles.brandEyebrow}>Detroit Axle Workspace</div>
-                <img
-                  src={LOGO_WORDMARK_SRC}
-                  alt="Detroit Axle"
-                  style={{ width: '100%', maxWidth: '360px', height: '44px', objectFit: 'contain', objectPosition: 'left center', marginTop: '2px' }}
-                />
-                <div style={{ color: theme.brandTitle, fontSize: '28px', fontWeight: 800, lineHeight: 1.08, marginTop: '8px' }}>
+                <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={{ width: '100%', maxWidth: '760px', height: isCompactLayout ? '48px' : '72px', objectFit: 'contain', objectPosition: 'left center' }} />
+                <div style={{ fontSize: isCompactLayout ? '28px' : '36px', lineHeight: 1.04, fontWeight: 800, color: themeMode === 'light' ? '#334155' : '#dbeafe' }}>
                   Quality Assurance Command Center
                 </div>
               </div>
@@ -420,38 +547,39 @@ function AppShell() {
               </>
             ) : (
               <div style={desktopShellStyle}>
-                <aside style={sidebarPanelStyle}>
-                  <div style={sidebarMiniBrandStyle}>
-                    <div style={sidebarLogoShellStyle}>
-                      <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                    </div>
-                    <div style={{ minWidth: 0, display: 'grid', gap: '3px' }}>
-                      <div style={{ ...styles.sidebarTitle, marginBottom: 0, fontSize: '10px' }}>Detroit Axle Workspace</div>
-                      <div style={{ fontSize: '12px', fontWeight: 800, color: theme.brandTitle, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {activeRouteLabel}
+                <aside style={sidebarShellStyle}>
+                  <div style={railHeaderStyle}>
+                    <div style={railLogoRowStyle}>
+                      <div style={railLogoWrapStyle}>
+                        <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      </div>
+                      <div style={{ display: 'grid', gap: '3px', minWidth: 0 }}>
+                        <div style={sectionTagStyle}>Detroit Axle Workspace</div>
+                        <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={railWordmarkStyle} />
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ height: '1px', background: theme.navButtonBorder }} />
-
-                  <div style={{ display: 'grid', gap: '8px' }}>
+                  <div ref={navRailBodyRef} style={navRailBodyStyle}>
+                    <div style={navHighlightStyle} />
                     {navItems.map((item) => {
                       const active = location.pathname === item.path;
                       return (
                         <button
                           key={item.path}
+                          ref={(node) => {
+                            navButtonRefs.current[item.path] = node;
+                          }}
                           type="button"
                           onClick={() => navigate(item.path)}
-                          style={{
-                            ...desktopNavButtonStyle,
-                            ...(active ? styles.activeNavButton : {}),
-                          }}
+                          onMouseEnter={() => setHoveredNavPath(item.path)}
+                          onMouseLeave={() => setHoveredNavPath(null)}
+                          style={navButtonDesktopStyle(active)}
                         >
-                          <span style={sidebarIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
+                          <span style={navIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
                           <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
                             <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
-                            <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.8)' : theme.metaText }}>
+                            <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.82)' : theme.metaText, opacity: 0.92 }}>
                               {active ? 'Current view' : 'Open'}
                             </span>
                           </span>
