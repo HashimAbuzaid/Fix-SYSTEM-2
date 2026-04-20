@@ -1,35 +1,30 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { BrowserRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { ErrorBoundary } from './components/ErrorBoundary';
+import { useMemo, useState, useEffect, type CSSProperties } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
-import type { UserProfile } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
-import {
-  applyThemeCssVariables,
-  createStyles,
-  getThemePalette,
-  readStoredTheme,
-} from './lib/theme';
+import { getThemePalette, applyThemeCssVariables, createStyles, readStoredTheme } from './lib/theme';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import type { ThemeMode } from './lib/theme';
 
-import AccountsSupabase from './QA/AccountsSupabase';
-import AgentFeedbackSupabase from './QA/AgentFeedbackSupabase';
-import AgentPortal from './QA/AgentPortal';
-import AuditsImportSupabase from './QA/AuditsImportSupabase';
-import AuditsListSupabase from './QA/AuditsListSupabase';
-import CallsUploadSupabase from './QA/CallsUploadSupabase';
-import Dashboard from './QA/Dashboard';
 import Login from './QA/Login';
-import MonitoringSupabase from './QA/MonitoringSupabase';
-import NewAuditSupabase from './QA/NewAuditSupabase';
-import ReportsSupabase from './QA/ReportsSupabase';
 import ResetPassword from './QA/ResetPassword';
-import SalesUploadSupabase from './QA/SalesUploadSupabase';
+import AgentPortal from './QA/AgentPortal';
 import SupervisorPortal from './QA/SupervisorPortal';
-import SupervisorRequestsSupabase from './QA/SupervisorRequestsSupabase';
-import TicketAIReviewQueueSupabase from './QA/TicketAIReviewQueueSupabase';
-import TicketEvidenceUploadSupabase from './QA/TicketEvidenceUploadSupabase';
+import Dashboard from './QA/Dashboard';
+import NewAuditSupabase from './QA/NewAuditSupabase';
+import AuditsImportSupabase from './QA/AuditsImportSupabase';
+import CallsUploadSupabase from './QA/CallsUploadSupabase';
 import TicketsUploadSupabase from './QA/TicketsUploadSupabase';
+import TicketEvidenceUploadSupabase from './QA/TicketEvidenceUploadSupabase';
+import TicketAIReviewQueueSupabase from './QA/TicketAIReviewQueueSupabase';
+import SalesUploadSupabase from './QA/SalesUploadSupabase';
+import AuditsListSupabase from './QA/AuditsListSupabase';
+import AccountsSupabase from './QA/AccountsSupabase';
+import SupervisorRequestsSupabase from './QA/SupervisorRequestsSupabase';
+import AgentFeedbackSupabase from './QA/AgentFeedbackSupabase';
+import ReportsSupabase from './QA/ReportsSupabase';
+import MonitoringSupabase from './QA/MonitoringSupabase';
+import type { UserProfile } from './context/AuthContext';
 
 const ROUTES = {
   dashboard: '/',
@@ -49,25 +44,24 @@ const ROUTES = {
   profile: '/profile',
 } as const;
 
-type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
+type RoutePath = typeof ROUTES[keyof typeof ROUTES];
 
-const BRAND_MARK_SRC = '/detroit-axle-mark.png';
-const BRAND_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
+type NavItem = { path: RoutePath; label: string };
 
-function getActiveRouteLabel(
-  pathname: string,
-  items: Array<{ path: RoutePath; label: string }>
-) {
+const LOGO_MARK_SRC = '/detroit-axle-mark.png';
+const LOGO_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
+
+function getActiveRouteLabel(pathname: string, items: NavItem[]) {
   return items.find((item) => item.path === pathname)?.label || 'Workspace';
 }
 
-function buildNavItems(profile: UserProfile) {
+function buildNavItems(profile: UserProfile): NavItem[] {
   const isAdmin = profile.role === 'admin';
   const isStaff = isAdmin || profile.role === 'qa';
 
   if (!isStaff) return [];
 
-  const items: Array<{ path: RoutePath; label: string }> = [
+  const items: NavItem[] = [
     { path: ROUTES.dashboard, label: 'Dashboard' },
     { path: ROUTES.newAudit, label: 'New Audit' },
     { path: ROUTES.auditsUpload, label: 'Audits Upload' },
@@ -90,13 +84,33 @@ function buildNavItems(profile: UserProfile) {
 
   items.push(
     { path: ROUTES.reports, label: 'Reports' },
-    {
-      path: ROUTES.profile,
-      label: isAdmin ? 'My Admin Profile' : 'My QA Profile',
-    }
+    { path: ROUTES.profile, label: isAdmin ? 'My Admin Profile' : 'My QA Profile' }
   );
 
   return items;
+}
+
+function getNavIcon(label: string) {
+  const map: Record<string, string> = {
+    Dashboard: '⌂',
+    'New Audit': '+',
+    'Audits Upload': '⇪',
+    'Audits List': '≣',
+    'Calls Upload': '☎',
+    'Tickets Upload': '✉',
+    'Ticket Evidence': '◫',
+    'Ticket AI Review': '✦',
+    'Sales Upload': '$',
+    'Agent Feedback': '☰',
+    Monitoring: '⦿',
+    Accounts: '◎',
+    'Supervisor Requests': '↗',
+    Reports: '▤',
+    'My Admin Profile': '☺',
+    'My QA Profile': '☺',
+  };
+
+  return map[label] || '•';
 }
 
 function ProfileInfoCard({
@@ -136,20 +150,12 @@ function StaffRoutes({
       <Route path={ROUTES.auditsList} element={<AuditsListSupabase />} />
       <Route path={ROUTES.callsUpload} element={<CallsUploadSupabase />} />
       <Route path={ROUTES.ticketsUpload} element={<TicketsUploadSupabase />} />
-      <Route
-        path={ROUTES.ticketEvidence}
-        element={<TicketEvidenceUploadSupabase />}
-      />
-      <Route
-        path={ROUTES.ticketAiReview}
-        element={<TicketAIReviewQueueSupabase />}
-      />
+      <Route path={ROUTES.ticketEvidence} element={<TicketEvidenceUploadSupabase />} />
+      <Route path={ROUTES.ticketAiReview} element={<TicketAIReviewQueueSupabase />} />
       <Route path={ROUTES.salesUpload} element={<SalesUploadSupabase />} />
       <Route path={ROUTES.agentFeedback} element={<AgentFeedbackSupabase />} />
       <Route path={ROUTES.monitoring} element={<MonitoringSupabase />} />
-      {isAdmin && (
-        <Route path={ROUTES.accounts} element={<AccountsSupabase />} />
-      )}
+      {isAdmin && <Route path={ROUTES.accounts} element={<AccountsSupabase />} />}
       {isAdmin && (
         <Route
           path={ROUTES.supervisorRequests}
@@ -162,46 +168,16 @@ function StaffRoutes({
         element={
           <div style={styles.profilePanel}>
             <div style={styles.sectionEyebrow}>Profile</div>
-            <h2
-              style={{
-                marginTop: 0,
-                marginBottom: '18px',
-                color: theme.brandTitle,
-              }}
-            >
+            <h2 style={{ marginTop: 0, marginBottom: '18px', color: theme.brandTitle }}>
               {isAdmin ? 'My Admin Profile' : 'My QA Profile'}
             </h2>
             <div style={styles.profileGrid}>
-              <ProfileInfoCard
-                label="Name"
-                value={profile.agent_name || '-'}
-                styles={styles}
-              />
-              <ProfileInfoCard
-                label="Display Name"
-                value={profile.display_name || '-'}
-                styles={styles}
-              />
-              <ProfileInfoCard
-                label="Email"
-                value={profile.email || '-'}
-                styles={styles}
-              />
-              <ProfileInfoCard
-                label="Role"
-                value={profile.role || '-'}
-                styles={styles}
-              />
-              <ProfileInfoCard
-                label="Agent ID"
-                value={profile.agent_id || '-'}
-                styles={styles}
-              />
-              <ProfileInfoCard
-                label="Team"
-                value={profile.team || '-'}
-                styles={styles}
-              />
+              <ProfileInfoCard label="Name" value={profile.agent_name || '-'} styles={styles} />
+              <ProfileInfoCard label="Display Name" value={profile.display_name || '-'} styles={styles} />
+              <ProfileInfoCard label="Email" value={profile.email || '-'} styles={styles} />
+              <ProfileInfoCard label="Role" value={profile.role || '-'} styles={styles} />
+              <ProfileInfoCard label="Agent ID" value={profile.agent_id || '-'} styles={styles} />
+              <ProfileInfoCard label="Team" value={profile.team || '-'} styles={styles} />
             </div>
           </div>
         }
@@ -220,7 +196,6 @@ function AppShell() {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth
   );
-  const [routeReady, setRouteReady] = useState(false);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -238,21 +213,11 @@ function AppShell() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('detroit-axle-theme-mode', themeMode);
     document.documentElement.setAttribute('data-theme-mode', themeMode);
-    document.documentElement.style.colorScheme =
-      themeMode === 'light' ? 'light' : 'dark';
+    document.documentElement.style.colorScheme = themeMode === 'light' ? 'light' : 'dark';
     document.body.style.background = theme.bodyBackground;
     document.body.style.color = theme.bodyColor;
     applyThemeCssVariables(themeMode);
   }, [themeMode, theme.bodyBackground, theme.bodyColor]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    setRouteReady(false);
-    const frameId = window.requestAnimationFrame(() => {
-      setRouteReady(true);
-    });
-    return () => window.cancelAnimationFrame(frameId);
-  }, [location.pathname]);
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
@@ -263,28 +228,11 @@ function AppShell() {
       : profile.agent_name;
   }, [profile]);
 
-  const renderStaffContent = (content: ReactNode) => (
-    <div
-      style={{
-        ...styles.routeStage,
-        opacity: routeReady ? 1 : 0,
-        transform: routeReady ? 'translateY(0)' : 'translateY(14px)',
-      }}
-      data-route-shell="true"
-    >
-      {content}
-    </div>
-  );
-
   if (loading) {
     return (
       <div style={styles.loadingShell}>
         <div style={styles.loadingCard}>
-          <img
-            src={BRAND_MARK_SRC}
-            alt="Detroit Axle"
-            style={styles.loadingBrandMark}
-          />
+          <div style={styles.loadingDot} />
           <h1 style={{ margin: '0 0 8px 0', color: theme.loadingText }}>
             Loading Detroit Axle QA System
           </h1>
@@ -295,9 +243,7 @@ function AppShell() {
   }
 
   if (recoveryMode) {
-    return (
-      <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />
-    );
+    return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
   }
 
   if (!auth.session) return <Login />;
@@ -307,9 +253,7 @@ function AppShell() {
       <div style={styles.loadingShell}>
         <div style={styles.errorCard}>
           <div style={styles.sectionEyebrow}>Profile Error</div>
-          <h1 style={{ marginTop: 0, color: theme.errorText }}>
-            Profile not found
-          </h1>
+          <h1 style={{ marginTop: 0, color: theme.errorText }}>Profile not found</h1>
           <p style={{ color: theme.loadingSubtext }}>
             {auth.profileError ||
               'This user exists in Supabase Auth but does not have a profile row yet.'}
@@ -327,10 +271,135 @@ function AppShell() {
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
   const navItems = buildNavItems(profile);
-  const activeRouteLabel = getActiveRouteLabel(
-    location.pathname as RoutePath,
-    navItems
-  );
+  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
+
+  const desktopShellStyle: CSSProperties = {
+    ...styles.workspaceShell,
+    gridTemplateColumns: '292px minmax(0, 1fr)',
+    gap: '24px',
+  };
+
+  const sidebarShellStyle: CSSProperties = {
+    ...styles.sidebarPanel,
+    top: '132px',
+    padding: '18px 16px 18px 16px',
+    display: 'grid',
+    gap: '16px',
+    alignContent: 'start',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(242,247,255,0.96) 100%)'
+        : 'linear-gradient(180deg, rgba(8,18,38,0.96) 0%, rgba(9,17,34,0.92) 100%)',
+  };
+
+  const railHeaderStyle: CSSProperties = {
+    display: 'grid',
+    gap: '14px',
+    padding: '8px 6px 2px 6px',
+  };
+
+  const railLogoCardStyle: CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: '66px minmax(0, 1fr)',
+    gap: '12px',
+    alignItems: 'center',
+    padding: '10px',
+    borderRadius: '20px',
+    border: theme.metaBorder,
+    background: theme.metaBackground,
+    boxShadow: theme.headerShadow,
+    minWidth: 0,
+  };
+
+  const railLogoWrapStyle: CSSProperties = {
+    width: '66px',
+    height: '66px',
+    borderRadius: '20px',
+    padding: '6px',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(242,247,255,0.94) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.03) 100%)',
+    border: theme.metaBorder,
+    boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08), 0 16px 30px rgba(2,6,23,0.18)',
+    display: 'grid',
+    placeItems: 'center',
+  };
+
+  const railWordmarkStyle: CSSProperties = {
+    width: '100%',
+    maxWidth: '132px',
+    height: '28px',
+    objectFit: 'contain',
+    objectPosition: 'left center',
+  };
+
+  const navGroupStyle: CSSProperties = {
+    display: 'grid',
+    gap: '8px',
+  };
+
+  const navButtonDesktopStyle: CSSProperties = {
+    ...styles.navButton,
+    display: 'grid',
+    gridTemplateColumns: '34px minmax(0, 1fr)',
+    alignItems: 'center',
+    gap: '12px',
+    minHeight: '52px',
+    textAlign: 'left',
+    borderRadius: '18px',
+    padding: '10px 12px',
+  };
+
+  const navIconBubbleStyle = (active: boolean): CSSProperties => ({
+    width: '34px',
+    height: '34px',
+    borderRadius: '12px',
+    display: 'grid',
+    placeItems: 'center',
+    fontSize: '15px',
+    fontWeight: 900,
+    color: active ? '#ffffff' : theme.navButtonText,
+    background: active
+      ? 'rgba(255,255,255,0.18)'
+      : themeMode === 'light'
+      ? 'rgba(37,99,235,0.08)'
+      : 'rgba(148,163,184,0.10)',
+    boxShadow: active ? '0 12px 24px rgba(37,99,235,0.18)' : 'none',
+  });
+
+  const sectionTagStyle: CSSProperties = {
+    color: theme.brandEyebrow,
+    fontSize: '11px',
+    fontWeight: 800,
+    letterSpacing: '0.18em',
+    textTransform: 'uppercase',
+  };
+
+  const headerBrandLogoWrapStyle: CSSProperties = {
+    ...styles.brandLogoWrap,
+    width: '86px',
+    height: '86px',
+    borderRadius: '28px',
+    padding: '7px',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,255,0.95) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
+  };
+
+  const headerBrandInnerStyle: CSSProperties = {
+    width: '100%',
+    height: '100%',
+    borderRadius: '22px',
+    display: 'grid',
+    placeItems: 'center',
+    background:
+      themeMode === 'light'
+        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,249,255,0.94) 100%)'
+        : 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
+    overflow: 'hidden',
+  };
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
@@ -341,29 +410,20 @@ function AppShell() {
         <header style={styles.headerShell}>
           <div style={styles.headerLeft}>
             <div style={styles.brandWrap}>
-              <div style={styles.brandLogoWrap}>
-                <img
-                  src={BRAND_MARK_SRC}
-                  alt="Detroit Axle logo"
-                  style={styles.brandLogo}
-                />
+              <div style={headerBrandLogoWrapStyle}>
+                <div style={headerBrandInnerStyle}>
+                  <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
               </div>
-
-              <div style={styles.brandAccent} />
-
-              <div style={styles.brandTextWrap}>
+              <div style={{ ...styles.brandAccent, height: '84px', width: '12px' }} />
+              <div style={{ display: 'grid', gap: '8px', minWidth: 0 }}>
                 <div style={styles.brandEyebrow}>Detroit Axle Workspace</div>
-                <img
-                  src={BRAND_WORDMARK_SRC}
-                  alt="Detroit Axle"
-                  style={styles.brandWordmark}
-                />
-                <div style={styles.brandSubtitle}>
+                <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={{ width: '100%', maxWidth: '760px', height: isCompactLayout ? '48px' : '72px', objectFit: 'contain', objectPosition: 'left center' }} />
+                <div style={{ fontSize: isCompactLayout ? '28px' : '36px', lineHeight: 1.04, fontWeight: 800, color: themeMode === 'light' ? '#334155' : '#dbeafe' }}>
                   Quality Assurance Command Center
                 </div>
               </div>
             </div>
-
             <div style={styles.metaStrip}>
               <div style={styles.metaPill}>Role: {profile.role}</div>
               <div style={styles.metaPill}>Workspace: {activeRouteLabel}</div>
@@ -375,9 +435,7 @@ function AppShell() {
           <div style={styles.headerActions}>
             <button
               type="button"
-              onClick={() =>
-                setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))
-              }
+              onClick={() => setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))}
               style={styles.themeButton}
             >
               {themeMode === 'light' ? 'Dark Theme' : 'Light Theme'}
@@ -401,9 +459,7 @@ function AppShell() {
                         onClick={() => navigate(item.path)}
                         style={{
                           ...styles.navButton,
-                          ...(location.pathname === item.path
-                            ? styles.activeNavButton
-                            : {}),
+                          ...(location.pathname === item.path ? styles.activeNavButton : {}),
                         }}
                       >
                         {item.label}
@@ -411,81 +467,74 @@ function AppShell() {
                     ))}
                   </div>
                 </nav>
-
-                {renderStaffContent(
-                  <div style={styles.contentInner}>
-                    <StaffRoutes profile={profile} styles={styles} theme={theme} />
-                  </div>
-                )}
+                <div style={styles.contentInner}>
+                  <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                </div>
               </>
             ) : (
-              <div style={styles.workspaceShell}>
-                <aside style={styles.sidebarPanel}>
-                  <div style={styles.sidebarTitle}>Workspace Navigation</div>
-                  <p style={styles.sidebarText}>
-                    Jump between operations, audits, uploads, reports, and
-                    people workflows.
-                  </p>
-                  <div style={styles.metaStrip}>
-                    <div style={styles.metaPill}>
-                      Active View: {activeRouteLabel}
+              <div style={desktopShellStyle}>
+                <aside style={sidebarShellStyle}>
+                  <div style={railHeaderStyle}>
+                    <div style={railLogoCardStyle}>
+                      <div style={railLogoWrapStyle}>
+                        <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                      </div>
+                      <div style={{ display: 'grid', gap: '6px', minWidth: 0 }}>
+                        <div style={sectionTagStyle}>Detroit Axle Workspace</div>
+                        <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={railWordmarkStyle} />
+                      </div>
                     </div>
-                    <div style={styles.metaPill}>{navItems.length} tools</div>
+                    <div style={{ ...styles.sidebarText, fontSize: '13px' }}>
+                      Premium operations hub for audits, uploads, evidence review, reports, and people workflows.
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div style={{ ...styles.metaPill, justifyContent: 'center', display: 'flex' }}>View: {activeRouteLabel}</div>
+                      <div style={{ ...styles.metaPill, justifyContent: 'center', display: 'flex' }}>{navItems.length} tools</div>
+                    </div>
                   </div>
-                  {navItems.map((item) => (
-                    <button
-                      key={item.path}
-                      type="button"
-                      onClick={() => navigate(item.path)}
-                      style={{
-                        ...styles.navButton,
-                        textAlign: 'left',
-                        ...(location.pathname === item.path
-                          ? styles.activeNavButton
-                          : {}),
-                      }}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </aside>
 
-                {renderStaffContent(
-                  <div style={styles.contentInner}>
-                    <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                  <div style={navGroupStyle}>
+                    <div style={styles.sidebarTitle}>Workspace Navigation</div>
+                    {navItems.map((item) => {
+                      const active = location.pathname === item.path;
+                      return (
+                        <button
+                          key={item.path}
+                          type="button"
+                          onClick={() => navigate(item.path)}
+                          style={{
+                            ...navButtonDesktopStyle,
+                            ...(active ? styles.activeNavButton : {}),
+                          }}
+                        >
+                          <span style={navIconBubbleStyle(active)}>{getNavIcon(item.label)}</span>
+                          <span style={{ display: 'grid', gap: '2px', minWidth: 0 }}>
+                            <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+                            <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.8)' : theme.metaText, opacity: 0.9 }}>
+                              {active ? 'Current workspace' : 'Open view'}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+                </aside>
+                <div style={styles.contentInner}>
+                  <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                </div>
               </div>
             )}
           </main>
         ) : isSupervisor ? (
           <main style={styles.contentShell}>
-            <div
-              style={{
-                ...styles.routeStage,
-                opacity: routeReady ? 1 : 0,
-                transform: routeReady ? 'translateY(0)' : 'translateY(14px)',
-              }}
-              data-route-shell="true"
-            >
-              <div style={styles.contentInner}>
-                <SupervisorPortal currentUser={profile} />
-              </div>
+            <div style={styles.contentInner}>
+              <SupervisorPortal currentUser={profile} />
             </div>
           </main>
         ) : (
           <main style={styles.contentShell}>
-            <div
-              style={{
-                ...styles.routeStage,
-                opacity: routeReady ? 1 : 0,
-                transform: routeReady ? 'translateY(0)' : 'translateY(14px)',
-              }}
-              data-route-shell="true"
-            >
-              <div style={styles.contentInner}>
-                <AgentPortal currentUser={profile} />
-              </div>
+            <div style={styles.contentInner}>
+              <AgentPortal currentUser={profile} />
             </div>
           </main>
         )}
