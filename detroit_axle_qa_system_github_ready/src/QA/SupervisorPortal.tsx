@@ -631,13 +631,8 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
   function handleMonitoringWidgetClick() {
     setMonitoringOpen(true);
 
-    if (pageRootRef.current) {
-      pageRootRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      return;
-    }
-
-    if (typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (selectedAgent) {
+      setMonitoringAgentFilter(selectedAgent.agent_id || '');
     }
   }
 
