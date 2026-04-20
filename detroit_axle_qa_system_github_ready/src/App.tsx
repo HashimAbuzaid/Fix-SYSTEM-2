@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, type CSSProperties } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
 import { getThemePalette, applyThemeCssVariables, createStyles, readStoredTheme } from './lib/theme';
@@ -42,6 +42,10 @@ const ROUTES = {
   supervisorRequests: '/supervisor-requests',
   reports: '/reports',
   profile: '/profile',
+  supervisorOverview: '/supervisor',
+  supervisorTeamDashboard: '/supervisor/team-dashboard',
+  supervisorRequestsView: '/supervisor/requests',
+  supervisorProfile: '/supervisor/profile',
 } as const;
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
@@ -63,6 +67,16 @@ function getActiveRouteLabel(pathname: string, items: NavItem[]) {
 function buildNavItems(profile: UserProfile): NavItem[] {
   const isAdmin = profile.role === 'admin';
   const isStaff = isAdmin || profile.role === 'qa';
+  const isSupervisor = profile.role === 'supervisor';
+
+  if (isSupervisor) {
+    return [
+      { path: ROUTES.supervisorOverview, label: 'Overview' },
+      { path: ROUTES.supervisorTeamDashboard, label: 'Team Dashboard' },
+      { path: ROUTES.supervisorRequestsView, label: 'Supervisor Requests' },
+      { path: ROUTES.supervisorProfile, label: 'My Supervisor Profile' },
+    ];
+  }
 
   if (!isStaff) return [];
 
@@ -113,6 +127,9 @@ function getNavIcon(label: string) {
     Reports: '▤',
     'My Admin Profile': '☺',
     'My QA Profile': '☺',
+    Overview: '⌂',
+    'Team Dashboard': '▤',
+    'My Supervisor Profile': '☺',
   };
 
   return map[label] || '•';
@@ -171,23 +188,65 @@ function StaffRoutes({
       <Route
         path={ROUTES.profile}
         element={
-          <div style={styles.profilePanel}>
-            <div style={styles.sectionEyebrow}>Profile</div>
-            <h2 style={{ marginTop: 0, marginBottom: '18px', color: theme.brandTitle }}>
-              {isAdmin ? 'My Admin Profile' : 'My QA Profile'}
-            </h2>
-            <div style={styles.profileGrid}>
-              <ProfileInfoCard label="Name" value={profile.agent_name || '-'} styles={styles} />
-              <ProfileInfoCard label="Display Name" value={profile.display_name || '-'} styles={styles} />
-              <ProfileInfoCard label="Email" value={profile.email || '-'} styles={styles} />
-              <ProfileInfoCard label="Role" value={profile.role || '-'} styles={styles} />
-              <ProfileInfoCard label="Agent ID" value={profile.agent_id || '-'} styles={styles} />
-              <ProfileInfoCard label="Team" value={profile.team || '-'} styles={styles} />
-            </div>
-          </div>
+          <ProfilePanel
+            title={isAdmin ? 'My Admin Profile' : 'My QA Profile'}
+            profile={profile}
+            styles={styles}
+            theme={theme}
+          />
         }
       />
-      <Route path="*" element={<Dashboard />} />
+      <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />
+    </Routes>
+  );
+}
+
+
+function ProfilePanel({
+  title,
+  profile,
+  styles,
+  theme,
+}: {
+  title: string;
+  profile: UserProfile;
+  styles: ReturnType<typeof createStyles>;
+  theme: ReturnType<typeof getThemePalette>;
+}) {
+  return (
+    <div style={styles.profilePanel}>
+      <div style={styles.sectionEyebrow}>Profile</div>
+      <h2 style={{ marginTop: 0, marginBottom: '18px', color: theme.brandTitle }}>
+        {title}
+      </h2>
+      <div style={styles.profileGrid}>
+        <ProfileInfoCard label="Name" value={profile.agent_name || '-'} styles={styles} />
+        <ProfileInfoCard label="Display Name" value={profile.display_name || '-'} styles={styles} />
+        <ProfileInfoCard label="Email" value={profile.email || '-'} styles={styles} />
+        <ProfileInfoCard label="Role" value={profile.role || '-'} styles={styles} />
+        <ProfileInfoCard label="Agent ID" value={profile.agent_id || '-'} styles={styles} />
+        <ProfileInfoCard label="Team" value={profile.team || '-'} styles={styles} />
+      </div>
+    </div>
+  );
+}
+
+function SupervisorRoutes({
+  profile,
+  styles,
+  theme,
+}: {
+  profile: UserProfile;
+  styles: ReturnType<typeof createStyles>;
+  theme: ReturnType<typeof getThemePalette>;
+}) {
+  return (
+    <Routes>
+      <Route path={ROUTES.supervisorOverview} element={<SupervisorPortal currentUser={profile} initialTab="overview" hideInternalTabs />} />
+      <Route path={ROUTES.supervisorTeamDashboard} element={<SupervisorPortal currentUser={profile} initialTab="team-dashboard" hideInternalTabs />} />
+      <Route path={ROUTES.supervisorRequestsView} element={<SupervisorPortal currentUser={profile} initialTab="requests" hideInternalTabs />} />
+      <Route path={ROUTES.supervisorProfile} element={<ProfilePanel title="My Supervisor Profile" profile={profile} styles={styles} theme={theme} />} />
+      <Route path="*" element={<Navigate to={ROUTES.supervisorOverview} replace />} />
     </Routes>
   );
 }
@@ -284,6 +343,7 @@ function AppShell() {
   const isQA = profile.role === 'qa';
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
+  const hasSidebarRail = isStaff || isSupervisor;
   const navItems = buildNavItems(profile);
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
@@ -296,8 +356,8 @@ function AppShell() {
 
   const desktopShellStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: `${SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)`,
-    gap: '22px',
+    gridTemplateColumns: hasSidebarRail ? `${SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)` : 'minmax(0, 1fr)',
+    gap: hasSidebarRail ? '22px' : '0',
     alignItems: 'start',
   };
 
@@ -539,7 +599,7 @@ function AppShell() {
           </div>
         </header>
 
-        {isStaff ? (
+        {hasSidebarRail ? (
           <main style={styles.contentShell}>
             {isCompactLayout ? (
               <>
@@ -561,7 +621,11 @@ function AppShell() {
                   </div>
                 </nav>
                 <div style={styles.contentInner}>
-                  <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                  {isStaff ? (
+                    <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                  ) : (
+                    <SupervisorRoutes profile={profile} styles={styles} theme={theme} />
+                  )}
                 </div>
               </>
             ) : (
@@ -626,16 +690,14 @@ function AppShell() {
                   </div>
                 </aside>
                 <div style={styles.contentInner}>
-                  <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                  {isStaff ? (
+                    <StaffRoutes profile={profile} styles={styles} theme={theme} />
+                  ) : (
+                    <SupervisorRoutes profile={profile} styles={styles} theme={theme} />
+                  )}
                 </div>
               </div>
             )}
-          </main>
-        ) : isSupervisor ? (
-          <main style={styles.contentShell}>
-            <div style={styles.contentInner}>
-              <SupervisorPortal currentUser={profile} />
-            </div>
           </main>
         ) : (
           <main style={styles.contentShell}>

@@ -95,6 +95,8 @@ type SupervisorPortalTab = 'overview' | 'team-dashboard' | 'requests';
 
 type SupervisorPortalProps = {
   currentUser: UserProfile;
+  initialTab?: SupervisorPortalTab;
+  hideInternalTabs?: boolean;
 };
 
 type AgentFeedback = {
@@ -278,7 +280,7 @@ function getSupervisorThemeVars(): Record<string, string> {
 }
 
 
-function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
+function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTabs = false }: SupervisorPortalProps) {
   const [teamAgents, setTeamAgents] = useState<AgentProfile[]>([]);
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [records, setRecords] = useState<TeamRecord[]>([]);
@@ -291,7 +293,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
   const [monitoringOpen, setMonitoringOpen] = useState(false);
   const [monitoringAgentFilter, setMonitoringAgentFilter] = useState('');
-  const [activeTab, setActiveTab] = useState<SupervisorPortalTab>('overview');
+  const [activeTab, setActiveTab] = useState<SupervisorPortalTab>(initialTab);
   const [expandedAuditId, setExpandedAuditId] = useState<string | null>(null);
   const [auditDateFrom, setAuditDateFrom] = useState('');
   const [auditDateTo, setAuditDateTo] = useState('');
@@ -307,6 +309,10 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
   const pageRootRef = useRef<HTMLDivElement | null>(null);
   const themeVars = getSupervisorThemeVars();
   const [auditsVisible, setAuditsVisible] = useState(true);
+
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
 
   useEffect(() => {
     void loadTeamData(false);
@@ -775,6 +781,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
         </button>
       </div>
 
+      {!hideInternalTabs ? (
       <div style={tabBarStyle}>
         <button
           type="button"
@@ -807,6 +814,7 @@ function SupervisorPortal({ currentUser }: SupervisorPortalProps) {
           Supervisor Requests
         </button>
       </div>
+      ) : null}
 
       {activeTab === 'requests' ? (
         <div style={{ marginTop: '24px' }}>
