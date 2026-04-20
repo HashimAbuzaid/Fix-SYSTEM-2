@@ -565,6 +565,14 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       color: theme.profileCardValue,
       wordBreak: 'break-word',
     } as CSSProperties,
+    loadingDot: {
+  width: '74px',
+  height: '74px',
+  borderRadius: '50%',
+  margin: '0 auto 18px auto',
+  background: theme.loadingDotBackground,
+  boxShadow: theme.loadingDotShadow,
+} as CSSProperties,
     loadingShell: {
       minHeight: '100vh',
       display: 'flex',
