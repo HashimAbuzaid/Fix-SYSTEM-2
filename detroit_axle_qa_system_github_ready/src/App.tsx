@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type CSSProperties } from 'react';
+import { useMemo, useState, useEffect, useRef, type CSSProperties } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -55,6 +55,7 @@ const SIDEBAR_ITEM_HEIGHT = 56;
 const SIDEBAR_ITEM_GAP = 8;
 const SIDEBAR_TRACK_TOP = 6;
 const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
+const SIDEBAR_SCROLL_KEY = 'detroit-axle-sidebar-scroll-top';
 
 function getActiveRouteLabel(pathname: string, items: NavItem[]) {
   return items.find((item) => item.path === pathname)?.label || 'Workspace';
@@ -203,6 +204,7 @@ function AppShell() {
   );
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [hoveredPath, setHoveredPath] = useState<RoutePath | null>(null);
+  const sidebarNavScrollRef = useRef<HTMLDivElement | null>(null);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -235,12 +237,39 @@ function AppShell() {
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
+  const navItems = useMemo(() => (profile ? buildNavItems(profile) : []), [profile]);
+  const activeRouteLabel = useMemo(
+    () => getActiveRouteLabel(location.pathname as RoutePath, navItems),
+    [location.pathname, navItems]
+  );
+
   const profileLabel = useMemo(() => {
     if (!profile) return '';
     return profile.display_name
       ? `${profile.agent_name} - ${profile.display_name}`
       : profile.agent_name;
   }, [profile]);
+
+  useEffect(() => {
+    if (isCompactLayout) return;
+    if (typeof window === 'undefined') return;
+    const node = sidebarNavScrollRef.current;
+    if (!node) return;
+
+    const stored = window.sessionStorage.getItem(SIDEBAR_SCROLL_KEY);
+    if (!stored) return;
+
+    const nextScrollTop = Number(stored);
+    if (!Number.isFinite(nextScrollTop)) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      if (sidebarNavScrollRef.current) {
+        sidebarNavScrollRef.current.scrollTop = nextScrollTop;
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [isCompactLayout, location.pathname, navItems.length]);
 
   if (loading) {
     return (
@@ -284,8 +313,6 @@ function AppShell() {
   const isQA = profile.role === 'qa';
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
-  const navItems = buildNavItems(profile);
-  const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
   const activeIndicatorPath = (hoveredPath ?? location.pathname) as RoutePath;
   const activeIndicatorIndex = Math.max(
@@ -381,6 +408,17 @@ function AppShell() {
     objectPosition: 'left center',
   };
 
+  const navScrollViewportStyle: CSSProperties = {
+    position: 'relative',
+    minHeight: 0,
+    height: '100%',
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    paddingRight: expandedSidebar ? '2px' : '0',
+    scrollbarGutter: 'stable',
+    overscrollBehavior: 'contain',
+  };
+
   const navRailStyle: CSSProperties = {
     position: 'relative',
     display: 'grid',
@@ -388,6 +426,7 @@ function AppShell() {
     alignContent: 'start',
     padding: '6px 0 4px 0',
     contain: 'layout paint style',
+    minHeight: 'max-content',
   };
 
   const navTrackStyle: CSSProperties = {
@@ -485,6 +524,16 @@ function AppShell() {
     overflow: 'hidden',
   };
 
+  const handleSidebarNavigate = (path: RoutePath) => {
+    if (typeof window !== 'undefined' && sidebarNavScrollRef.current) {
+      window.sessionStorage.setItem(
+        SIDEBAR_SCROLL_KEY,
+        String(sidebarNavScrollRef.current.scrollTop || 0)
+      );
+    }
+    navigate(path);
+  };
+
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
       <div style={styles.appShell}>
@@ -540,7 +589,7 @@ function AppShell() {
                       <button
                         key={item.path}
                         type="button"
-                        onClick={() => navigate(item.path)}
+                        onClick={() => handleSidebarNavigate(item.path)}
                         style={{
                           ...styles.navButton,
                           ...(location.pathname === item.path ? styles.activeNavButton : {}),
@@ -586,15 +635,26 @@ function AppShell() {
                       </div>
                     </div>
 
-                    <div style={navRailStyle}>
-                      <div style={navTrackStyle} />
-                      {navItems.map((item) => {
+                    <div
+                      ref={sidebarNavScrollRef}
+                      style={navScrollViewportStyle}
+                      onScroll={(event) => {
+                        if (typeof window === 'undefined') return;
+                        window.sessionStorage.setItem(
+                          SIDEBAR_SCROLL_KEY,
+                          String(event.currentTarget.scrollTop || 0)
+                        );
+                      }}
+                    >
+                      <div style={navRailStyle}>
+                        <div style={navTrackStyle} />
+                        {navItems.map((item) => {
                         const active = location.pathname === item.path;
                         return (
                           <button
                             key={item.path}
                             type="button"
-                            onClick={() => navigate(item.path)}
+                            onClick={() => handleSidebarNavigate(item.path)}
                             onMouseEnter={() => setHoveredPath(item.path)}
                             onMouseLeave={() => setHoveredPath(null)}
                             style={navButtonDesktopStyle(active)}
@@ -612,6 +672,7 @@ function AppShell() {
                           </button>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 </aside>
