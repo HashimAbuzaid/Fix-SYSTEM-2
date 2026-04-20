@@ -366,6 +366,7 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       boxShadow: theme.headerShadow,
       backdropFilter: 'blur(18px)',
       marginBottom: '26px',
+      transition: 'background 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease',
     } as CSSProperties,
     headerLeft: { display: 'grid', gap: '16px', minWidth: 0 } as CSSProperties,
     headerActions: {
@@ -378,25 +379,26 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
     } as CSSProperties,
     brandWrap: { display: 'flex', gap: '16px', alignItems: 'center', minWidth: 0 } as CSSProperties,
     brandLogoWrap: {
-      width: '64px',
-      height: '64px',
-      borderRadius: '20px',
+      width: '76px',
+      height: '76px',
+      borderRadius: '24px',
       border: theme.metaBorder,
-      background: theme.metaBackground,
+      background: mode === 'light' ? 'rgba(255,255,255,0.96)' : 'rgba(255,255,255,0.92)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
       boxShadow: theme.headerShadow,
-      padding: '10px',
+      padding: '8px',
       flexShrink: 0,
+      overflow: 'hidden',
     } as CSSProperties,
     brandLogo: {
-      width: '40px',
-      height: '40px',
+      width: '100%',
+      height: '100%',
       objectFit: 'contain',
       filter: mode === 'light'
-        ? 'drop-shadow(0 12px 22px rgba(37,99,235,0.18))'
-        : 'drop-shadow(0 12px 24px rgba(96,165,250,0.24))',
+        ? 'drop-shadow(0 12px 22px rgba(37,99,235,0.14))'
+        : 'drop-shadow(0 12px 26px rgba(96,165,250,0.18))',
     } as CSSProperties,
     brandAccent: {
       width: '10px',
@@ -406,13 +408,34 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       boxShadow: theme.brandAccentShadow,
       flexShrink: 0,
     } as CSSProperties,
+    brandTextWrap: {
+      display: 'grid',
+      gap: '8px',
+      alignItems: 'start',
+      minWidth: 0,
+    } as CSSProperties,
     brandEyebrow: {
       color: theme.brandEyebrow,
       fontSize: '13px',
       fontWeight: 700,
       textTransform: 'uppercase',
       letterSpacing: '0.16em',
-      marginBottom: '8px',
+      marginBottom: 0,
+    } as CSSProperties,
+    brandWordmark: {
+      width: 'min(420px, 100%)',
+      maxWidth: '100%',
+      height: 'auto',
+      objectFit: 'contain',
+      filter: mode === 'light'
+        ? 'drop-shadow(0 10px 20px rgba(37,99,235,0.10))'
+        : 'drop-shadow(0 12px 20px rgba(96,165,250,0.16))',
+    } as CSSProperties,
+    brandSubtitle: {
+      color: theme.metaText,
+      fontSize: '14px',
+      fontWeight: 700,
+      letterSpacing: '0.02em',
     } as CSSProperties,
     brandTitle: {
       margin: 0,
@@ -478,7 +501,7 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       cursor: 'pointer',
       fontWeight: 700,
       whiteSpace: 'nowrap',
-      transition: 'all 0.2s ease',
+      transition: 'transform 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease',
       backdropFilter: 'blur(14px)',
     } as CSSProperties,
     activeNavButton: {
@@ -488,6 +511,9 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       boxShadow: theme.navButtonActiveShadow,
     } as CSSProperties,
     contentShell: { position: 'relative', zIndex: 1 } as CSSProperties,
+    routeStage: {
+      transition: 'opacity 0.26s ease, transform 0.26s ease',
+    } as CSSProperties,
     contentInner: {
       minHeight: 'calc(100vh - 220px)',
       width: '100%',
@@ -498,6 +524,7 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       boxShadow: theme.panelShadow,
       backdropFilter: 'blur(18px)',
       color: theme.contentText,
+      transition: 'background 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease',
     } as CSSProperties,
     profilePanel: {
       borderRadius: '28px',
@@ -557,13 +584,14 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       textAlign: 'center',
       boxShadow: theme.headerShadow,
     } as CSSProperties,
-    loadingDot: {
-      width: '74px',
-      height: '74px',
-      borderRadius: '50%',
+    loadingBrandMark: {
+      width: '88px',
+      height: '88px',
       margin: '0 auto 18px auto',
-      background: theme.loadingDotBackground,
-      boxShadow: theme.loadingDotShadow,
+      objectFit: 'contain',
+      filter: mode === 'light'
+        ? 'drop-shadow(0 14px 30px rgba(37,99,235,0.16))'
+        : 'drop-shadow(0 18px 34px rgba(96,165,250,0.18))',
     } as CSSProperties,
     loadingSubtext: { margin: 0, color: theme.loadingSubtext } as CSSProperties,
     errorCard: {
