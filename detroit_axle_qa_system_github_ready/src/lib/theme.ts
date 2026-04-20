@@ -557,6 +557,16 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       textAlign: 'center',
       boxShadow: theme.headerShadow,
     } as CSSProperties,
+    loadingBrandMark: {
+  width: '88px',
+  height: '88px',
+  margin: '0 auto 18px auto',
+  objectFit: 'contain',
+  filter:
+    mode === 'light'
+      ? 'drop-shadow(0 14px 30px rgba(37,99,235,0.16))'
+      : 'drop-shadow(0 18px 34px rgba(96,165,250,0.18))',
+} as CSSProperties,
     loadingDot: {
       width: '74px',
       height: '74px',
