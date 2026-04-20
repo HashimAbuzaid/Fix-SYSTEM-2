@@ -694,6 +694,51 @@ function AuditsListSupabase() {
     return `${normalized.length} evals selected`;
   }
 
+
+type ProgressDisplayCell = {
+  score: number | null;
+  label: string;
+  isOff?: boolean;
+};
+
+function buildShiftedEvaluations(
+  evaluations: ImportedEvaluation[],
+  offIndexes: number[]
+): ProgressDisplayCell[] {
+  const normalizedOffIndexes = normalizeOffEvalIndexes(offIndexes);
+  const offSet = new Set(normalizedOffIndexes);
+  const source = evaluations.slice(0, MAX_PROGRESS_EVALS);
+  const shifted: ProgressDisplayCell[] = [];
+  let evalPointer = 0;
+
+  for (let index = 0; index < MAX_PROGRESS_EVALS; index += 1) {
+    if (offSet.has(index)) {
+      shifted.push({
+        score: null,
+        label: 'OFF',
+        isOff: true,
+      });
+      continue;
+    }
+
+    const nextEvaluation = source[evalPointer];
+    if (nextEvaluation) {
+      shifted.push({
+        score: nextEvaluation.score,
+        label: nextEvaluation.label,
+      });
+      evalPointer += 1;
+    } else {
+      shifted.push({
+        score: null,
+        label: '',
+      });
+    }
+  }
+
+  return shifted;
+}
+
   async function syncAgentOffPresence(
     agentId: string,
     team: 'Calls' | 'Tickets' | 'Sales',
@@ -1138,17 +1183,14 @@ const evaluationProgressData = useMemo(() => {
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-  const maxEvaluations = Math.max(
-    1,
-    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
-  );
 
   const evaluationColumns = Array.from(
-    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    { length: MAX_PROGRESS_EVALS },
     (_, index) => {
-      const group = PROGRESS_GROUPS.find(
-        (item) => index >= item.start && index < item.end
-      ) || PROGRESS_GROUPS[0];
+      const group =
+        PROGRESS_GROUPS.find(
+          (item) => index >= item.start && index < item.end
+        ) || PROGRESS_GROUPS[0];
 
       return {
         index,
@@ -1241,6 +1283,16 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
 }
 
 
+function getShiftedRowEvaluations(
+  row: (typeof evaluationProgressData.rows)[number]
+) {
+  return buildShiftedEvaluations(
+    row.evaluations,
+    getRowEffectiveOffIndexes(row)
+  );
+}
+
+
   function getOffEvalCellStyle(isSelectedTarget: boolean) {
     return {
       ...progressOffEvalCellStyle,
@@ -1252,14 +1304,15 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     row: (typeof evaluationProgressData.rows)[number],
     column: ProgressColumn
   ) {
-    const evaluation = row.evaluations[column.index] || {
+    const shiftedEvaluations = getShiftedRowEvaluations(row);
+    const evaluation = shiftedEvaluations[column.index] || {
       score: null,
       label: '',
+      isOff: false,
     };
     const hasValue =
       evaluation.score !== null && Number.isFinite(evaluation.score);
-    const rowOffIndexes = getRowEffectiveOffIndexes(row);
-    const isOffCell = rowOffIndexes.includes(column.index);
+    const isOffCell = evaluation.isOff === true;
     const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
     if (isOffCell) {
@@ -1288,7 +1341,11 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
         }}
         title={
           isSelectedTarget
-            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            ? `${column.label} is selected for OFF control${
+                hasValue
+                  ? ` • ${evaluation.label || `${evaluation.score}%`}`
+                  : ''
+              }`
             : hasValue
             ? evaluation.label || `${evaluation.score}%`
             : 'No evaluation'
