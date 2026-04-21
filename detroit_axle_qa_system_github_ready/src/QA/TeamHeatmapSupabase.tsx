@@ -129,18 +129,48 @@ function getAverageQualityForAudits(audits: AuditItem[]) {
   );
 }
 
-function getHeatCellTone(rate: number) {
-  if (rate >= 0.5) return 'var(--sd-critical-bg, rgba(220,38,38,0.16))';
-  if (rate >= 0.3) return 'var(--sd-warning-bg, rgba(245,158,11,0.16))';
-  if (rate > 0) return 'var(--sd-watch-bg, rgba(59,130,246,0.14))';
-  return 'var(--sd-good-bg, rgba(22,163,74,0.12))';
+function toDateOnly(value?: string | null) {
+  return String(value || '').slice(0, 10);
 }
 
-function getHeatCellText(rate: number) {
-  if (rate >= 0.5) return 'var(--sd-critical-text, #fecaca)';
-  if (rate >= 0.3) return 'var(--sd-warning-text, #fde68a)';
-  if (rate > 0) return 'var(--sd-watch-text, #bfdbfe)';
-  return 'var(--sd-good-text, #bbf7d0)';
+function matchesDateRange(dateValue?: string | null, from?: string, to?: string) {
+  const value = toDateOnly(dateValue);
+  if (!value) return false;
+  const effectiveFrom = from || '0001-01-01';
+  const effectiveTo = to || '9999-12-31';
+  return value >= effectiveFrom && value <= effectiveTo;
+}
+
+function getHeatCellTone(rate: number) {
+  if (rate >= 0.5) {
+    return {
+      background: 'linear-gradient(180deg, rgba(254,226,226,0.98) 0%, rgba(254,202,202,0.98) 100%)',
+      color: '#991b1b',
+      border: '1px solid rgba(239,68,68,0.28)',
+    };
+  }
+
+  if (rate >= 0.3) {
+    return {
+      background: 'linear-gradient(180deg, rgba(255,247,237,0.98) 0%, rgba(254,215,170,0.96) 100%)',
+      color: '#b45309',
+      border: '1px solid rgba(245,158,11,0.26)',
+    };
+  }
+
+  if (rate > 0) {
+    return {
+      background: 'linear-gradient(180deg, rgba(239,246,255,0.98) 0%, rgba(191,219,254,0.96) 100%)',
+      color: '#1d4ed8',
+      border: '1px solid rgba(59,130,246,0.24)',
+    };
+  }
+
+  return {
+    background: 'linear-gradient(180deg, rgba(240,253,244,0.98) 0%, rgba(220,252,231,0.96) 100%)',
+    color: '#166534',
+    border: '1px solid rgba(34,197,94,0.22)',
+  };
 }
 
 export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabaseProps) {
@@ -150,6 +180,8 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   const canChangeTeam = currentUser.role === 'admin';
 
@@ -195,11 +227,15 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
     setRefreshing(false);
   }
 
-  const metricUniverse = useMemo(() => getMetricUniverse(audits), [audits]);
+  const filteredAudits = useMemo(() => {
+    return audits.filter((audit) => matchesDateRange(audit.audit_date, dateFrom, dateTo));
+  }, [audits, dateFrom, dateTo]);
+
+  const metricUniverse = useMemo(() => getMetricUniverse(filteredAudits), [filteredAudits]);
 
   const agentAuditMap = useMemo(() => {
     const map = new Map<string, AuditItem[]>();
-    audits.forEach((audit) => {
+    filteredAudits.forEach((audit) => {
       const key = buildAgentKey(audit.agent_id, audit.agent_name);
       const current = map.get(key) || [];
       current.push(audit);
@@ -211,7 +247,7 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
     });
 
     return map;
-  }, [audits]);
+  }, [filteredAudits]);
 
   const heatmapRows = useMemo<HeatmapRow[]>(() => {
     return agents.map((agent) => {
@@ -246,7 +282,12 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
     });
   }, [agents, agentAuditMap, metricUniverse]);
 
-  const teamAverageQuality = getAverageQualityForAudits(audits);
+  const teamAverageQuality = getAverageQualityForAudits(filteredAudits);
+
+  function clearDates() {
+    setDateFrom('');
+    setDateTo('');
+  }
 
   if (loading) {
     return <div style={loadingStyle}>Loading team heatmap...</div>;
@@ -259,7 +300,7 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
           <div style={eyebrowStyle}>Team Heatmap</div>
           <h2 style={titleStyle}>{selectedTeam} Heatmap</h2>
           <p style={subtitleStyle}>
-            Standalone issue-rate heatmap by agent and audit metric. This page shows only the heatmap view.
+            Standalone issue-rate heatmap by agent and audit metric. Clearer heat tones and date filtering are included here.
           </p>
         </div>
 
@@ -280,6 +321,20 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
             </select>
           </div>
 
+          <div style={toolbarFieldWrapStyle}>
+            <label style={labelStyle}>Date From</label>
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={fieldStyle} />
+          </div>
+
+          <div style={toolbarFieldWrapStyle}>
+            <label style={labelStyle}>Date To</label>
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={fieldStyle} />
+          </div>
+
+          <button type="button" onClick={clearDates} style={secondaryButtonStyle}>
+            Clear Dates
+          </button>
+
           <button
             type="button"
             onClick={() => void loadHeatmap(true)}
@@ -298,7 +353,7 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
         </div>
         <div style={summaryCardStyle}>
           <div style={summaryLabelStyle}>Audits</div>
-          <div style={summaryValueStyle}>{audits.length}</div>
+          <div style={summaryValueStyle}>{filteredAudits.length}</div>
         </div>
         <div style={summaryCardStyle}>
           <div style={summaryLabelStyle}>Average Quality</div>
@@ -311,7 +366,7 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
       {errorMessage ? <div style={errorBannerStyle}>{errorMessage}</div> : null}
 
       {heatmapRows.length === 0 || metricUniverse.length === 0 ? (
-        <div style={emptyStateStyle}>No audit score detail data is available for this heatmap yet.</div>
+        <div style={emptyStateStyle}>No audit score detail data is available for this heatmap in the selected date range.</div>
       ) : (
         <div style={heatmapWrapStyle}>
           <div style={heatmapTableStyle}>
@@ -319,7 +374,7 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
               <div style={heatmapAgentCellStyle}>Agent</div>
               <div style={heatmapAvgCellStyle}>Avg</div>
               {metricUniverse.map((metric) => (
-                <div key={metric} style={heatmapMetricCellStyle}>
+                <div key={metric} style={heatmapMetricHeaderCellStyle}>
                   {metric}
                 </div>
               ))}
@@ -337,29 +392,32 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
                   </span>
                 </div>
 
-                {row.cells.map((cell) => (
-                  <div
-                    key={`${row.agentKey}-${cell.metric}`}
-                    style={{
-                      ...heatmapMetricCellStyle,
-                      background: getHeatCellTone(cell.rate),
-                      color: getHeatCellText(cell.rate),
-                      border: '1px solid rgba(148,163,184,0.12)',
-                    }}
-                    title={
-                      cell.total > 0
-                        ? `${cell.metric}: ${cell.flagged} flagged out of ${cell.total} checks`
-                        : `${cell.metric}: no checks yet`
-                    }
-                  >
-                    <div style={heatCellTopStyle}>
-                      {cell.total > 0 ? `${Math.round(cell.rate * 100)}%` : '-'}
+                {row.cells.map((cell) => {
+                  const tone = getHeatCellTone(cell.rate);
+                  return (
+                    <div
+                      key={`${row.agentKey}-${cell.metric}`}
+                      style={{
+                        ...heatmapMetricCellStyle,
+                        background: tone.background,
+                        color: tone.color,
+                        border: tone.border,
+                      }}
+                      title={
+                        cell.total > 0
+                          ? `${cell.metric}: ${cell.flagged} flagged out of ${cell.total} checks`
+                          : `${cell.metric}: no checks yet`
+                      }
+                    >
+                      <div style={heatCellTopStyle}>
+                        {cell.total > 0 ? `${Math.round(cell.rate * 100)}%` : '-'}
+                      </div>
+                      <div style={heatCellBottomStyle}>
+                        {cell.flagged}/{cell.total}
+                      </div>
                     </div>
-                    <div style={heatCellBottomStyle}>
-                      {cell.flagged}/{cell.total}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ))}
           </div>
@@ -423,7 +481,7 @@ const toolbarStyle: CSSProperties = {
 const toolbarFieldWrapStyle: CSSProperties = {
   display: 'grid',
   gap: '8px',
-  minWidth: '180px',
+  minWidth: '170px',
 };
 
 const labelStyle: CSSProperties = {
@@ -445,6 +503,16 @@ const refreshButtonStyle: CSSProperties = {
   backgroundColor: 'var(--da-secondary-bg, rgba(15,23,42,0.78))',
   color: 'var(--da-secondary-text, #e5eefb)',
   border: 'var(--da-secondary-border, 1px solid rgba(148,163,184,0.18))',
+  padding: '12px 16px',
+  borderRadius: '12px',
+  cursor: 'pointer',
+  fontWeight: 700,
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  background: 'rgba(37,99,235,0.10)',
+  color: '#1d4ed8',
+  border: '1px solid rgba(59,130,246,0.20)',
   padding: '12px 16px',
   borderRadius: '12px',
   cursor: 'pointer',
@@ -493,6 +561,7 @@ const heatmapWrapStyle: CSSProperties = {
   borderRadius: '18px',
   border: '1px solid rgba(148,163,184,0.12)',
   background: 'var(--da-card-bg, rgba(15,23,42,0.52))',
+  boxShadow: 'var(--da-panel-shadow, 0 10px 24px rgba(15,23,42,0.08))',
 };
 
 const heatmapTableStyle: CSSProperties = {
@@ -529,22 +598,35 @@ const heatmapAvgCellStyle: CSSProperties = {
   alignItems: 'center',
 };
 
-const heatmapMetricCellStyle: CSSProperties = {
+const heatmapMetricHeaderCellStyle: CSSProperties = {
   minWidth: 0,
   padding: '10px 8px',
   borderRadius: '12px',
   textAlign: 'center',
+  color: '#2563eb',
+  background: 'rgba(37,99,235,0.06)',
+  border: '1px solid rgba(59,130,246,0.12)',
+};
+
+const heatmapMetricCellStyle: CSSProperties = {
+  minWidth: 0,
+  padding: '12px 8px',
+  borderRadius: '12px',
+  textAlign: 'center',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.28)',
 };
 
 const heatCellTopStyle: CSSProperties = {
   fontWeight: 900,
   fontSize: '14px',
+  lineHeight: 1.1,
 };
 
 const heatCellBottomStyle: CSSProperties = {
   marginTop: '4px',
   fontSize: '12px',
-  opacity: 0.88,
+  opacity: 0.95,
+  fontWeight: 700,
 };
 
 const cellPrimaryStyle: CSSProperties = {
