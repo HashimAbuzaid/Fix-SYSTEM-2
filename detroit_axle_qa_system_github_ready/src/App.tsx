@@ -568,6 +568,7 @@ function AppShell() {
     alignSelf: 'start',
     width: `${SIDEBAR_COLLAPSED_WIDTH}px`,
     height: 'calc(100vh - 92px)',
+    maxHeight: 'calc(100vh - 92px)',
     minHeight: '420px',
     zIndex: 10,
   };
@@ -576,6 +577,7 @@ function AppShell() {
     position: 'relative',
     width: expandedSidebar ? `${SIDEBAR_EXPANDED_WIDTH}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
     minHeight: '100%',
+    height: '100%',
     padding: '8px',
     borderRadius: '20px',
     border: theme.panelBorder,
@@ -641,10 +643,13 @@ function AppShell() {
   const navRailStyle: CSSProperties = {
     position: 'relative',
     flex: 1,
+    minHeight: 0,
+    height: '100%',
     overflowY: 'auto',
     overflowX: 'hidden',
-    padding: '4px 4px 8px 0',
+    padding: '4px 4px 24px 0',
     scrollbarWidth: 'thin',
+    scrollbarGutter: 'stable',
     scrollBehavior: 'smooth',
     WebkitOverflowScrolling: 'touch',
   };
