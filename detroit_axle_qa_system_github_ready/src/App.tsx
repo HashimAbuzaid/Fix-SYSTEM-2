@@ -739,17 +739,42 @@ function AppShell() {
                 flexShrink: 0,
               }}
             />
-            <img
-              src={LOGO_WORDMARK_SRC}
-              alt="Detroit Axle"
+            <div
               style={{
-                width: isCompactLayout ? '128px' : '220px',
-                height: isCompactLayout ? '28px' : '42px',
-                objectFit: 'contain',
-                objectPosition: 'left center',
-                display: 'block',
+                display: 'flex',
+                alignItems: 'center',
+                gap: isCompactLayout ? '8px' : '10px',
+                minWidth: 0,
               }}
-            />
+            >
+              <img
+                src={LOGO_WORDMARK_SRC}
+                alt="Detroit Axle"
+                style={{
+                  width: isCompactLayout ? '128px' : '220px',
+                  height: isCompactLayout ? '28px' : '42px',
+                  objectFit: 'contain',
+                  objectPosition: 'left center',
+                  display: 'block',
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                style={{
+                  color: themeMode === 'light' ? '#334155' : '#dbeafe',
+                  fontSize: isCompactLayout ? '14px' : '18px',
+                  fontWeight: 800,
+                  letterSpacing: '0.12em',
+                  textTransform: 'uppercase',
+                  lineHeight: 1,
+                  opacity: 0.96,
+                  fontFamily: "'Syne', sans-serif",
+                  textShadow: themeMode === 'light' ? 'none' : '0 1px 10px rgba(37,99,235,0.16)',
+                }}
+              >
+                QA
+              </span>
+            </div>
           </div>
 
           {/* Center: breadcrumb */}
