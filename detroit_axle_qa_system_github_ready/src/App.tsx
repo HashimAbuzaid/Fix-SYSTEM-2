@@ -62,7 +62,6 @@ const SIDEBAR_COLLAPSED_WIDTH = 72;
 const SIDEBAR_EXPANDED_WIDTH = 264;
 const SIDEBAR_ITEM_HEIGHT = 48;
 const SIDEBAR_ITEM_GAP = 4;
-const SIDEBAR_TRACK_TOP = 0;
 const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
 
 // ─────────────────────────────────────────────────────────────
