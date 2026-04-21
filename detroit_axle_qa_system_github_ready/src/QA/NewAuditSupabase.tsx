@@ -36,6 +36,17 @@ type CreatorSummary = {
   email: string;
 };
 
+type LastAuditSummary = {
+  id: string;
+  createdAt: string;
+  agentName: string;
+  agentId: string | null;
+  team: TeamType;
+  caseType: string;
+  auditDate: string;
+  qualityScore: number | null;
+};
+
 type AuthMetadata = {
   display_name?: string;
   full_name?: string;
@@ -280,6 +291,13 @@ function openNativeDatePicker(target: HTMLInputElement) {
 }
 
 
+function formatAuditDisplayDate(value?: string | null) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
 function getThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -367,6 +385,7 @@ function NewAuditSupabase() {
   const [creatorSummary, setCreatorSummary] = useState<CreatorSummary | null>(
     null
   );
+  const [lastAudit, setLastAudit] = useState<LastAuditSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
@@ -377,6 +396,7 @@ function NewAuditSupabase() {
   useEffect(() => {
     void loadAgentProfiles();
     void loadCurrentCreatorSummary();
+    void loadLastAuditSummary();
   }, []);
 
   useEffect(() => {
@@ -458,6 +478,34 @@ function NewAuditSupabase() {
       ]),
       role: creatorProfile.role,
       email: creatorProfile.email || authUser.email || '',
+    });
+  }
+
+  async function loadLastAuditSummary() {
+    const { data, error } = await supabase
+      .from('audits')
+      .select(
+        'id, created_at, agent_name, agent_id, team, case_type, audit_date, quality_score'
+      )
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (error || !data) {
+      setLastAudit(null);
+      return;
+    }
+
+    setLastAudit({
+      id: data.id,
+      createdAt: data.created_at,
+      agentName: data.agent_name || '-',
+      agentId: data.agent_id || null,
+      team: (data.team || '') as TeamType,
+      caseType: data.case_type || '-',
+      auditDate: data.audit_date || '',
+      qualityScore:
+        typeof data.quality_score === 'number' ? data.quality_score : Number(data.quality_score),
     });
   }
 
@@ -729,6 +777,7 @@ function NewAuditSupabase() {
     setDraft(createEmptyDraft(savedTeam));
     setSuccessMessage('Audit saved successfully. Draft cleared.');
     void loadCurrentCreatorSummary();
+    void loadLastAuditSummary();
   }
 
   function renderScorecard(title: string, metrics: Metric[]) {
@@ -939,6 +988,64 @@ function NewAuditSupabase() {
               <p style={{ ...infoLineStyle, marginBottom: 0 }}>
                 <strong>Creator Email:</strong> {creatorSummary?.email || '-'}
               </p>
+            </div>
+
+            <div style={lastAuditCardStyle}>
+              <div style={lastAuditHeaderRowStyle}>
+                <div>
+                  <div style={lastAuditEyebrowStyle}>Tracking</div>
+                  <div style={lastAuditTitleStyle}>Last Audit Created</div>
+                </div>
+                <div style={lastAuditBadgeStyle}>
+                  {lastAudit?.qualityScore != null && Number.isFinite(lastAudit.qualityScore)
+                    ? `${Number(lastAudit.qualityScore).toFixed(2)}%`
+                    : '-'}
+                </div>
+              </div>
+
+              <div style={lastAuditGridStyle}>
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Agent</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {lastAudit ? lastAudit.agentName : '-'}
+                  </span>
+                </div>
+
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Agent ID</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {lastAudit?.agentId || '-'}
+                  </span>
+                </div>
+
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Team</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {lastAudit?.team || '-'}
+                  </span>
+                </div>
+
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Case Type</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {lastAudit?.caseType || '-'}
+                  </span>
+                </div>
+
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Audit Date</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {lastAudit?.auditDate || '-'}
+                  </span>
+                </div>
+
+                <div style={lastAuditInfoItemStyle}>
+                  <span style={lastAuditInfoLabelStyle}>Created At</span>
+                  <span style={lastAuditInfoValueStyle}>
+                    {formatAuditDisplayDate(lastAudit?.createdAt)}
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div>
@@ -1366,5 +1473,80 @@ const successBannerStyle = {
   color: '#bbf7d0',
   fontWeight: 700,
 };
+
+const lastAuditCardStyle = {
+  gridColumn: '1 / -1',
+  borderRadius: '18px',
+  padding: '18px',
+  border: '1px solid rgba(96, 165, 250, 0.20)',
+  background: 'var(--screen-highlight-bg)',
+  boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+};
+
+const lastAuditHeaderRowStyle = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  gap: '12px',
+  alignItems: 'center',
+  flexWrap: 'wrap' as const,
+  marginBottom: '14px',
+};
+
+const lastAuditEyebrowStyle = {
+  color: 'var(--screen-accent)',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.16em',
+  marginBottom: '6px',
+};
+
+const lastAuditTitleStyle = {
+  color: 'var(--screen-heading)',
+  fontSize: '22px',
+  fontWeight: 800,
+  lineHeight: 1.1,
+};
+
+const lastAuditBadgeStyle = {
+  padding: '10px 14px',
+  borderRadius: '999px',
+  border: '1px solid var(--screen-score-pill-border)',
+  background: 'var(--screen-score-pill-bg)',
+  color: 'var(--screen-score-pill-text)',
+  fontSize: '14px',
+  fontWeight: 800,
+};
+
+const lastAuditGridStyle = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+  gap: '12px',
+};
+
+const lastAuditInfoItemStyle = {
+  borderRadius: '14px',
+  padding: '12px 14px',
+  border: '1px solid var(--screen-border)',
+  background: 'var(--screen-note-bg)',
+  display: 'grid',
+  gap: '6px',
+};
+
+const lastAuditInfoLabelStyle = {
+  color: 'var(--screen-muted)',
+  fontSize: '11px',
+  fontWeight: 800,
+  textTransform: 'uppercase' as const,
+  letterSpacing: '0.12em',
+};
+
+const lastAuditInfoValueStyle = {
+  color: 'var(--screen-heading)',
+  fontSize: '14px',
+  fontWeight: 700,
+  lineHeight: 1.4,
+};
+
 
 export default NewAuditSupabase;
