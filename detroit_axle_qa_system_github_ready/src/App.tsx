@@ -27,6 +27,9 @@ import MonitoringSupabase from './QA/MonitoringSupabase';
 import TeamHeatmapSupabase from './QA/TeamHeatmapSupabase';
 import type { UserProfile } from './context/AuthContext';
 
+// ─────────────────────────────────────────────────────────────
+// Routes & constants
+// ─────────────────────────────────────────────────────────────
 const ROUTES = {
   dashboard: '/',
   newAudit: '/new-audit',
@@ -51,19 +54,152 @@ const ROUTES = {
 } as const;
 
 type RoutePath = typeof ROUTES[keyof typeof ROUTES];
-type NavItem = { path: RoutePath; label: string };
+type NavItem = { path: RoutePath; label: string; group: string };
 
 const LOGO_MARK_SRC = '/detroit-axle-mark.png';
 const LOGO_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
-const SIDEBAR_COLLAPSED_WIDTH = 88;
-const SIDEBAR_EXPANDED_WIDTH = 272;
-const SIDEBAR_ITEM_HEIGHT = 56;
-const SIDEBAR_ITEM_GAP = 8;
-const SIDEBAR_TRACK_TOP = 6;
+const SIDEBAR_COLLAPSED_WIDTH = 72;
+const SIDEBAR_EXPANDED_WIDTH = 264;
+const SIDEBAR_ITEM_HEIGHT = 48;
+const SIDEBAR_ITEM_GAP = 4;
+const SIDEBAR_TRACK_TOP = 0;
 const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
 
+// ─────────────────────────────────────────────────────────────
+// Nav group definitions
+// ─────────────────────────────────────────────────────────────
+const NAV_GROUPS: Record<string, string[]> = {
+  Core:       ['Dashboard', 'Overview', 'Team Dashboard'],
+  Audits:     ['New Audit', 'Audits Upload', 'Audits List'],
+  Data:       ['Calls Upload', 'Tickets Upload', 'Ticket Evidence', 'Ticket AI Review', 'Sales Upload'],
+  Analytics:  ['Agent Feedback', 'Monitoring', 'Team Heatmap'],
+  Management: ['Accounts', 'Supervisor Requests', 'Reports'],
+  Account:    ['My Admin Profile', 'My QA Profile', 'My Supervisor Profile', 'Supervisor Requests'],
+};
+
+function getNavGroup(label: string): string {
+  for (const [group, labels] of Object.entries(NAV_GROUPS)) {
+    if (labels.includes(label)) return group;
+  }
+  return 'Other';
+}
+
+// ─────────────────────────────────────────────────────────────
+// SVG icons
+// ─────────────────────────────────────────────────────────────
+function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
+  const p = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none' as const,
+    stroke: 'currentColor' as const,
+    strokeWidth: 1.75,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+  const map: Record<string, JSX.Element> = {
+    Dashboard: (
+      <svg {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
+    ),
+    'New Audit': (
+      <svg {...p}><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    ),
+    'Audits Upload': (
+      <svg {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    ),
+    'Audits List': (
+      <svg {...p}><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/><circle cx="4.5" cy="6" r="1.5" fill="currentColor" stroke="none"/><circle cx="4.5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="4.5" cy="18" r="1.5" fill="currentColor" stroke="none"/></svg>
+    ),
+    'Calls Upload': (
+      <svg {...p}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.99 9a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.93 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    ),
+    'Tickets Upload': (
+      <svg {...p}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+    ),
+    'Ticket Evidence': (
+      <svg {...p}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    ),
+    'Ticket AI Review': (
+      <svg {...p}><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    ),
+    'Sales Upload': (
+      <svg {...p}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    ),
+    'Agent Feedback': (
+      <svg {...p}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    ),
+    Monitoring: (
+      <svg {...p}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    ),
+    'Team Heatmap': (
+      <svg {...p}><rect x="3" y="3" width="4" height="4" rx="0.8"/><rect x="10" y="3" width="4" height="4" rx="0.8"/><rect x="17" y="3" width="4" height="4" rx="0.8"/><rect x="3" y="10" width="4" height="4" rx="0.8"/><rect x="10" y="10" width="4" height="4" rx="0.8"/><rect x="17" y="10" width="4" height="4" rx="0.8"/><rect x="3" y="17" width="4" height="4" rx="0.8"/><rect x="10" y="17" width="4" height="4" rx="0.8"/><rect x="17" y="17" width="4" height="4" rx="0.8"/></svg>
+    ),
+    Accounts: (
+      <svg {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+    ),
+    'Supervisor Requests': (
+      <svg {...p}><polyline points="17 11 21 7 17 3"/><line x1="21" y1="7" x2="9" y2="7"/><polyline points="7 21 3 17 7 13"/><line x1="15" y1="17" x2="3" y2="17"/></svg>
+    ),
+    Reports: (
+      <svg {...p}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    ),
+    'My Admin Profile': (
+      <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    ),
+    'My QA Profile': (
+      <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    ),
+    Overview: (
+      <svg {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    ),
+    'Team Dashboard': (
+      <svg {...p}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+    ),
+    'My Supervisor Profile': (
+      <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    ),
+  };
+  return map[label] ?? (
+    <svg {...p}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Theme toggle icons
+// ─────────────────────────────────────────────────────────────
+function SunIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
 function getActiveRouteLabel(pathname: string, items: NavItem[]) {
-  return items.find((item) => item.path === pathname)?.label || 'Workspace';
+  return items.find((item) => item.path === pathname)?.label ?? 'Workspace';
+}
+
+function getUserInitials(profile: UserProfile): string {
+  const name = profile.display_name || profile.agent_name || profile.email || '?';
+  const parts = name.split(/[\s_-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
 }
 
 function buildNavItems(profile: UserProfile): NavItem[] {
@@ -71,74 +207,54 @@ function buildNavItems(profile: UserProfile): NavItem[] {
   const isStaff = isAdmin || profile.role === 'qa';
   const isSupervisor = profile.role === 'supervisor';
 
+  const withGroup = (path: RoutePath, label: string): NavItem => ({
+    path, label, group: getNavGroup(label),
+  });
+
   if (isSupervisor) {
     return [
-      { path: ROUTES.supervisorOverview, label: 'Overview' },
-      { path: ROUTES.supervisorTeamDashboard, label: 'Team Dashboard' },
-      { path: ROUTES.supervisorRequestsView, label: 'Supervisor Requests' },
-      { path: ROUTES.supervisorProfile, label: 'My Supervisor Profile' },
+      withGroup(ROUTES.supervisorOverview, 'Overview'),
+      withGroup(ROUTES.supervisorTeamDashboard, 'Team Dashboard'),
+      withGroup(ROUTES.supervisorRequestsView, 'Supervisor Requests'),
+      withGroup(ROUTES.supervisorProfile, 'My Supervisor Profile'),
     ];
   }
 
   if (!isStaff) return [];
 
   const items: NavItem[] = [
-    { path: ROUTES.dashboard, label: 'Dashboard' },
-    { path: ROUTES.newAudit, label: 'New Audit' },
-    { path: ROUTES.auditsUpload, label: 'Audits Upload' },
-    { path: ROUTES.auditsList, label: 'Audits List' },
-    { path: ROUTES.callsUpload, label: 'Calls Upload' },
-    { path: ROUTES.ticketsUpload, label: 'Tickets Upload' },
-    { path: ROUTES.ticketEvidence, label: 'Ticket Evidence' },
-    { path: ROUTES.ticketAiReview, label: 'Ticket AI Review' },
-    { path: ROUTES.salesUpload, label: 'Sales Upload' },
-    { path: ROUTES.agentFeedback, label: 'Agent Feedback' },
-    { path: ROUTES.monitoring, label: 'Monitoring' },
-    { path: ROUTES.teamHeatmap, label: 'Team Heatmap' },
+    withGroup(ROUTES.dashboard, 'Dashboard'),
+    withGroup(ROUTES.newAudit, 'New Audit'),
+    withGroup(ROUTES.auditsUpload, 'Audits Upload'),
+    withGroup(ROUTES.auditsList, 'Audits List'),
+    withGroup(ROUTES.callsUpload, 'Calls Upload'),
+    withGroup(ROUTES.ticketsUpload, 'Tickets Upload'),
+    withGroup(ROUTES.ticketEvidence, 'Ticket Evidence'),
+    withGroup(ROUTES.ticketAiReview, 'Ticket AI Review'),
+    withGroup(ROUTES.salesUpload, 'Sales Upload'),
+    withGroup(ROUTES.agentFeedback, 'Agent Feedback'),
+    withGroup(ROUTES.monitoring, 'Monitoring'),
+    withGroup(ROUTES.teamHeatmap, 'Team Heatmap'),
   ];
 
   if (isAdmin) {
     items.push(
-      { path: ROUTES.accounts, label: 'Accounts' },
-      { path: ROUTES.supervisorRequests, label: 'Supervisor Requests' }
+      withGroup(ROUTES.accounts, 'Accounts'),
+      withGroup(ROUTES.supervisorRequests, 'Supervisor Requests'),
     );
   }
 
   items.push(
-    { path: ROUTES.reports, label: 'Reports' },
-    { path: ROUTES.profile, label: isAdmin ? 'My Admin Profile' : 'My QA Profile' }
+    withGroup(ROUTES.reports, 'Reports'),
+    withGroup(ROUTES.profile, isAdmin ? 'My Admin Profile' : 'My QA Profile'),
   );
 
   return items;
 }
 
-function getNavIcon(label: string) {
-  const map: Record<string, string> = {
-    Dashboard: '⌂',
-    'New Audit': '+',
-    'Audits Upload': '⇪',
-    'Audits List': '≣',
-    'Calls Upload': '☎',
-    'Tickets Upload': '✉',
-    'Ticket Evidence': '◫',
-    'Ticket AI Review': '✦',
-    'Sales Upload': '$',
-    'Agent Feedback': '☰',
-    Monitoring: '⦿',
-    'Team Heatmap': '▦',
-    Accounts: '◎',
-    'Supervisor Requests': '↗',
-    Reports: '▤',
-    'My Admin Profile': '☺',
-    'My QA Profile': '☺',
-    Overview: '⌂',
-    'Team Dashboard': '▤',
-    'My Supervisor Profile': '☺',
-  };
-
-  return map[label] || '•';
-}
-
+// ─────────────────────────────────────────────────────────────
+// ProfileInfoCard
+// ─────────────────────────────────────────────────────────────
 function ProfileInfoCard({
   label,
   value,
@@ -156,6 +272,64 @@ function ProfileInfoCard({
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// ProfilePanel
+// ─────────────────────────────────────────────────────────────
+function ProfilePanel({
+  title,
+  profile,
+  styles,
+  theme,
+}: {
+  title: string;
+  profile: UserProfile;
+  styles: ReturnType<typeof createStyles>;
+  theme: ReturnType<typeof getThemePalette>;
+}) {
+  const initials = getUserInitials(profile);
+  return (
+    <div style={styles.profilePanel}>
+      {/* Avatar row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+        <div style={{
+          width: '56px',
+          height: '56px',
+          borderRadius: '50%',
+          background: theme.headerUserAvatarBg,
+          color: theme.headerUserAvatarText,
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: '18px',
+          fontWeight: 800,
+          fontFamily: "'Syne', sans-serif",
+          boxShadow: `0 0 0 3px ${theme.avatarRingColor}`,
+          flexShrink: 0,
+        }}>
+          {initials}
+        </div>
+        <div>
+          <div style={styles.sectionEyebrow}>Profile</div>
+          <h2 style={{ marginTop: 0, marginBottom: 0, color: theme.brandTitle, fontFamily: "'Syne', sans-serif", fontSize: '22px' }}>
+            {title}
+          </h2>
+        </div>
+      </div>
+
+      <div style={styles.profileGrid}>
+        <ProfileInfoCard label="Name" value={profile.agent_name || '-'} styles={styles} />
+        <ProfileInfoCard label="Display Name" value={profile.display_name || '-'} styles={styles} />
+        <ProfileInfoCard label="Email" value={profile.email || '-'} styles={styles} />
+        <ProfileInfoCard label="Role" value={profile.role || '-'} styles={styles} />
+        <ProfileInfoCard label="Agent ID" value={profile.agent_id || '-'} styles={styles} />
+        <ProfileInfoCard label="Team" value={profile.team || '-'} styles={styles} />
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// StaffRoutes
+// ─────────────────────────────────────────────────────────────
 function StaffRoutes({
   profile,
   styles,
@@ -206,35 +380,9 @@ function StaffRoutes({
   );
 }
 
-function ProfilePanel({
-  title,
-  profile,
-  styles,
-  theme,
-}: {
-  title: string;
-  profile: UserProfile;
-  styles: ReturnType<typeof createStyles>;
-  theme: ReturnType<typeof getThemePalette>;
-}) {
-  return (
-    <div style={styles.profilePanel}>
-      <div style={styles.sectionEyebrow}>Profile</div>
-      <h2 style={{ marginTop: 0, marginBottom: '18px', color: theme.brandTitle }}>
-        {title}
-      </h2>
-      <div style={styles.profileGrid}>
-        <ProfileInfoCard label="Name" value={profile.agent_name || '-'} styles={styles} />
-        <ProfileInfoCard label="Display Name" value={profile.display_name || '-'} styles={styles} />
-        <ProfileInfoCard label="Email" value={profile.email || '-'} styles={styles} />
-        <ProfileInfoCard label="Role" value={profile.role || '-'} styles={styles} />
-        <ProfileInfoCard label="Agent ID" value={profile.agent_id || '-'} styles={styles} />
-        <ProfileInfoCard label="Team" value={profile.team || '-'} styles={styles} />
-      </div>
-    </div>
-  );
-}
-
+// ─────────────────────────────────────────────────────────────
+// SupervisorRoutes
+// ─────────────────────────────────────────────────────────────
 function SupervisorRoutes({
   profile,
   styles,
@@ -255,6 +403,53 @@ function SupervisorRoutes({
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// LoadingScreen
+// ─────────────────────────────────────────────────────────────
+function LoadingScreen({
+  styles,
+  theme,
+  message = 'Preparing your workspace…',
+}: {
+  styles: ReturnType<typeof createStyles>;
+  theme: ReturnType<typeof getThemePalette>;
+  message?: string;
+}) {
+  return (
+    <div style={styles.loadingShell}>
+      <div style={styles.loadingCard}>
+        <img src={LOGO_MARK_SRC} alt="Detroit Axle" style={styles.loadingBrandMark} />
+        <h2 style={{
+          margin: '0 0 6px 0',
+          fontSize: '22px',
+          fontWeight: 800,
+          color: theme.loadingText,
+          fontFamily: "'Syne', sans-serif",
+          letterSpacing: '-0.02em',
+        }}>
+          Detroit Axle QA
+        </h2>
+        <p style={styles.loadingSubtext}>{message}</p>
+        {/* Three-dot pulse */}
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '4px' }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                ...styles.loadingDot,
+                animation: `da-pulse-dot 1.2s ease-in-out ${i * 160}ms infinite`,
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// AppShell — main layout
+// ─────────────────────────────────────────────────────────────
 function AppShell() {
   const auth = useAuthState();
   const navigate = useNavigate();
@@ -269,7 +464,7 @@ function AppShell() {
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
-  const isCompactLayout = viewportWidth < 1180;
+  const isCompactLayout = viewportWidth < 1100;
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -301,22 +496,13 @@ function AppShell() {
   const profileLabel = useMemo(() => {
     if (!profile) return '';
     return profile.display_name
-      ? `${profile.agent_name} - ${profile.display_name}`
+      ? `${profile.agent_name} — ${profile.display_name}`
       : profile.agent_name;
   }, [profile]);
 
+  // ── Loading ──
   if (loading) {
-    return (
-      <div style={styles.loadingShell}>
-        <div style={styles.loadingCard}>
-          <div style={styles.loadingDot} />
-          <h1 style={{ margin: '0 0 8px 0', color: theme.loadingText }}>
-            Loading Detroit Axle QA System
-          </h1>
-          <p style={styles.loadingSubtext}>Preparing your workspace...</p>
-        </div>
-      </div>
-    );
+    return <LoadingScreen styles={styles} theme={theme} />;
   }
 
   if (recoveryMode) {
@@ -330,8 +516,10 @@ function AppShell() {
       <div style={styles.loadingShell}>
         <div style={styles.errorCard}>
           <div style={styles.sectionEyebrow}>Profile Error</div>
-          <h1 style={{ marginTop: 0, color: theme.errorText }}>Profile not found</h1>
-          <p style={{ color: theme.loadingSubtext }}>
+          <h1 style={{ marginTop: 0, color: theme.errorText, fontFamily: "'Syne', sans-serif" }}>
+            Profile not found
+          </h1>
+          <p style={{ color: theme.loadingSubtext, marginBottom: '20px' }}>
             {auth.profileError ||
               'This user exists in Supabase Auth but does not have a profile row yet.'}
           </p>
@@ -351,25 +539,30 @@ function AppShell() {
   const navItems = buildNavItems(profile);
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
+  const userInitials = getUserInitials(profile);
+
   const activeIndicatorIndex = Math.max(
     0,
     navItems.findIndex((item) => item.path === location.pathname)
   );
 
+  // ── Desktop sidebar layout ──
   const desktopShellStyle: CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: hasSidebarRail ? `${SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)` : 'minmax(0, 1fr)',
-    gap: hasSidebarRail ? '22px' : '0',
+    gridTemplateColumns: hasSidebarRail
+      ? `${SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)`
+      : 'minmax(0, 1fr)',
+    gap: hasSidebarRail ? '16px' : '0',
     alignItems: 'start',
   };
 
   const sidebarDockStyle: CSSProperties = {
     position: 'sticky',
-    top: '128px',
+    top: '76px',
     alignSelf: 'start',
     width: `${SIDEBAR_COLLAPSED_WIDTH}px`,
-    height: 'calc(100vh - 156px)',
-    minHeight: '540px',
+    height: 'calc(100vh - 92px)',
+    minHeight: '420px',
     zIndex: 10,
   };
 
@@ -377,94 +570,89 @@ function AppShell() {
     position: 'relative',
     width: expandedSidebar ? `${SIDEBAR_EXPANDED_WIDTH}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
     minHeight: '100%',
-    padding: expandedSidebar ? '12px 12px 14px 12px' : '12px 8px 14px 8px',
-    borderRadius: '30px',
+    padding: '8px',
+    borderRadius: '20px',
     border: theme.panelBorder,
-    background:
-      themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(243,247,255,0.96) 100%)'
-        : 'linear-gradient(180deg, rgba(8,18,38,0.98) 0%, rgba(9,17,34,0.96) 100%)',
+    background: themeMode === 'light'
+      ? 'rgba(255,255,255,0.90)'
+      : 'rgba(6,12,26,0.92)',
     boxShadow: expandedSidebar
-      ? '0 26px 52px rgba(2,6,23,0.22)'
-      : '0 18px 36px rgba(2,6,23,0.16)',
-    display: 'grid',
-    gridTemplateRows: 'auto 1fr',
-    gap: '12px',
+      ? '0 24px 56px rgba(0,0,0,0.36)'
+      : '0 12px 32px rgba(0,0,0,0.24)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0',
     overflow: 'hidden',
     willChange: 'width, box-shadow',
     transform: 'translateZ(0)',
     backfaceVisibility: 'hidden',
-    transition: `width ${EXPAND_EASE}, padding ${EXPAND_EASE}, box-shadow 180ms ease`,
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    transition: `width ${EXPAND_EASE}, box-shadow 200ms ease`,
   };
 
+  // Sidebar header (logo area)
   const railHeaderStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: expandedSidebar ? '48px minmax(0, 1fr)' : '1fr',
-    gap: expandedSidebar ? '12px' : '8px',
+    display: 'flex',
     alignItems: 'center',
-    padding: expandedSidebar ? '6px 6px 12px 6px' : '6px 2px 12px 2px',
-    borderBottom:
-      themeMode === 'light'
-        ? '1px solid rgba(148,163,184,0.16)'
-        : '1px solid rgba(148,163,184,0.10)',
-    transition: `grid-template-columns ${EXPAND_EASE}, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
+    gap: expandedSidebar ? '10px' : '0',
+    padding: expandedSidebar ? '8px 10px 12px 10px' : '8px 4px 12px 4px',
+    borderBottom: themeMode === 'light'
+      ? '1px solid rgba(148,163,184,0.14)'
+      : '1px solid rgba(148,163,184,0.08)',
+    overflow: 'hidden',
+    transition: `gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
   };
 
   const railLogoWrapStyle: CSSProperties = {
-    width: expandedSidebar ? '48px' : '44px',
-    height: expandedSidebar ? '48px' : '44px',
-    justifySelf: 'center',
-    borderRadius: expandedSidebar ? '16px' : '14px',
+    width: '40px',
+    height: '40px',
+    borderRadius: '12px',
     padding: '5px',
-    background:
-      themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,248,255,0.96) 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
+    background: themeMode === 'light'
+      ? 'rgba(239,246,255,0.96)'
+      : 'rgba(255,255,255,0.08)',
     border: theme.metaBorder,
     display: 'grid',
     placeItems: 'center',
     overflow: 'hidden',
-    transition: `width ${EXPAND_EASE}, height ${EXPAND_EASE}, border-radius ${EXPAND_EASE}`,
+    flexShrink: 0,
+    justifySelf: 'center',
   };
 
   const railBrandTextStyle: CSSProperties = {
     display: 'grid',
-    gap: '6px',
+    gap: '2px',
     minWidth: 0,
     opacity: expandedSidebar ? 1 : 0,
-    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-10px)',
+    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-8px)',
     transition: 'opacity 140ms ease, transform 180ms ease',
     pointerEvents: expandedSidebar ? 'auto' : 'none',
+    overflow: 'hidden',
   };
 
-  const railWordmarkStyle: CSSProperties = {
-    width: '126px',
-    height: '24px',
-    objectFit: 'contain',
-    objectPosition: 'left center',
-  };
-
+  // Nav rail
   const navRailStyle: CSSProperties = {
     position: 'relative',
-    display: 'grid',
-    gap: `${SIDEBAR_ITEM_GAP}px`,
-    alignContent: 'start',
-    padding: '6px 0 4px 0',
-    contain: 'layout paint style',
+    flex: 1,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    padding: '4px 0',
+    scrollbarWidth: 'none',
   };
 
   const navTrackStyle: CSSProperties = {
     position: 'absolute',
-    left: expandedSidebar ? '6px' : '4px',
+    left: '4px',
     top: `${SIDEBAR_TRACK_TOP}px`,
-    width: expandedSidebar ? 'calc(100% - 12px)' : 'calc(100% - 8px)',
+    width: 'calc(100% - 8px)',
     height: `${SIDEBAR_ITEM_HEIGHT}px`,
-    borderRadius: '18px',
+    borderRadius: '14px',
     background: theme.navButtonActiveBackground,
     border: theme.navButtonActiveBorder,
     boxShadow: theme.navButtonActiveShadow,
     transform: `translate3d(0, ${(SIDEBAR_ITEM_HEIGHT + SIDEBAR_ITEM_GAP) * activeIndicatorIndex}px, 0)`,
-    transition: `transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), width ${EXPAND_EASE}, left ${EXPAND_EASE}`,
+    transition: `transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), width ${EXPAND_EASE}`,
     willChange: 'transform, width',
     zIndex: 0,
     pointerEvents: 'none',
@@ -474,109 +662,144 @@ function AppShell() {
     ...styles.navButton,
     position: 'relative',
     zIndex: 1,
-    display: 'grid',
-    gridTemplateColumns: '40px minmax(0, 1fr)',
+    display: 'flex',
     alignItems: 'center',
-    justifyItems: 'stretch',
-    gap: expandedSidebar ? '12px' : '0',
+    gap: expandedSidebar ? '10px' : '0',
+    height: `${SIDEBAR_ITEM_HEIGHT}px`,
     minHeight: `${SIDEBAR_ITEM_HEIGHT}px`,
+    marginBottom: `${SIDEBAR_ITEM_GAP}px`,
     textAlign: 'left',
-    borderRadius: '18px',
-    padding: expandedSidebar ? '8px 12px' : '8px 0',
+    borderRadius: '14px',
+    padding: expandedSidebar ? '0 12px' : '0',
+    justifyContent: expandedSidebar ? 'flex-start' : 'center',
     border: '1px solid transparent',
     background: !active && hovered
-      ? themeMode === 'light'
-        ? 'rgba(37,99,235,0.07)'
-        : 'rgba(148,163,184,0.10)'
+      ? themeMode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(255,255,255,0.06)'
       : 'transparent',
-    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
+    color: active
+      ? '#ffffff'
+      : hovered
+      ? themeMode === 'light' ? '#2563eb' : '#93c5fd'
+      : theme.navButtonText,
     boxShadow: 'none',
     overflow: 'hidden',
+    whiteSpace: 'nowrap',
     transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
+    width: '100%',
   });
 
   const navIconBubbleStyle = (active: boolean, hovered: boolean): CSSProperties => ({
-    width: '40px',
-    height: '40px',
-    borderRadius: '14px',
+    width: '32px',
+    height: '32px',
+    borderRadius: '10px',
     display: 'grid',
     placeItems: 'center',
-    fontSize: '15px',
-    fontWeight: 900,
-    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
-    background: active
-      ? 'rgba(255,255,255,0.16)'
-      : hovered
-      ? themeMode === 'light'
-        ? 'rgba(37,99,235,0.14)'
-        : 'rgba(148,163,184,0.18)'
-      : themeMode === 'light'
-      ? 'rgba(37,99,235,0.08)'
-      : 'rgba(148,163,184,0.10)',
-    transition: 'background 140ms ease, color 140ms ease',
     flexShrink: 0,
+    color: active
+      ? '#ffffff'
+      : hovered
+      ? themeMode === 'light' ? '#2563eb' : '#93c5fd'
+      : theme.navButtonText,
+    background: active
+      ? 'rgba(255,255,255,0.18)'
+      : hovered
+      ? themeMode === 'light' ? 'rgba(37,99,235,0.10)' : 'rgba(255,255,255,0.10)'
+      : 'transparent',
+    transition: 'background 140ms ease, color 140ms ease',
   });
 
-  const navLabelWrapStyle = (active: boolean, hovered: boolean): CSSProperties => ({
-    display: 'grid',
-    gap: '2px',
-    minWidth: 0,
-    maxWidth: expandedSidebar ? '180px' : '0px',
-    opacity: expandedSidebar ? 1 : 0,
-    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-8px)',
-    transition: 'max-width 220ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease, transform 160ms ease',
-    pointerEvents: expandedSidebar ? 'auto' : 'none',
+  const navLabelStyle = (active: boolean): CSSProperties => ({
+    fontSize: '13px',
+    fontWeight: 600,
     overflow: 'hidden',
+    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
+    opacity: expandedSidebar ? 1 : 0,
+    maxWidth: expandedSidebar ? '160px' : '0',
+    transition: `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
+    color: active ? '#ffffff' : 'currentColor',
   });
 
-
-
+  // Group nav items for the expanded sidebar
+  const navGroupsOrdered = useMemo(() => {
+    const groups: Record<string, NavItem[]> = {};
+    navItems.forEach((item) => {
+      const g = item.group;
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(item);
+    });
+    // preserve insertion order
+    return Object.entries(groups);
+  }, [navItems]);
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
       <div style={styles.appShell}>
+        {/* Ambient glows */}
         <div style={styles.backgroundGlowTop} />
         <div style={styles.backgroundGlowBottom} />
 
+        {/* ── Compact sticky header ── */}
         <header style={styles.headerShell}>
+          {/* Left: brand */}
           <div style={styles.headerLeft}>
-            <div style={{ ...styles.brandWrap, gap: '14px' }}>
-              <div style={{ ...styles.brandAccent, height: '84px', width: '12px' }} />
-              <div style={{ display: 'grid', gap: '8px', minWidth: 0 }}>
-                <div style={styles.brandEyebrow}>Detroit Axle Workspace</div>
-                <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={{ width: '100%', maxWidth: '760px', height: isCompactLayout ? '48px' : '72px', objectFit: 'contain', objectPosition: 'left center' }} />
-                <div style={{ fontSize: isCompactLayout ? '28px' : '36px', lineHeight: 1.04, fontWeight: 800, color: themeMode === 'light' ? '#334155' : '#dbeafe' }}>
-                  Quality Assurance Command Center
-                </div>
-              </div>
+            <div style={styles.headerLogoMark}>
+              <img
+                src={LOGO_MARK_SRC}
+                alt="Detroit Axle"
+                style={{ width: '26px', height: '26px', objectFit: 'contain' }}
+              />
             </div>
-            <div style={styles.metaStrip}>
-              <div style={styles.metaPill}>Role: {profile.role}</div>
-              <div style={styles.metaPill}>Workspace: {activeRouteLabel}</div>
-              <div style={styles.metaPill}>User: {profileLabel}</div>
-              <div style={styles.metaPill}>Email: {profile.email}</div>
+            <div>
+              <div style={styles.headerBrandName}>Detroit Axle</div>
+              <div style={styles.headerBrandSub}>QA Command Center</div>
             </div>
           </div>
 
+          {/* Center: breadcrumb */}
+          {!isCompactLayout && (
+            <div style={styles.headerCenter}>
+              <span style={styles.headerCrumb}>Workspace</span>
+              <span style={styles.headerCrumbSep}>›</span>
+              <span style={styles.headerPageTitle}>{activeRouteLabel}</span>
+            </div>
+          )}
+
+          {/* Right: user + actions */}
           <div style={styles.headerActions}>
+            {!isCompactLayout && (
+              <div style={styles.headerUserBadge}>
+                <div style={styles.headerUserAvatar}>{userInitials}</div>
+                <div>
+                  <div style={styles.headerUserName}>{profileLabel || profile.email}</div>
+                  <div style={styles.headerUserRole}>{profile.role}</div>
+                </div>
+              </div>
+            )}
+
             <button
               type="button"
               onClick={() => setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))}
-              style={styles.themeButton}
+              style={styles.headerThemeBtn}
+              title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
             >
-              {themeMode === 'light' ? 'Dark Theme' : 'Light Theme'}
+              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                {themeMode === 'light' ? <MoonIcon /> : <SunIcon />}
+                {!isCompactLayout && (themeMode === 'light' ? 'Dark' : 'Light')}
+              </span>
             </button>
-            <button type="button" onClick={logout} style={styles.logoutButton}>
-              Logout
+
+            <button type="button" onClick={logout} style={styles.headerLogoutBtn}>
+              Sign Out
             </button>
           </div>
         </header>
 
+        {/* ── Main content area ── */}
         {hasSidebarRail ? (
           <main style={styles.contentShell}>
             {isCompactLayout ? (
+              /* ── Mobile: horizontal scrolling nav ── */
               <>
                 <nav style={styles.navShell}>
                   <div style={styles.navScroller}>
@@ -587,9 +810,13 @@ function AppShell() {
                         onClick={() => navigate(item.path)}
                         style={{
                           ...styles.navButton,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
                           ...(location.pathname === item.path ? styles.activeNavButton : {}),
                         }}
                       >
+                        <NavIconSvg label={item.label} size={15} />
                         {item.label}
                       </button>
                     ))}
@@ -604,66 +831,105 @@ function AppShell() {
                 </div>
               </>
             ) : (
+              /* ── Desktop: collapsible sidebar rail ── */
               <div style={desktopShellStyle}>
                 <aside
                   style={sidebarDockStyle}
                   onMouseEnter={() => setIsSidebarExpanded(true)}
-                  onMouseLeave={() => {
-                    setIsSidebarExpanded(false);
-                    setHoveredPath(null);
-                  }}
+                  onMouseLeave={() => { setIsSidebarExpanded(false); setHoveredPath(null); }}
                   onFocusCapture={() => setIsSidebarExpanded(true)}
-                  onBlurCapture={(event) => {
-                    const nextTarget = event.relatedTarget as Node | null;
-                    if (!event.currentTarget.contains(nextTarget)) {
+                  onBlurCapture={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
                       setIsSidebarExpanded(false);
                       setHoveredPath(null);
                     }
                   }}
                 >
                   <div style={sidebarPanelStyle}>
+                    {/* Sidebar header */}
                     <div style={railHeaderStyle}>
                       <div style={railLogoWrapStyle}>
-                        <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        <img
+                          src={LOGO_MARK_SRC}
+                          alt="Detroit Axle"
+                          style={{ width: '28px', height: '28px', objectFit: 'contain' }}
+                        />
                       </div>
                       <div style={railBrandTextStyle}>
-                        <div style={{ color: theme.brandEyebrow, fontSize: '10px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase' }}>
-                          Detroit Axle Workspace
-                        </div>
-                        <img src={LOGO_WORDMARK_SRC} alt="Detroit Axle" style={railWordmarkStyle} />
+                        <img
+                          src={LOGO_WORDMARK_SRC}
+                          alt="Detroit Axle"
+                          style={{ width: '110px', height: '18px', objectFit: 'contain', objectPosition: 'left center' }}
+                        />
+                        <span style={{
+                          fontSize: '10px',
+                          color: themeMode === 'light' ? '#64748b' : '#475569',
+                          fontWeight: 500,
+                          letterSpacing: '0.04em',
+                        }}>
+                          QA System
+                        </span>
                       </div>
                     </div>
 
+                    {/* Nav items */}
                     <div style={navRailStyle}>
+                      {/* Active track slider */}
                       <div style={navTrackStyle} />
-                      {navItems.map((item) => {
-                        const active = location.pathname === item.path;
-                        const hovered = hoveredPath === item.path;
-                        return (
-                          <button
-                            key={item.path}
-                            type="button"
-                            onClick={() => navigate(item.path)}
-                            onMouseEnter={() => setHoveredPath(item.path)}
-                            onMouseLeave={() => setHoveredPath(null)}
-                            style={navButtonDesktopStyle(active, hovered)}
-                            title={expandedSidebar ? undefined : item.label}
-                          >
-                            <span style={navIconBubbleStyle(active, hovered)}>{getNavIcon(item.label)}</span>
-                            <span style={navLabelWrapStyle(active, hovered)}>
-                              <span style={{ fontWeight: 800, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {item.label}
+
+                      {expandedSidebar
+                        ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
+                          <div key={groupName}>
+                            {gi > 0 && <div style={styles.navDivider} />}
+                            <div style={styles.navGroupLabel}>{groupName}</div>
+                            {groupItems.map((item) => {
+                              const active = location.pathname === item.path;
+                              const hovered = hoveredPath === item.path;
+                              return (
+                                <button
+                                  key={item.path}
+                                  type="button"
+                                  onClick={() => navigate(item.path)}
+                                  onMouseEnter={() => setHoveredPath(item.path)}
+                                  onMouseLeave={() => setHoveredPath(null)}
+                                  style={navButtonDesktopStyle(active, hovered)}
+                                  title={undefined}
+                                >
+                                  <span style={navIconBubbleStyle(active, hovered)}>
+                                    <NavIconSvg label={item.label} size={16} />
+                                  </span>
+                                  <span style={navLabelStyle(active)}>{item.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))
+                        : navItems.map((item) => {
+                          const active = location.pathname === item.path;
+                          const hovered = hoveredPath === item.path;
+                          return (
+                            <button
+                              key={item.path}
+                              type="button"
+                              onClick={() => navigate(item.path)}
+                              onMouseEnter={() => setHoveredPath(item.path)}
+                              onMouseLeave={() => setHoveredPath(null)}
+                              style={navButtonDesktopStyle(active, hovered)}
+                              title={item.label}
+                            >
+                              <span style={navIconBubbleStyle(active, hovered)}>
+                                <NavIconSvg label={item.label} size={16} />
                               </span>
-                              <span style={{ fontSize: '11px', color: active ? 'rgba(255,255,255,0.82)' : theme.metaText, opacity: 0.9 }}>
-                                {active ? 'Current view' : 'Open'}
-                              </span>
-                            </span>
-                          </button>
-                        );
-                      })}
+                              <span style={navLabelStyle(active)}>{item.label}</span>
+                            </button>
+                          );
+                        })
+                      }
                     </div>
                   </div>
                 </aside>
+
+                {/* Content panel */}
                 <div style={styles.contentInner}>
                   {isStaff ? (
                     <StaffRoutes profile={profile} styles={styles} theme={theme} />
@@ -675,6 +941,7 @@ function AppShell() {
             )}
           </main>
         ) : (
+          /* ── Agent portal (no sidebar) ── */
           <main style={styles.contentShell}>
             <div style={styles.contentInner}>
               <AgentPortal currentUser={profile} />
@@ -686,6 +953,9 @@ function AppShell() {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// App root
+// ─────────────────────────────────────────────────────────────
 function App() {
   return (
     <ErrorBoundary>

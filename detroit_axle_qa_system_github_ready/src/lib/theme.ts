@@ -51,6 +51,34 @@ export type ThemePalette = {
   errorCardBorder: string;
   errorText: string;
   contentText: string;
+  // ── Compact header tokens ──
+  compactHeaderBg: string;
+  compactHeaderBorder: string;
+  compactHeaderShadow: string;
+  headerBrandNameColor: string;
+  headerBrandSubColor: string;
+  headerPageTitleColor: string;
+  headerCrumbColor: string;
+  headerUserAvatarBg: string;
+  headerUserAvatarText: string;
+  headerUserNameColor: string;
+  headerUserRoleColor: string;
+  headerIconBtnBg: string;
+  headerIconBtnBorder: string;
+  headerIconBtnColor: string;
+  headerIconBtnHoverBg: string;
+  headerSignOutBg: string;
+  headerSignOutBorder: string;
+  headerSignOutColor: string;
+  // ── Nav group labels ──
+  navGroupLabelColor: string;
+  navDividerColor: string;
+  // ── Avatar / profile panel ──
+  avatarRingColor: string;
+  profileStatBg: string;
+  profileStatBorder: string;
+  profileStatLabel: string;
+  profileStatValue: string;
 };
 
 export function readStoredTheme(): ThemeMode {
@@ -63,109 +91,173 @@ export function getThemePalette(mode: ThemeMode): ThemePalette {
   if (mode === 'light') {
     return {
       shellBackground:
-        'radial-gradient(circle at top left, rgba(37,99,235,0.14), transparent 28%), radial-gradient(circle at bottom right, rgba(59,130,246,0.12), transparent 32%), linear-gradient(180deg, #f8fbff 0%, #edf4ff 46%, #e6efff 100%)',
+        'radial-gradient(ellipse 80% 40% at 10% -10%, rgba(37,99,235,0.12), transparent 60%), ' +
+        'radial-gradient(ellipse 60% 30% at 90% 110%, rgba(99,102,241,0.08), transparent 50%), ' +
+        'linear-gradient(180deg, #f4f8ff 0%, #eef4ff 100%)',
       shellColor: '#0f172a',
       bodyBackground: '#edf4ff',
       bodyColor: '#0f172a',
-      glowTop: 'radial-gradient(circle, rgba(37,99,235,0.14) 0%, transparent 68%)',
-      glowBottom: 'radial-gradient(circle, rgba(14,165,233,0.12) 0%, transparent 70%)',
-      headerBackground: 'linear-gradient(180deg, rgba(255,255,255,0.94) 0%, rgba(245,249,255,0.9) 100%)',
-      headerBorder: '1px solid rgba(148,163,184,0.22)',
-      headerShadow: '0 20px 48px rgba(148,163,184,0.16)',
+      glowTop: 'radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 68%)',
+      glowBottom: 'radial-gradient(circle, rgba(14,165,233,0.10) 0%, transparent 70%)',
+      headerBackground: 'rgba(255,255,255,0.88)',
+      headerBorder: '1px solid rgba(148,163,184,0.20)',
+      headerShadow: '0 4px 24px rgba(15,23,42,0.08)',
       brandEyebrow: '#2563eb',
       brandTitle: '#0f172a',
       brandAccent: 'linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)',
-      brandAccentShadow: '0 0 24px rgba(37,99,235,0.24)',
-      metaBackground: 'rgba(255,255,255,0.82)',
-      metaBorder: '1px solid rgba(148,163,184,0.22)',
+      brandAccentShadow: '0 0 24px rgba(37,99,235,0.22)',
+      metaBackground: 'rgba(255,255,255,0.80)',
+      metaBorder: '1px solid rgba(148,163,184,0.20)',
       metaText: '#334155',
-      navButtonBackground: 'rgba(255,255,255,0.86)',
+      navButtonBackground: 'rgba(255,255,255,0.82)',
       navButtonBorder: '1px solid rgba(148,163,184,0.18)',
-      navButtonText: '#334155',
-      navButtonActiveBackground: 'linear-gradient(135deg, rgba(37,99,235,0.96) 0%, rgba(59,130,246,0.94) 100%)',
-      navButtonActiveBorder: '1px solid rgba(96,165,250,0.34)',
+      navButtonText: '#475569',
+      navButtonActiveBackground: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+      navButtonActiveBorder: '1px solid rgba(96,165,250,0.40)',
       navButtonActiveText: '#ffffff',
-      navButtonActiveShadow: '0 10px 24px rgba(37,99,235,0.22)',
-      panelBackground: 'linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(245,249,255,0.88) 100%)',
-      panelBorder: '1px solid rgba(148,163,184,0.18)',
-      panelShadow: '0 24px 58px rgba(15,23,42,0.12)',
-      profileCardBackground: 'rgba(255,255,255,0.84)',
+      navButtonActiveShadow: '0 8px 20px rgba(37,99,235,0.24)',
+      panelBackground: 'rgba(255,255,255,0.80)',
+      panelBorder: '1px solid rgba(148,163,184,0.16)',
+      panelShadow: '0 20px 48px rgba(15,23,42,0.10)',
+      profileCardBackground: 'rgba(248,251,255,0.92)',
       profileCardBorder: '1px solid rgba(148,163,184,0.18)',
-      profileCardLabel: '#2563eb',
+      profileCardLabel: '#3b82f6',
       profileCardValue: '#0f172a',
       buttonPrimaryBackground: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-      buttonPrimaryBorder: '1px solid rgba(37,99,235,0.26)',
+      buttonPrimaryBorder: '1px solid rgba(37,99,235,0.30)',
       buttonPrimaryText: '#ffffff',
-      buttonPrimaryShadow: '0 12px 28px rgba(37,99,235,0.22)',
-      buttonSecondaryBackground: 'rgba(255,255,255,0.88)',
-      buttonSecondaryBorder: '1px solid rgba(148,163,184,0.24)',
-      buttonSecondaryText: '#0f172a',
-      loadingBackground: 'radial-gradient(circle at top left, rgba(37,99,235,0.12), transparent 28%), linear-gradient(180deg, #f5f9ff 0%, #edf4ff 100%)',
-      loadingCardBackground: 'rgba(255,255,255,0.9)',
+      buttonPrimaryShadow: '0 8px 20px rgba(37,99,235,0.28)',
+      buttonSecondaryBackground: 'rgba(255,255,255,0.90)',
+      buttonSecondaryBorder: '1px solid rgba(148,163,184,0.22)',
+      buttonSecondaryText: '#334155',
+      loadingBackground:
+        'radial-gradient(ellipse 70% 40% at 10% -5%, rgba(37,99,235,0.12), transparent 55%), ' +
+        'linear-gradient(180deg, #f4f8ff 0%, #edf4ff 100%)',
+      loadingCardBackground: 'rgba(255,255,255,0.92)',
       loadingCardBorder: '1px solid rgba(148,163,184,0.18)',
-      loadingDotBackground: 'radial-gradient(circle at 30% 30%, #bfdbfe 0%, #60a5fa 55%, #2563eb 100%)',
-      loadingDotShadow: '0 0 38px rgba(37,99,235,0.18)',
+      loadingDotBackground: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
+      loadingDotShadow: '0 0 14px rgba(37,99,235,0.35)',
       loadingText: '#0f172a',
       loadingSubtext: '#64748b',
-      errorCardBackground: 'rgba(255,255,255,0.92)',
-      errorCardBorder: '1px solid rgba(248,113,113,0.22)',
+      errorCardBackground: 'rgba(255,255,255,0.94)',
+      errorCardBorder: '1px solid rgba(248,113,113,0.24)',
       errorText: '#0f172a',
       contentText: '#334155',
+      // compact header
+      compactHeaderBg: 'rgba(255,255,255,0.88)',
+      compactHeaderBorder: '1px solid rgba(148,163,184,0.18)',
+      compactHeaderShadow: '0 2px 20px rgba(15,23,42,0.07)',
+      headerBrandNameColor: '#0f172a',
+      headerBrandSubColor: '#64748b',
+      headerPageTitleColor: '#0f172a',
+      headerCrumbColor: '#94a3b8',
+      headerUserAvatarBg: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+      headerUserAvatarText: '#ffffff',
+      headerUserNameColor: '#0f172a',
+      headerUserRoleColor: '#64748b',
+      headerIconBtnBg: 'rgba(248,250,252,0.90)',
+      headerIconBtnBorder: '1px solid rgba(148,163,184,0.18)',
+      headerIconBtnColor: '#475569',
+      headerIconBtnHoverBg: 'rgba(239,246,255,0.95)',
+      headerSignOutBg: 'rgba(254,242,242,0.90)',
+      headerSignOutBorder: '1px solid rgba(252,165,165,0.26)',
+      headerSignOutColor: '#b91c1c',
+      navGroupLabelColor: '#94a3b8',
+      navDividerColor: 'rgba(148,163,184,0.14)',
+      avatarRingColor: 'rgba(37,99,235,0.28)',
+      profileStatBg: 'rgba(239,246,255,0.90)',
+      profileStatBorder: '1px solid rgba(37,99,235,0.14)',
+      profileStatLabel: '#2563eb',
+      profileStatValue: '#0f172a',
     };
   }
 
   return {
     shellBackground:
-      'radial-gradient(circle at top left, rgba(59,130,246,0.24), transparent 28%), radial-gradient(circle at bottom right, rgba(99,102,241,0.20), transparent 30%), linear-gradient(180deg, #06101d 0%, #0a1222 45%, #0a1020 100%)',
+      'radial-gradient(ellipse 80% 40% at 10% -10%, rgba(37,99,235,0.16), transparent 60%), ' +
+      'radial-gradient(ellipse 60% 30% at 90% 110%, rgba(99,102,241,0.12), transparent 50%), ' +
+      'linear-gradient(180deg, #050d1a 0%, #080f1e 50%, #060c18 100%)',
     shellColor: '#e5eefb',
-    bodyBackground: '#07111f',
+    bodyBackground: '#050d1a',
     bodyColor: '#e5eefb',
     glowTop: 'radial-gradient(circle, rgba(37,99,235,0.18) 0%, transparent 68%)',
     glowBottom: 'radial-gradient(circle, rgba(14,165,233,0.14) 0%, transparent 70%)',
-    headerBackground: 'linear-gradient(180deg, rgba(15,23,42,0.88) 0%, rgba(15,23,42,0.62) 100%)',
-    headerBorder: '1px solid rgba(148,163,184,0.18)',
-    headerShadow: '0 22px 52px rgba(2,6,23,0.46)',
-    brandEyebrow: '#93c5fd',
+    headerBackground: 'rgba(8, 16, 32, 0.82)',
+    headerBorder: '1px solid rgba(148,163,184,0.12)',
+    headerShadow: '0 4px 24px rgba(0,0,0,0.36)',
+    brandEyebrow: '#60a5fa',
     brandTitle: '#f8fbff',
     brandAccent: 'linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)',
-    brandAccentShadow: '0 0 24px rgba(37,99,235,0.45)',
-    metaBackground: 'rgba(15,23,42,0.58)',
-    metaBorder: '1px solid rgba(148,163,184,0.14)',
-    metaText: '#cbd5e1',
-    navButtonBackground: 'rgba(15,23,42,0.62)',
-    navButtonBorder: '1px solid rgba(148,163,184,0.16)',
-    navButtonText: '#cbd5e1',
-    navButtonActiveBackground: 'linear-gradient(135deg, rgba(37,99,235,0.95) 0%, rgba(59,130,246,0.92) 100%)',
-    navButtonActiveBorder: '1px solid rgba(147,197,253,0.38)',
+    brandAccentShadow: '0 0 28px rgba(37,99,235,0.50)',
+    metaBackground: 'rgba(8,16,34,0.68)',
+    metaBorder: '1px solid rgba(148,163,184,0.12)',
+    metaText: '#94a3b8',
+    navButtonBackground: 'rgba(8,16,34,0.68)',
+    navButtonBorder: '1px solid rgba(148,163,184,0.12)',
+    navButtonText: '#94a3b8',
+    navButtonActiveBackground: 'linear-gradient(135deg, rgba(29,78,216,0.95) 0%, rgba(59,130,246,0.90) 100%)',
+    navButtonActiveBorder: '1px solid rgba(96,165,250,0.36)',
     navButtonActiveText: '#ffffff',
-    navButtonActiveShadow: '0 10px 24px rgba(37,99,235,0.25)',
-    panelBackground: 'linear-gradient(180deg, rgba(15,23,42,0.78) 0%, rgba(15,23,42,0.56) 100%)',
-    panelBorder: '1px solid rgba(148,163,184,0.14)',
-    panelShadow: '0 24px 60px rgba(2,6,23,0.42)',
-    profileCardBackground: 'rgba(15,23,42,0.58)',
-    profileCardBorder: '1px solid rgba(148,163,184,0.12)',
-    profileCardLabel: '#93c5fd',
+    navButtonActiveShadow: '0 8px 24px rgba(37,99,235,0.32)',
+    panelBackground: 'rgba(8, 16, 32, 0.72)',
+    panelBorder: '1px solid rgba(148,163,184,0.10)',
+    panelShadow: '0 24px 64px rgba(0,0,0,0.50)',
+    profileCardBackground: 'rgba(8,16,34,0.68)',
+    profileCardBorder: '1px solid rgba(148,163,184,0.10)',
+    profileCardLabel: '#60a5fa',
     profileCardValue: '#f8fafc',
     buttonPrimaryBackground: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-    buttonPrimaryBorder: '1px solid rgba(96,165,250,0.34)',
+    buttonPrimaryBorder: '1px solid rgba(96,165,250,0.32)',
     buttonPrimaryText: '#ffffff',
-    buttonPrimaryShadow: '0 12px 28px rgba(37,99,235,0.28)',
-    buttonSecondaryBackground: 'rgba(15,23,42,0.68)',
-    buttonSecondaryBorder: '1px solid rgba(148,163,184,0.18)',
+    buttonPrimaryShadow: '0 8px 24px rgba(37,99,235,0.36)',
+    buttonSecondaryBackground: 'rgba(8,16,34,0.72)',
+    buttonSecondaryBorder: '1px solid rgba(148,163,184,0.16)',
     buttonSecondaryText: '#e5eefb',
-    loadingBackground: 'radial-gradient(circle at top left, rgba(59,130,246,0.22), transparent 28%), linear-gradient(180deg, #07111f 0%, #0b1324 100%)',
-    loadingCardBackground: 'rgba(15,23,42,0.74)',
-    loadingCardBorder: '1px solid rgba(148,163,184,0.14)',
-    loadingDotBackground: 'radial-gradient(circle at 30% 30%, #93c5fd 0%, #2563eb 55%, #1e3a8a 100%)',
-    loadingDotShadow: '0 0 40px rgba(37,99,235,0.35)',
+    loadingBackground:
+      'radial-gradient(ellipse 70% 40% at 10% -5%, rgba(37,99,235,0.20), transparent 55%), ' +
+      'linear-gradient(180deg, #050d1a 0%, #080f1e 100%)',
+    loadingCardBackground: 'rgba(8,16,34,0.80)',
+    loadingCardBorder: '1px solid rgba(148,163,184,0.12)',
+    loadingDotBackground: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
+    loadingDotShadow: '0 0 14px rgba(37,99,235,0.50)',
     loadingText: '#f8fbff',
-    loadingSubtext: '#94a3b8',
-    errorCardBackground: 'rgba(15,23,42,0.74)',
-    errorCardBorder: '1px solid rgba(248,113,113,0.2)',
+    loadingSubtext: '#64748b',
+    errorCardBackground: 'rgba(8,16,34,0.82)',
+    errorCardBorder: '1px solid rgba(248,113,113,0.20)',
     errorText: '#f8fafc',
     contentText: '#e5eefb',
+    // compact header
+    compactHeaderBg: 'rgba(6, 12, 26, 0.86)',
+    compactHeaderBorder: '1px solid rgba(148,163,184,0.10)',
+    compactHeaderShadow: '0 2px 24px rgba(0,0,0,0.40)',
+    headerBrandNameColor: '#f8fbff',
+    headerBrandSubColor: '#64748b',
+    headerPageTitleColor: '#e5eefb',
+    headerCrumbColor: '#475569',
+    headerUserAvatarBg: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+    headerUserAvatarText: '#ffffff',
+    headerUserNameColor: '#e5eefb',
+    headerUserRoleColor: '#64748b',
+    headerIconBtnBg: 'rgba(15,23,42,0.70)',
+    headerIconBtnBorder: '1px solid rgba(148,163,184,0.14)',
+    headerIconBtnColor: '#94a3b8',
+    headerIconBtnHoverBg: 'rgba(29,78,216,0.20)',
+    headerSignOutBg: 'rgba(127,29,29,0.22)',
+    headerSignOutBorder: '1px solid rgba(248,113,113,0.20)',
+    headerSignOutColor: '#fca5a5',
+    navGroupLabelColor: '#334155',
+    navDividerColor: 'rgba(148,163,184,0.08)',
+    avatarRingColor: 'rgba(59,130,246,0.36)',
+    profileStatBg: 'rgba(29,78,216,0.14)',
+    profileStatBorder: '1px solid rgba(96,165,250,0.18)',
+    profileStatLabel: '#60a5fa',
+    profileStatValue: '#f8fafc',
   };
 }
+
+// ─────────────────────────────────────────────────────────────
+// CSS variable maps (consumed by child components via var())
+// ─────────────────────────────────────────────────────────────
 
 const LIGHT_CSS_VARS: Record<string, string> = {
   '--da-page-text': '#334155',
@@ -225,6 +317,13 @@ const LIGHT_CSS_VARS: Record<string, string> = {
   '--da-widget-border': '1px solid rgba(148,163,184,0.2)',
   '--da-widget-title': '#0f172a',
   '--da-widget-subtitle': '#64748b',
+  '--screen-field-bg': 'rgba(255,255,255,0.96)',
+  '--screen-field-text': '#0f172a',
+  '--screen-border': 'rgba(148,163,184,0.22)',
+  '--screen-heading': '#0f172a',
+  '--screen-muted': '#64748b',
+  '--screen-select-option-bg': '#ffffff',
+  '--screen-select-option-text': '#0f172a',
 };
 
 const DARK_CSS_VARS: Record<string, string> = {
@@ -235,56 +334,63 @@ const DARK_CSS_VARS: Record<string, string> = {
   '--da-eyebrow': '#60a5fa',
   '--da-section-eyebrow': '#93c5fd',
   '--da-accent-text': '#93c5fd',
-  '--da-option-bg': '#0f172a',
-  '--da-meta-bg': 'rgba(15, 23, 42, 0.62)',
-  '--da-meta-border': '1px solid rgba(148, 163, 184, 0.14)',
-  '--da-meta-text': '#cbd5e1',
-  '--da-field-bg': 'rgba(15, 23, 42, 0.74)',
-  '--da-field-border': '1px solid rgba(148, 163, 184, 0.18)',
+  '--da-option-bg': '#0d1a30',
+  '--da-meta-bg': 'rgba(8,16,34,0.68)',
+  '--da-meta-border': '1px solid rgba(148,163,184,0.12)',
+  '--da-meta-text': '#94a3b8',
+  '--da-field-bg': 'rgba(8,16,34,0.80)',
+  '--da-field-border': '1px solid rgba(148,163,184,0.14)',
   '--da-field-text': '#e5eefb',
-  '--da-secondary-bg': 'rgba(15, 23, 42, 0.74)',
-  '--da-secondary-border': '1px solid rgba(148, 163, 184, 0.18)',
+  '--da-secondary-bg': 'rgba(8,16,34,0.72)',
+  '--da-secondary-border': '1px solid rgba(148,163,184,0.14)',
   '--da-secondary-text': '#e5eefb',
-  '--da-surface-bg': 'rgba(15, 23, 42, 0.68)',
-  '--da-card-bg': 'rgba(15, 23, 42, 0.52)',
-  '--da-menu-bg': 'rgba(15, 23, 42, 0.96)',
-  '--da-panel-bg': 'linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%)',
-  '--da-panel-border': '1px solid rgba(148, 163, 184, 0.14)',
-  '--da-panel-shadow': '0 18px 42px rgba(2, 6, 23, 0.34)',
-  '--da-card-label': '#94a3b8',
+  '--da-surface-bg': 'rgba(8,16,34,0.68)',
+  '--da-card-bg': 'rgba(8,16,34,0.56)',
+  '--da-menu-bg': 'rgba(6,12,26,0.98)',
+  '--da-panel-bg': 'linear-gradient(180deg, rgba(8,16,34,0.88) 0%, rgba(8,16,34,0.72) 100%)',
+  '--da-panel-border': '1px solid rgba(148,163,184,0.10)',
+  '--da-panel-shadow': '0 20px 48px rgba(0,0,0,0.46)',
+  '--da-card-label': '#64748b',
   '--da-card-value': '#f8fafc',
-  '--da-card-subtitle': '#64748b',
-  '--da-row-bg': 'rgba(15, 23, 42, 0.52)',
-  '--da-row-border': '1px solid rgba(148, 163, 184, 0.12)',
+  '--da-card-subtitle': '#475569',
+  '--da-row-bg': 'rgba(8,16,34,0.56)',
+  '--da-row-border': '1px solid rgba(148,163,184,0.10)',
   '--da-row-title': '#f8fafc',
-  '--da-row-subtitle': '#94a3b8',
-  '--da-rank-badge-bg': 'rgba(37, 99, 235, 0.22)',
-  '--da-rank-badge-text': '#bfdbfe',
+  '--da-row-subtitle': '#64748b',
+  '--da-rank-badge-bg': 'rgba(29,78,216,0.22)',
+  '--da-rank-badge-text': '#93c5fd',
   '--da-pill-bg': 'linear-gradient(135deg, #0f4c81 0%, #2563eb 100%)',
   '--da-pill-text': '#ffffff',
-  '--da-team-meta': '#cbd5e1',
-  '--da-insight-title': '#93c5fd',
-  '--da-insight-body': '#cbd5e1',
-  '--da-empty-bg': 'rgba(15, 23, 42, 0.52)',
-  '--da-empty-border': '1px dashed rgba(148, 163, 184, 0.24)',
-  '--da-empty-text': '#94a3b8',
-  '--da-status-pill-bg': 'rgba(15, 23, 42, 0.62)',
-  '--da-status-pill-border': '1px solid rgba(148, 163, 184, 0.14)',
-  '--da-status-pill-text': '#cbd5e1',
-  '--da-active-option-bg': 'rgba(30, 64, 175, 0.32)',
-  '--da-success-bg': 'rgba(22, 101, 52, 0.16)',
-  '--da-success-border': '1px solid rgba(74, 222, 128, 0.2)',
+  '--da-team-meta': '#94a3b8',
+  '--da-insight-title': '#60a5fa',
+  '--da-insight-body': '#94a3b8',
+  '--da-empty-bg': 'rgba(8,16,34,0.56)',
+  '--da-empty-border': '1px dashed rgba(148,163,184,0.16)',
+  '--da-empty-text': '#64748b',
+  '--da-status-pill-bg': 'rgba(8,16,34,0.68)',
+  '--da-status-pill-border': '1px solid rgba(148,163,184,0.12)',
+  '--da-status-pill-text': '#94a3b8',
+  '--da-active-option-bg': 'rgba(29,78,216,0.28)',
+  '--da-success-bg': 'rgba(22,101,52,0.18)',
+  '--da-success-border': '1px solid rgba(74,222,128,0.20)',
   '--da-success-text': '#bbf7d0',
-  '--da-warning-bg': 'rgba(127, 29, 29, 0.22)',
-  '--da-warning-border': '1px solid rgba(252, 165, 165, 0.24)',
-  '--da-warning-text': '#fecaca',
-  '--da-error-bg': 'rgba(127, 29, 29, 0.24)',
-  '--da-error-border': '1px solid rgba(248, 113, 113, 0.22)',
+  '--da-warning-bg': 'rgba(120,53,15,0.22)',
+  '--da-warning-border': '1px solid rgba(251,191,36,0.22)',
+  '--da-warning-text': '#fde68a',
+  '--da-error-bg': 'rgba(127,29,29,0.24)',
+  '--da-error-border': '1px solid rgba(248,113,113,0.20)',
   '--da-error-text': '#fecaca',
-  '--da-widget-bg': 'linear-gradient(180deg, rgba(15,23,42,0.94) 0%, rgba(15,23,42,0.82) 100%)',
-  '--da-widget-border': '1px solid rgba(96,165,250,0.22)',
+  '--da-widget-bg': 'linear-gradient(180deg, rgba(8,16,34,0.94) 0%, rgba(8,16,34,0.82) 100%)',
+  '--da-widget-border': '1px solid rgba(96,165,250,0.18)',
   '--da-widget-title': '#f8fafc',
-  '--da-widget-subtitle': '#94a3b8',
+  '--da-widget-subtitle': '#64748b',
+  '--screen-field-bg': 'rgba(8,16,34,0.80)',
+  '--screen-field-text': '#e5eefb',
+  '--screen-border': 'rgba(148,163,184,0.14)',
+  '--screen-heading': '#f8fafc',
+  '--screen-muted': '#94a3b8',
+  '--screen-select-option-bg': '#0d1a30',
+  '--screen-select-option-text': '#e5eefb',
 };
 
 export function applyThemeCssVariables(mode: ThemeMode) {
@@ -295,249 +401,457 @@ export function applyThemeCssVariables(mode: ThemeMode) {
   });
 }
 
+// ─────────────────────────────────────────────────────────────
+// createStyles — returns inline style objects used by App.tsx
+// ─────────────────────────────────────────────────────────────
 export function createStyles(theme: ThemePalette, mode: ThemeMode) {
+  const isLight = mode === 'light';
+
   const secondaryButtonBase: CSSProperties = {
-    padding: '12px 18px',
-    borderRadius: '14px',
+    padding: '9px 16px',
+    borderRadius: '10px',
     border: theme.buttonSecondaryBorder,
     background: theme.buttonSecondaryBackground,
     color: theme.buttonSecondaryText,
-    fontWeight: 700,
+    fontWeight: 600,
+    fontSize: '13px',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    transition: 'transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
   };
 
   const primaryButtonBase: CSSProperties = {
-    padding: '12px 18px',
-    borderRadius: '14px',
+    padding: '9px 16px',
+    borderRadius: '10px',
     border: theme.buttonPrimaryBorder,
     background: theme.buttonPrimaryBackground,
     color: theme.buttonPrimaryText,
-    fontWeight: 700,
+    fontWeight: 600,
+    fontSize: '13px',
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     flexShrink: 0,
     boxShadow: theme.buttonPrimaryShadow,
-    transition: 'transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease',
+    transition: 'transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease',
   };
 
   return {
+    // ── Shell ──
     appShell: {
       minHeight: '100vh',
       background: theme.shellBackground,
       color: theme.shellColor,
-      padding: '28px',
       position: 'relative',
-      overflow: 'hidden',
     } as CSSProperties,
+
     backgroundGlowTop: {
-      position: 'absolute',
-      top: '-120px',
-      right: '-120px',
-      width: '340px',
-      height: '340px',
+      position: 'fixed',
+      top: '-80px',
+      right: '-80px',
+      width: '400px',
+      height: '400px',
       background: theme.glowTop,
       pointerEvents: 'none',
+      zIndex: 0,
     } as CSSProperties,
+
     backgroundGlowBottom: {
-      position: 'absolute',
+      position: 'fixed',
       bottom: '-180px',
-      left: '-120px',
-      width: '380px',
-      height: '380px',
+      left: '-100px',
+      width: '420px',
+      height: '420px',
       background: theme.glowBottom,
       pointerEvents: 'none',
+      zIndex: 0,
     } as CSSProperties,
+
+    // ── Compact sticky header ──
     headerShell: {
       position: 'sticky',
-      top: '16px',
-      zIndex: 30,
+      top: 0,
+      zIndex: 50,
+      height: '64px',
       display: 'flex',
-      justifyContent: 'space-between',
-      gap: '20px',
       alignItems: 'center',
-      flexWrap: 'wrap',
-      padding: '24px 28px',
-      borderRadius: '30px',
-      border: theme.headerBorder,
-      background: theme.headerBackground,
-      boxShadow: theme.headerShadow,
-      backdropFilter: 'blur(18px)',
-      marginBottom: '26px',
+      justifyContent: 'space-between',
+      gap: '16px',
+      padding: '0 20px',
+      background: theme.compactHeaderBg,
+      borderBottom: theme.compactHeaderBorder,
+      boxShadow: theme.compactHeaderShadow,
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
     } as CSSProperties,
-    headerLeft: { display: 'grid', gap: '16px', minWidth: 0 } as CSSProperties,
+
+    headerLeft: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px',
+      minWidth: 0,
+      flexShrink: 0,
+    } as CSSProperties,
+
+    headerLogoMark: {
+      width: '36px',
+      height: '36px',
+      borderRadius: '10px',
+      background: isLight
+        ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(239,246,255,0.90) 100%)'
+        : 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)',
+      border: theme.metaBorder,
+      display: 'grid',
+      placeItems: 'center',
+      padding: '4px',
+      flexShrink: 0,
+    } as CSSProperties,
+
+    headerBrandName: {
+      fontSize: '15px',
+      fontWeight: 700,
+      color: theme.headerBrandNameColor,
+      letterSpacing: '-0.01em',
+      lineHeight: 1.2,
+      fontFamily: "'Syne', sans-serif",
+    } as CSSProperties,
+
+    headerBrandSub: {
+      fontSize: '11px',
+      fontWeight: 500,
+      color: theme.headerBrandSubColor,
+      letterSpacing: '0.04em',
+      lineHeight: 1,
+    } as CSSProperties,
+
+    headerCenter: {
+      display: 'flex',
+      alignItems: 'center',
+      gap: '6px',
+      flex: 1,
+      minWidth: 0,
+      justifyContent: 'center',
+    } as CSSProperties,
+
+    headerCrumb: {
+      fontSize: '13px',
+      color: theme.headerCrumbColor,
+      fontWeight: 500,
+    } as CSSProperties,
+
+    headerCrumbSep: {
+      fontSize: '13px',
+      color: theme.headerCrumbColor,
+      opacity: 0.5,
+    } as CSSProperties,
+
+    headerPageTitle: {
+      fontSize: '13px',
+      fontWeight: 700,
+      color: theme.headerPageTitleColor,
+      letterSpacing: '-0.01em',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+      maxWidth: '200px',
+    } as CSSProperties,
+
     headerActions: {
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      flexWrap: 'nowrap',
-      marginLeft: 'auto',
+      gap: '8px',
       flexShrink: 0,
     } as CSSProperties,
-    brandWrap: { display: 'flex', gap: '16px', alignItems: 'center', minWidth: 0 } as CSSProperties,
-    brandLogoWrap: {
-      width: '64px',
-      height: '64px',
-      borderRadius: '20px',
-      border: theme.metaBorder,
-      background: theme.metaBackground,
+
+    headerUserBadge: {
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      boxShadow: theme.headerShadow,
-      padding: '10px',
-      flexShrink: 0,
-    } as CSSProperties,
-    brandLogo: {
-      width: '40px',
-      height: '40px',
-      objectFit: 'contain',
-      filter: mode === 'light'
-        ? 'drop-shadow(0 12px 22px rgba(37,99,235,0.18))'
-        : 'drop-shadow(0 12px 24px rgba(96,165,250,0.24))',
-    } as CSSProperties,
-    brandAccent: {
-      width: '10px',
-      height: '64px',
+      gap: '8px',
+      padding: '5px 10px 5px 5px',
       borderRadius: '999px',
-      background: theme.brandAccent,
-      boxShadow: theme.brandAccentShadow,
-      flexShrink: 0,
+      border: theme.metaBorder,
+      background: theme.metaBackground,
+      cursor: 'default',
     } as CSSProperties,
-    brandEyebrow: {
-      color: theme.brandEyebrow,
-      fontSize: '13px',
-      fontWeight: 700,
-      textTransform: 'uppercase',
-      letterSpacing: '0.16em',
-      marginBottom: '8px',
-    } as CSSProperties,
-    brandTitle: {
-      margin: 0,
-      fontSize: '40px',
-      lineHeight: 1.05,
+
+    headerUserAvatar: {
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      background: theme.headerUserAvatarBg,
+      color: theme.headerUserAvatarText,
+      display: 'grid',
+      placeItems: 'center',
+      fontSize: '11px',
       fontWeight: 800,
-      color: theme.brandTitle,
-      wordBreak: 'break-word',
+      letterSpacing: '0.02em',
+      flexShrink: 0,
+      boxShadow: `0 0 0 2px ${theme.avatarRingColor}`,
     } as CSSProperties,
-    metaStrip: { display: 'flex', gap: '10px', flexWrap: 'wrap' } as CSSProperties,
+
+    headerUserName: {
+      fontSize: '13px',
+      fontWeight: 600,
+      color: theme.headerUserNameColor,
+      lineHeight: 1.2,
+    } as CSSProperties,
+
+    headerUserRole: {
+      fontSize: '10px',
+      fontWeight: 500,
+      color: theme.headerUserRoleColor,
+      textTransform: 'capitalize' as const,
+      lineHeight: 1,
+    } as CSSProperties,
+
+    headerThemeBtn: {
+      ...secondaryButtonBase,
+      padding: '7px 12px',
+      borderRadius: '8px',
+      background: theme.headerIconBtnBg,
+      border: theme.headerIconBtnBorder,
+      color: theme.headerIconBtnColor,
+      fontSize: '12px',
+    } as CSSProperties,
+
+    headerLogoutBtn: {
+      ...secondaryButtonBase,
+      padding: '7px 12px',
+      borderRadius: '8px',
+      background: theme.headerSignOutBg,
+      border: theme.headerSignOutBorder,
+      color: theme.headerSignOutColor,
+      fontSize: '12px',
+      fontWeight: 700,
+    } as CSSProperties,
+
+    // ── Breadcrumb meta pills (kept for backward compat) ──
+    metaStrip: { display: 'flex', gap: '8px', flexWrap: 'wrap' as const } as CSSProperties,
     metaPill: {
-      padding: '10px 14px',
+      padding: '6px 12px',
       borderRadius: '999px',
       border: theme.metaBorder,
       backgroundColor: theme.metaBackground,
       color: theme.metaText,
-      fontSize: '13px',
+      fontSize: '12px',
       fontWeight: 600,
       backdropFilter: 'blur(14px)',
     } as CSSProperties,
-    themeButton: { ...secondaryButtonBase, minWidth: '132px', textAlign: 'center' } as CSSProperties,
-    logoutButton: { ...primaryButtonBase, minWidth: '96px', textAlign: 'center' } as CSSProperties,
-    navShell: { position: 'relative', zIndex: 1, marginTop: '2px', marginBottom: '18px' } as CSSProperties,
+
+    themeButton: { ...secondaryButtonBase } as CSSProperties,
+    logoutButton: { ...primaryButtonBase } as CSSProperties,
+
+    // ── Content layout ──
+    contentShell: {
+      position: 'relative',
+      zIndex: 1,
+      padding: '20px 20px 28px',
+    } as CSSProperties,
+
+    contentInner: {
+      minHeight: 'calc(100vh - 180px)',
+      width: '100%',
+      padding: '28px',
+      borderRadius: '20px',
+      border: theme.panelBorder,
+      background: theme.panelBackground,
+      boxShadow: theme.panelShadow,
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
+      color: theme.contentText,
+    } as CSSProperties,
+
+    // ── Desktop shell ──
     workspaceShell: {
       display: 'grid',
       gridTemplateColumns: '300px minmax(0, 1fr)',
-      gap: '22px',
+      gap: '20px',
       alignItems: 'start',
     } as CSSProperties,
+
+    // ── Sidebar ──
     sidebarPanel: {
       position: 'sticky',
-      top: '138px',
-      borderRadius: '30px',
+      top: '80px',
+      borderRadius: '20px',
       border: theme.panelBorder,
       background: theme.panelBackground,
       boxShadow: theme.panelShadow,
       backdropFilter: 'blur(18px)',
-      padding: '20px',
+      WebkitBackdropFilter: 'blur(18px)',
+      padding: '16px',
       display: 'grid',
-      gap: '12px',
+      gap: '8px',
     } as CSSProperties,
+
     sidebarTitle: {
       color: theme.brandEyebrow,
-      fontSize: '11px',
+      fontSize: '10px',
       fontWeight: 800,
-      textTransform: 'uppercase',
+      textTransform: 'uppercase' as const,
       letterSpacing: '0.18em',
       marginBottom: '2px',
     } as CSSProperties,
-    sidebarText: { color: theme.metaText, fontSize: '13px', lineHeight: 1.5, margin: 0 } as CSSProperties,
+
+    sidebarText: {
+      color: theme.metaText,
+      fontSize: '13px',
+      lineHeight: 1.5,
+      margin: 0,
+    } as CSSProperties,
+
+    // ── Nav group label (shown when sidebar expanded) ──
+    navGroupLabel: {
+      fontSize: '10px',
+      fontWeight: 800,
+      letterSpacing: '0.14em',
+      textTransform: 'uppercase' as const,
+      color: theme.navGroupLabelColor,
+      padding: '6px 12px 2px',
+    } as CSSProperties,
+
+    navDivider: {
+      height: '1px',
+      background: theme.navDividerColor,
+      margin: '4px 0',
+    } as CSSProperties,
+
+    // ── Mobile nav scroller ──
+    navShell: {
+      position: 'relative',
+      zIndex: 1,
+      marginTop: '0',
+      marginBottom: '16px',
+    } as CSSProperties,
+
     navScroller: {
       display: 'flex',
-      gap: '10px',
+      gap: '8px',
       overflowX: 'auto',
-      padding: '6px 2px 8px 2px',
+      padding: '4px 2px 8px 2px',
+      scrollbarWidth: 'none' as const,
+      msOverflowStyle: 'none' as const,
     } as CSSProperties,
+
     navButton: {
-      padding: '12px 16px',
-      borderRadius: '14px',
+      padding: '10px 14px',
+      borderRadius: '10px',
       border: theme.navButtonBorder,
       background: theme.navButtonBackground,
       color: theme.navButtonText,
       cursor: 'pointer',
-      fontWeight: 700,
-      whiteSpace: 'nowrap',
-      transition: 'all 0.2s ease',
+      fontWeight: 600,
+      fontSize: '13px',
+      whiteSpace: 'nowrap' as const,
+      transition: 'all 0.18s ease',
       backdropFilter: 'blur(14px)',
     } as CSSProperties,
+
     activeNavButton: {
       background: theme.navButtonActiveBackground,
       color: theme.navButtonActiveText,
       border: theme.navButtonActiveBorder,
       boxShadow: theme.navButtonActiveShadow,
     } as CSSProperties,
-    contentShell: { position: 'relative', zIndex: 1 } as CSSProperties,
-    contentInner: {
-      minHeight: 'calc(100vh - 220px)',
-      width: '100%',
-      padding: '34px',
-      borderRadius: '32px',
+
+    // ── Profile panel ──
+    profilePanel: {
+      borderRadius: '20px',
       border: theme.panelBorder,
       background: theme.panelBackground,
-      boxShadow: theme.panelShadow,
-      backdropFilter: 'blur(18px)',
-      color: theme.contentText,
-    } as CSSProperties,
-    profilePanel: {
-      borderRadius: '28px',
-      border: theme.panelBorder,
-      background: theme.profileCardBackground,
       padding: '28px',
     } as CSSProperties,
+
     sectionEyebrow: {
       color: theme.brandEyebrow,
-      fontSize: '12px',
+      fontSize: '11px',
       fontWeight: 800,
       letterSpacing: '0.18em',
-      textTransform: 'uppercase',
-      marginBottom: '12px',
+      textTransform: 'uppercase' as const,
+      marginBottom: '10px',
     } as CSSProperties,
+
     profileGrid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-      gap: '16px',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+      gap: '12px',
     } as CSSProperties,
+
     profileInfoCard: {
-      borderRadius: '20px',
-      padding: '20px',
-      border: theme.profileCardBorder,
-      background: theme.profileCardBackground,
+      borderRadius: '16px',
+      padding: '18px 20px',
+      border: theme.profileStatBorder,
+      background: theme.profileStatBg,
+      transition: 'transform 0.16s ease',
     } as CSSProperties,
+
     profileInfoLabel: {
-      fontSize: '12px',
-      textTransform: 'uppercase',
-      letterSpacing: '0.12em',
-      color: theme.profileCardLabel,
-      marginBottom: '10px',
+      fontSize: '11px',
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.14em',
+      color: theme.profileStatLabel,
+      marginBottom: '8px',
       fontWeight: 700,
     } as CSSProperties,
+
     profileInfoValue: {
-      fontSize: '16px',
+      fontSize: '15px',
       fontWeight: 700,
-      color: theme.profileCardValue,
-      wordBreak: 'break-word',
+      color: theme.profileStatValue,
+      wordBreak: 'break-word' as const,
+      fontFamily: "'JetBrains Mono', monospace",
     } as CSSProperties,
+
+    // ── Brand wrap (kept for compat) ──
+    brandWrap: { display: 'flex', gap: '14px', alignItems: 'center', minWidth: 0 } as CSSProperties,
+
+    brandLogoWrap: {
+      width: '54px',
+      height: '54px',
+      borderRadius: '16px',
+      border: theme.metaBorder,
+      background: theme.metaBackground,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '8px',
+      flexShrink: 0,
+    } as CSSProperties,
+
+    brandLogo: {
+      width: '36px',
+      height: '36px',
+      objectFit: 'contain' as const,
+    } as CSSProperties,
+
+    brandAccent: {
+      width: '4px',
+      height: '54px',
+      borderRadius: '999px',
+      background: theme.brandAccent,
+      boxShadow: theme.brandAccentShadow,
+      flexShrink: 0,
+    } as CSSProperties,
+
+    brandEyebrow: {
+      color: theme.brandEyebrow,
+      fontSize: '11px',
+      fontWeight: 700,
+      textTransform: 'uppercase' as const,
+      letterSpacing: '0.16em',
+      marginBottom: '6px',
+    } as CSSProperties,
+
+    brandTitle: {
+      margin: 0,
+      fontSize: '32px',
+      lineHeight: 1.05,
+      fontWeight: 800,
+      color: theme.brandTitle,
+      fontFamily: "'Syne', sans-serif",
+    } as CSSProperties,
+
+    // ── Loading screen ──
     loadingShell: {
       minHeight: '100vh',
       display: 'flex',
@@ -547,45 +861,51 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       padding: '24px',
       color: theme.loadingText,
     } as CSSProperties,
+
     loadingCard: {
       width: '100%',
-      maxWidth: '560px',
-      borderRadius: '28px',
+      maxWidth: '440px',
+      borderRadius: '24px',
       border: theme.loadingCardBorder,
       background: theme.loadingCardBackground,
-      padding: '34px',
+      padding: '40px 36px',
       textAlign: 'center',
-      boxShadow: theme.headerShadow,
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      animation: 'da-fade-in-up 0.5s cubic-bezier(0.22,1,0.36,1) both',
     } as CSSProperties,
+
     loadingBrandMark: {
-  width: '88px',
-  height: '88px',
-  margin: '0 auto 18px auto',
-  objectFit: 'contain',
-  filter:
-    mode === 'light'
-      ? 'drop-shadow(0 14px 30px rgba(37,99,235,0.16))'
-      : 'drop-shadow(0 18px 34px rgba(96,165,250,0.18))',
-} as CSSProperties,
+      width: '72px',
+      height: '72px',
+      margin: '0 auto 20px auto',
+      objectFit: 'contain' as const,
+      animation: 'da-logo-glow 2.4s ease-in-out infinite',
+    } as CSSProperties,
+
     loadingDot: {
-      width: '74px',
-      height: '74px',
+      width: '9px',
+      height: '9px',
       borderRadius: '50%',
-      margin: '0 auto 18px auto',
       background: theme.loadingDotBackground,
       boxShadow: theme.loadingDotShadow,
+      display: 'inline-block',
     } as CSSProperties,
-    loadingSubtext: { margin: 0, color: theme.loadingSubtext } as CSSProperties,
+
+    loadingSubtext: { margin: '0 0 20px 0', color: theme.loadingSubtext, fontSize: '14px' } as CSSProperties,
+
     errorCard: {
       width: '100%',
-      maxWidth: '620px',
-      borderRadius: '28px',
+      maxWidth: '560px',
+      borderRadius: '24px',
       border: theme.errorCardBorder,
       background: theme.errorCardBackground,
-      padding: '34px',
-      boxShadow: theme.headerShadow,
+      padding: '36px',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
       color: theme.errorText,
     } as CSSProperties,
+
     secondaryButtonBase,
     primaryButtonBase,
   };
