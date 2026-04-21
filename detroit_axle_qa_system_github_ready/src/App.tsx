@@ -564,12 +564,7 @@ function AppShell() {
 
         <header style={styles.headerShell}>
           <div style={styles.headerLeft}>
-            <div style={styles.brandWrap}>
-              <div style={headerBrandLogoWrapStyle}>
-                <div style={headerBrandInnerStyle}>
-                  <img src={LOGO_MARK_SRC} alt="Detroit Axle mark" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                </div>
-              </div>
+            <div style={{ ...styles.brandWrap, gap: '14px' }}>
               <div style={{ ...styles.brandAccent, height: '84px', width: '12px' }} />
               <div style={{ display: 'grid', gap: '8px', minWidth: 0 }}>
                 <div style={styles.brandEyebrow}>Detroit Axle Workspace</div>
