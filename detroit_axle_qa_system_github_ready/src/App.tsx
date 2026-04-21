@@ -739,49 +739,17 @@ function AppShell() {
                 flexShrink: 0,
               }}
             />
-            <div
+            <img
+              src={LOGO_WORDMARK_SRC}
+              alt="Detroit Axle"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: isCompactLayout ? '8px' : '10px',
-                minWidth: 0,
+                width: isCompactLayout ? '128px' : '220px',
+                height: isCompactLayout ? '28px' : '42px',
+                objectFit: 'contain',
+                objectPosition: 'left center',
+                display: 'block',
               }}
-            >
-              <img
-                src={LOGO_WORDMARK_SRC}
-                alt="Detroit Axle"
-                style={{
-                  width: isCompactLayout ? '128px' : '220px',
-                  height: isCompactLayout ? '28px' : '42px',
-                  objectFit: 'contain',
-                  objectPosition: 'left center',
-                  display: 'block',
-                  flexShrink: 0,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: isCompactLayout ? '16px' : '20px',
-                  fontWeight: 900,
-                  letterSpacing: '0.18em',
-                  textTransform: 'uppercase',
-                  lineHeight: 1,
-                  fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-                  background: themeMode === 'light'
-                    ? 'linear-gradient(90deg, #0b6fb3 0%, #35a8e0 100%)'
-                    : 'linear-gradient(90deg, #127bc0 0%, #58c0f4 100%)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                  filter: themeMode === 'light' ? 'none' : 'drop-shadow(0 1px 10px rgba(37,99,235,0.14))',
-                  transform: 'translateY(-1px)',
-                  flexShrink: 0,
-                }}
-              >
-                QA
-              </span>
-            </div>
+            />
           </div>
 
           {/* Center: breadcrumb */}
