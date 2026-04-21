@@ -729,13 +729,6 @@ function AppShell() {
         <header style={styles.headerShell}>
           {/* Left: brand */}
           <div style={{ ...styles.headerLeft, gap: '10px' }}>
-            <div style={styles.headerLogoMark}>
-              <img
-                src={LOGO_MARK_SRC}
-                alt="Detroit Axle"
-                style={{ width: '24px', height: '24px', objectFit: 'contain' }}
-              />
-            </div>
             <div
               style={{
                 width: '8px',
