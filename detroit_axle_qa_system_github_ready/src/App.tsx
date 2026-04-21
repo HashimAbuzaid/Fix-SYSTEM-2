@@ -649,10 +649,6 @@ function AppShell() {
     overflowX: 'hidden',
     padding: '4px 4px 24px 0',
     scrollbarWidth: 'thin',
-    scrollbarColor:
-      themeMode === 'light'
-        ? 'rgba(37,99,235,0.42) rgba(37,99,235,0.06)'
-        : 'rgba(96,165,250,0.34) rgba(255,255,255,0.04)',
     scrollbarGutter: 'stable',
     scrollBehavior: 'smooth',
     WebkitOverflowScrolling: 'touch',
@@ -723,46 +719,6 @@ function AppShell() {
   });
 
   return (
-    <>
-      <style>{`
-        .da-sidebar-scroll::-webkit-scrollbar {
-          width: 10px;
-        }
-
-        .da-sidebar-scroll::-webkit-scrollbar-track {
-          background: ${themeMode === 'light' ? 'rgba(37,99,235,0.05)' : 'rgba(255,255,255,0.04)'};
-          border-radius: 999px;
-        }
-
-        .da-sidebar-scroll::-webkit-scrollbar-thumb {
-          background: ${
-            themeMode === 'light'
-              ? 'linear-gradient(180deg, rgba(37,99,235,0.52) 0%, rgba(59,130,246,0.44) 100%)'
-              : 'linear-gradient(180deg, rgba(96,165,250,0.40) 0%, rgba(37,99,235,0.34) 100%)'
-          };
-          border-radius: 999px;
-          border: 2px solid transparent;
-          background-clip: padding-box;
-          opacity: 0;
-          transition: opacity 180ms ease, background 180ms ease;
-        }
-
-        .da-sidebar-scroll:hover::-webkit-scrollbar-thumb,
-        .da-sidebar-scroll:focus-within::-webkit-scrollbar-thumb,
-        .da-sidebar-scroll:active::-webkit-scrollbar-thumb {
-          opacity: 1;
-        }
-
-        .da-sidebar-scroll::-webkit-scrollbar-thumb:hover {
-          background: ${
-            themeMode === 'light'
-              ? 'linear-gradient(180deg, rgba(29,78,216,0.64) 0%, rgba(37,99,235,0.56) 100%)'
-              : 'linear-gradient(180deg, rgba(147,197,253,0.52) 0%, rgba(59,130,246,0.42) 100%)'
-          };
-          border: 2px solid transparent;
-          background-clip: padding-box;
-        }
-      `}</style>
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
       <div style={styles.appShell}>
         {/* Ambient glows */}
@@ -783,51 +739,17 @@ function AppShell() {
                 flexShrink: 0,
               }}
             />
-            <div
+            <img
+              src={LOGO_WORDMARK_SRC}
+              alt="Detroit Axle"
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: isCompactLayout ? '8px' : '10px',
-                minWidth: 0,
+                width: isCompactLayout ? '128px' : '220px',
+                height: isCompactLayout ? '28px' : '42px',
+                objectFit: 'contain',
+                objectPosition: 'left center',
+                display: 'block',
               }}
-            >
-              <img
-                src={LOGO_WORDMARK_SRC}
-                alt="Detroit Axle"
-                style={{
-                  width: isCompactLayout ? '128px' : '220px',
-                  height: isCompactLayout ? '28px' : '42px',
-                  objectFit: 'contain',
-                  objectPosition: 'left center',
-                  display: 'block',
-                  flexShrink: 0,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: isCompactLayout ? '13px' : '16px',
-                  fontWeight: 900,
-                  letterSpacing: '0.14em',
-                  textTransform: 'uppercase',
-                  lineHeight: 1,
-                  fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-                  background: themeMode === 'light'
-                    ? 'linear-gradient(90deg, #0b6fb3 0%, #35a8e0 100%)'
-                    : 'linear-gradient(90deg, #127bc0 0%, #58c0f4 100%)',
-                  WebkitBackgroundClip: 'text',
-                  backgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  color: 'transparent',
-                  filter: themeMode === 'light' ? 'none' : 'drop-shadow(0 1px 10px rgba(37,99,235,0.14))',
-                  transform: 'translateY(-1px)',
-                  flexShrink: 0,
-                  marginLeft: isCompactLayout ? '2px' : '4px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                QA SYSTEM
-              </span>
-            </div>
+            />
           </div>
 
           {/* Center: breadcrumb */}
@@ -947,7 +869,7 @@ function AppShell() {
                     </div>
 
                     {/* Nav items */}
-                    <div className="da-sidebar-scroll" style={navRailStyle}>
+                    <div style={navRailStyle}>
                       {expandedSidebar
                         ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
                           <div key={groupName}>
@@ -1021,7 +943,6 @@ function AppShell() {
         )}
       </div>
     </AuthContext.Provider>
-    </>
   );
 }
 
