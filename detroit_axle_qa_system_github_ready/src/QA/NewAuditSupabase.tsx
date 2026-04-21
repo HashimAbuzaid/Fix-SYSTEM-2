@@ -38,7 +38,6 @@ type CreatorSummary = {
 
 type LastAuditSummary = {
   id: string;
-  createdAt: string;
   agentName: string;
   agentId: string | null;
   team: TeamType;
@@ -291,13 +290,6 @@ function openNativeDatePicker(target: HTMLInputElement) {
 }
 
 
-function formatAuditDisplayDate(value?: string | null) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
-}
-
 function getThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -482,11 +474,19 @@ function NewAuditSupabase() {
   }
 
   async function loadLastAuditSummary() {
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+
+    if (authError || !authData.user) {
+      setLastAudit(null);
+      return;
+    }
+
     const { data, error } = await supabase
       .from('audits')
       .select(
-        'id, created_at, agent_name, agent_id, team, case_type, audit_date, quality_score'
+        'id, agent_name, agent_id, team, case_type, audit_date, quality_score'
       )
+      .eq('created_by_user_id', authData.user.id)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -498,7 +498,6 @@ function NewAuditSupabase() {
 
     setLastAudit({
       id: data.id,
-      createdAt: data.created_at,
       agentName: data.agent_name || '-',
       agentId: data.agent_id || null,
       team: (data.team || '') as TeamType,
@@ -1039,12 +1038,6 @@ function NewAuditSupabase() {
                   </span>
                 </div>
 
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Created At</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {formatAuditDisplayDate(lastAudit?.createdAt)}
-                  </span>
-                </div>
               </div>
             </div>
 
