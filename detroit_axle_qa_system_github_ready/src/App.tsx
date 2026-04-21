@@ -728,18 +728,35 @@ function AppShell() {
         {/* ── Compact sticky header ── */}
         <header style={styles.headerShell}>
           {/* Left: brand */}
-          <div style={styles.headerLeft}>
+          <div style={{ ...styles.headerLeft, gap: '10px' }}>
             <div style={styles.headerLogoMark}>
               <img
                 src={LOGO_MARK_SRC}
                 alt="Detroit Axle"
-                style={{ width: '26px', height: '26px', objectFit: 'contain' }}
+                style={{ width: '24px', height: '24px', objectFit: 'contain' }}
               />
             </div>
-            <div>
-              <div style={styles.headerBrandName}>Detroit Axle</div>
-              <div style={styles.headerBrandSub}>QA Command Center</div>
-            </div>
+            <div
+              style={{
+                width: '8px',
+                height: '52px',
+                borderRadius: '999px',
+                background: theme.brandAccent,
+                boxShadow: theme.brandAccentShadow,
+                flexShrink: 0,
+              }}
+            />
+            <img
+              src={LOGO_WORDMARK_SRC}
+              alt="Detroit Axle"
+              style={{
+                width: isCompactLayout ? '128px' : '220px',
+                height: isCompactLayout ? '28px' : '42px',
+                objectFit: 'contain',
+                objectPosition: 'left center',
+                display: 'block',
+              }}
+            />
           </div>
 
           {/* Center: breadcrumb */}
