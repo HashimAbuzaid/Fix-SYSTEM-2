@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, type CSSProperties } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -98,7 +98,7 @@ function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
-  const map: Record<string, ReactNode> = {
+  const map: Record<string, JSX.Element> = {
     Dashboard: (
       <svg {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
     ),
@@ -500,6 +500,18 @@ function AppShell() {
       : profile.agent_name;
   }, [profile]);
 
+  const navGroupsOrdered = useMemo(() => {
+    const groups: Record<string, NavItem[]> = {};
+    if (!profile) return [] as [string, NavItem[]][];
+    const items = buildNavItems(profile);
+    items.forEach((item) => {
+      const g = item.group;
+      if (!groups[g]) groups[g] = [];
+      groups[g].push(item);
+    });
+    return Object.entries(groups) as [string, NavItem[]][];
+  }, [profile]);
+
   // ── Loading ──
   if (loading) {
     return <LoadingScreen styles={styles} theme={theme} />;
@@ -719,18 +731,6 @@ function AppShell() {
     transition: `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
     color: active ? '#ffffff' : 'currentColor',
   });
-
-  // Group nav items for the expanded sidebar
-  const navGroupsOrdered = useMemo(() => {
-    const groups: Record<string, NavItem[]> = {};
-    navItems.forEach((item) => {
-      const g = item.group;
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(item);
-    });
-    // preserve insertion order
-    return Object.entries(groups);
-  }, [navItems]);
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
