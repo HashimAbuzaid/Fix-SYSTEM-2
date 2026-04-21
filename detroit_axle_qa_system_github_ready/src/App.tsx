@@ -531,30 +531,8 @@ function AppShell() {
     color: active ? '#ffffff' : hovered ? (themeMode === 'light' ? '#2563eb' : '#93c5fd') : theme.navButtonText,
   });
 
-  const headerBrandLogoWrapStyle: CSSProperties = {
-    ...styles.brandLogoWrap,
-    width: '86px',
-    height: '86px',
-    borderRadius: '28px',
-    padding: '7px',
-    background:
-      themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,248,255,0.95) 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 100%)',
-  };
 
-  const headerBrandInnerStyle: CSSProperties = {
-    width: '100%',
-    height: '100%',
-    borderRadius: '22px',
-    display: 'grid',
-    placeItems: 'center',
-    background:
-      themeMode === 'light'
-        ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(245,249,255,0.94) 100%)'
-        : 'linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
-    overflow: 'hidden',
-  };
+
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
