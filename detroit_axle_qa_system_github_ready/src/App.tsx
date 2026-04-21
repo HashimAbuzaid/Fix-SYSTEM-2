@@ -553,11 +553,6 @@ function AppShell() {
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
   const userInitials = getUserInitials(profile);
 
-  const activeIndicatorIndex = Math.max(
-    0,
-    navItems.findIndex((item) => item.path === location.pathname)
-  );
-
   // ── Desktop sidebar layout ──
   const desktopShellStyle: CSSProperties = {
     display: 'grid',
@@ -649,25 +644,10 @@ function AppShell() {
     flex: 1,
     overflowY: 'auto',
     overflowX: 'hidden',
-    padding: '4px 0',
-    scrollbarWidth: 'none',
-  };
-
-  const navTrackStyle: CSSProperties = {
-    position: 'absolute',
-    left: '4px',
-    top: `${SIDEBAR_TRACK_TOP}px`,
-    width: 'calc(100% - 8px)',
-    height: `${SIDEBAR_ITEM_HEIGHT}px`,
-    borderRadius: '14px',
-    background: theme.navButtonActiveBackground,
-    border: theme.navButtonActiveBorder,
-    boxShadow: theme.navButtonActiveShadow,
-    transform: `translate3d(0, ${(SIDEBAR_ITEM_HEIGHT + SIDEBAR_ITEM_GAP) * activeIndicatorIndex}px, 0)`,
-    transition: `transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), width ${EXPAND_EASE}`,
-    willChange: 'transform, width',
-    zIndex: 0,
-    pointerEvents: 'none',
+    padding: '4px 4px 8px 0',
+    scrollbarWidth: 'thin',
+    scrollBehavior: 'smooth',
+    WebkitOverflowScrolling: 'touch',
   };
 
   const navButtonDesktopStyle = (active: boolean, hovered: boolean): CSSProperties => ({
@@ -684,19 +664,21 @@ function AppShell() {
     borderRadius: '14px',
     padding: expandedSidebar ? '0 12px' : '0',
     justifyContent: expandedSidebar ? 'flex-start' : 'center',
-    border: '1px solid transparent',
-    background: !active && hovered
+    border: active ? theme.navButtonActiveBorder : '1px solid transparent',
+    background: active
+      ? theme.navButtonActiveBackground
+      : !active && hovered
       ? themeMode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(255,255,255,0.06)'
       : 'transparent',
     color: active
-      ? '#ffffff'
+      ? theme.navButtonActiveText
       : hovered
       ? themeMode === 'light' ? '#2563eb' : '#93c5fd'
       : theme.navButtonText,
-    boxShadow: 'none',
+    boxShadow: active ? theme.navButtonActiveShadow : 'none',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
+    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, box-shadow 160ms ease, border-color 160ms ease`,
     width: '100%',
   });
 
@@ -874,9 +856,6 @@ function AppShell() {
 
                     {/* Nav items */}
                     <div style={navRailStyle}>
-                      {/* Active track slider */}
-                      <div style={navTrackStyle} />
-
                       {expandedSidebar
                         ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
                           <div key={groupName}>
