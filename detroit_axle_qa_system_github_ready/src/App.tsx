@@ -761,15 +761,22 @@ function AppShell() {
               />
               <span
                 style={{
-                  color: themeMode === 'light' ? '#334155' : '#dbeafe',
-                  fontSize: isCompactLayout ? '14px' : '18px',
-                  fontWeight: 800,
-                  letterSpacing: '0.12em',
+                  fontSize: isCompactLayout ? '16px' : '20px',
+                  fontWeight: 900,
+                  letterSpacing: '0.18em',
                   textTransform: 'uppercase',
                   lineHeight: 1,
-                  opacity: 0.96,
-                  fontFamily: "'Syne', sans-serif",
-                  textShadow: themeMode === 'light' ? 'none' : '0 1px 10px rgba(37,99,235,0.16)',
+                  fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+                  background: themeMode === 'light'
+                    ? 'linear-gradient(90deg, #0b6fb3 0%, #35a8e0 100%)'
+                    : 'linear-gradient(90deg, #127bc0 0%, #58c0f4 100%)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  color: 'transparent',
+                  filter: themeMode === 'light' ? 'none' : 'drop-shadow(0 1px 10px rgba(37,99,235,0.14))',
+                  transform: 'translateY(-1px)',
+                  flexShrink: 0,
                 }}
               >
                 QA
