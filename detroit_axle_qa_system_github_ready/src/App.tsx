@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type CSSProperties } from 'react';
+import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -98,7 +98,7 @@ function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
-  const map: Record<string, JSX.Element> = {
+  const map: Record<string, ReactNode> = {
     Dashboard: (
       <svg {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
     ),
