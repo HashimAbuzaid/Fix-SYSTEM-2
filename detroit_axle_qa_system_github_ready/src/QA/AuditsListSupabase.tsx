@@ -131,7 +131,7 @@ function buildShiftedEvaluations(
       label: '',
     })
   );
-  const source = evaluations.slice(0, MAX_PROGRESS_EVALS);
+
   let sourcePointer = 0;
 
   for (let displayIndex = 0; displayIndex < MAX_PROGRESS_EVALS; displayIndex += 1) {
@@ -139,15 +139,14 @@ function buildShiftedEvaluations(
       continue;
     }
 
-    while (sourcePointer < source.length && offIndexSet.has(sourcePointer)) {
-      sourcePointer += 1;
-    }
-
-    if (sourcePointer >= source.length) {
+    if (sourcePointer >= evaluations.length) {
       break;
     }
 
-    filled[displayIndex] = source[sourcePointer] || { score: null, label: '' };
+    filled[displayIndex] = evaluations[sourcePointer] || {
+      score: null,
+      label: '',
+    };
     sourcePointer += 1;
   }
 
@@ -1405,9 +1404,9 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
         <div
           key={`${row.agent_id}-${row.team}-${column.index}`}
           style={getOffEvalCellStyle(isSelectedTarget)}
-          title={`OFF placed in ${column.label}`}
+          title={`OFF placed in ${column.label} and scores shifted right`}
         >
-          OFF
+          {column.label.replace('Eval ', 'OFF ')}
         </div>
       );
     }
@@ -2121,7 +2120,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     </div>
 
     <div style={progressHintStyle}>
-      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days.
+      Click one or more Eval headers to choose separate OFF markers. Each selected OFF keeps its own eval slot, and any score already in that slot shifts to the right.
     </div>
 
     {evaluationProgressData.rows.length === 0 ? (
