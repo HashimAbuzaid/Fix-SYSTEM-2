@@ -1234,10 +1234,10 @@ function AuditsImportSupabase() {
           );
           const merged = [...prev];
           dedupeResult.duplicateRows.forEach((item) => {
-            const key = `${item.rowNumber}||${item.agentLabel}||${item.reason}`;
-            if (!existingKeys.has(key)) {
+            const dedupeKey = `${item.rowNumber}||${item.agentLabel}||${item.reason}`;
+            if (!existingKeys.has(dedupeKey)) {
               merged.push(item);
-              existingKeys.add(key);
+              existingKeys.add(dedupeKey);
             }
           });
           return merged;
