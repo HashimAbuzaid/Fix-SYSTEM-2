@@ -739,11 +739,10 @@ function AuditsListSupabase() {
   function getEffectiveOffIndexesForAgent(
     agentId?: string | null,
     team?: string | null,
-    hasLegacyOffToday?: boolean
+    _hasLegacyOffToday?: boolean
   ) {
     const manualIndexes = getManualOffIndexes(agentId, team);
     if (manualIndexes.length > 0) return manualIndexes;
-    if (hasLegacyOffToday) return getSelectedOffTargetIndexes();
     return [];
   }
 
