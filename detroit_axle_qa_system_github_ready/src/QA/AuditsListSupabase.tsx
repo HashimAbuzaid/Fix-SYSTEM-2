@@ -1159,7 +1159,12 @@ const evaluationProgressData = useMemo(() => {
       if (!haystack.includes(normalizedSearch)) return;
     }
 
-    const existing = groupedRows.get(key) || {
+    const importedKey = getAgentProgressKey(
+      importedRow.agent_id || importedRow.agent_name,
+      importedRow.team
+    );
+
+    const existing = groupedRows.get(importedKey) || {
       agent_id: importedRow.agent_id,
       agent_name: importedRow.agent_name,
       display_name: importedRow.display_name,
@@ -1167,7 +1172,7 @@ const evaluationProgressData = useMemo(() => {
       evaluations: [],
     };
 
-    groupedRows.set(key, existing);
+    groupedRows.set(importedKey, existing);
   });
 
   const rows = Array.from(groupedRows.values())
