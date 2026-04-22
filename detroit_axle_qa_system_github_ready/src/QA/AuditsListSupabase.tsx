@@ -1146,7 +1146,7 @@ const evaluationProgressData = useMemo(() => {
     }
   });
 
-  Object.entries(importedProgressByAgent).forEach(([, importedRow]) => {
+  Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
     if (teamFilter && importedRow.team !== teamFilter) return;
     if (normalizedSearch) {
       const haystack = [
@@ -1159,12 +1159,7 @@ const evaluationProgressData = useMemo(() => {
       if (!haystack.includes(normalizedSearch)) return;
     }
 
-    const importedKey = getAgentProgressKey(
-      importedRow.agent_id || importedRow.agent_name,
-      importedRow.team
-    );
-
-    const existing = groupedRows.get(importedKey) || {
+    const existing = groupedRows.get(key) || {
       agent_id: importedRow.agent_id,
       agent_name: importedRow.agent_name,
       display_name: importedRow.display_name,
@@ -1172,7 +1167,7 @@ const evaluationProgressData = useMemo(() => {
       evaluations: [],
     };
 
-    groupedRows.set(importedKey, existing);
+    groupedRows.set(key, existing);
   });
 
   const rows = Array.from(groupedRows.values())
