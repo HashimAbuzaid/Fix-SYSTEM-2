@@ -124,10 +124,13 @@ function buildShiftedEvaluations(
   }
 
   const offIndexSet = new Set(normalizedOffIndexes);
-  const filled = Array.from({ length: MAX_PROGRESS_EVALS }, () => ({
-    score: null,
-    label: '',
-  }));
+  const filled: ImportedEvaluation[] = Array.from(
+    { length: MAX_PROGRESS_EVALS },
+    (): ImportedEvaluation => ({
+      score: null,
+      label: '',
+    })
+  );
   const source = evaluations.slice(0, MAX_PROGRESS_EVALS);
   let sourcePointer = 0;
 
