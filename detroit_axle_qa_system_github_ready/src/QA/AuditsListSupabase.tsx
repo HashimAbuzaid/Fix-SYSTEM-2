@@ -113,6 +113,46 @@ function normalizeOffEvalIndexes(indexes: number[]) {
     )
   ).sort((a, b) => a - b);
 }
+
+function buildShiftedEvaluations(
+  evaluations: ImportedEvaluation[],
+  offIndexes: number[]
+) {
+  const normalizedOffIndexes = normalizeOffEvalIndexes(offIndexes);
+
+  if (normalizedOffIndexes.length === 0) {
+    return evaluations.slice(0, MAX_PROGRESS_EVALS);
+  }
+
+  const offIndexSet = new Set(normalizedOffIndexes);
+  const shifted: ImportedEvaluation[] = Array.from(
+    { length: MAX_PROGRESS_EVALS },
+    (): ImportedEvaluation => ({
+      score: null,
+      label: '',
+    })
+  );
+
+  let sourceIndex = 0;
+
+  for (let displayIndex = 0; displayIndex < MAX_PROGRESS_EVALS; displayIndex += 1) {
+    if (offIndexSet.has(displayIndex)) {
+      continue;
+    }
+
+    if (sourceIndex >= evaluations.length) {
+      break;
+    }
+
+    shifted[displayIndex] = evaluations[sourceIndex] || {
+      score: null,
+      label: '',
+    };
+    sourceIndex += 1;
+  }
+
+  return shifted;
+}
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 
@@ -1064,6 +1104,8 @@ const evaluationProgressData = useMemo(() => {
       display_name: string | null;
       team: 'Calls' | 'Tickets' | 'Sales';
       evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
+      shiftedEvaluations?: ImportedEvaluation[];
+      offIndexes?: number[];
     }
   >();
 
@@ -1146,6 +1188,16 @@ const evaluationProgressData = useMemo(() => {
         ? imported.evaluations.slice(0, MAX_PROGRESS_EVALS)
         : dbEvaluations;
 
+      const offToday =
+        imported?.offToday === true ||
+        !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)];
+      const offIndexes = getEffectiveOffIndexesForAgent(
+        row.agent_id,
+        row.team,
+        offToday
+      );
+      const shiftedEvaluations = buildShiftedEvaluations(evaluations, offIndexes);
+
       const scoredItems = evaluations.filter((item) => item.score !== null);
       const averageScore =
         imported?.averageScore ??
@@ -1170,13 +1222,13 @@ const evaluationProgressData = useMemo(() => {
         display_name: imported?.display_name ?? row.display_name,
         team: row.team,
         evaluations,
+        shiftedEvaluations,
+        offIndexes,
         averageScore:
           averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
         latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
         latestAuditDate,
-        offToday:
-          imported?.offToday === true ||
-          !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
+        offToday,
       };
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
@@ -1303,13 +1355,15 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     row: (typeof evaluationProgressData.rows)[number],
     column: ProgressColumn
   ) {
-    const evaluation = row.evaluations[column.index] || {
-      score: null,
-      label: '',
-    };
+    const evaluation =
+      row.shiftedEvaluations?.[column.index] ||
+      row.evaluations[column.index] || {
+        score: null,
+        label: '',
+      };
     const hasValue =
       evaluation.score !== null && Number.isFinite(evaluation.score);
-    const rowOffIndexes = getRowEffectiveOffIndexes(row);
+    const rowOffIndexes = row.offIndexes || getRowEffectiveOffIndexes(row);
     const isOffCell = rowOffIndexes.includes(column.index);
     const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
@@ -2104,7 +2158,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
           </div>
 
           {evaluationProgressData.rows.map((row) => {
-            const rowOffIndexes = getRowEffectiveOffIndexes(row);
+            const rowOffIndexes = row.offIndexes || getRowEffectiveOffIndexes(row);
             const rowHasAnyOff = rowOffIndexes.length > 0;
             const allSelectedTargetsAreOff =
               selectedOffEvalIndexes.length > 0 &&
