@@ -49,7 +49,7 @@ type AgentDailyStatus = {
   agent_id: string;
   team: 'Calls' | 'Tickets' | 'Sales';
   status_date: string;
-  status: string;
+  status: 'OFF';
   created_by_user_id?: string | null;
   created_by_name?: string | null;
   created_at?: string | null;
@@ -103,6 +103,8 @@ type ProgressColumn = {
   groupKey: ProgressGroupKey;
   groupLabel: string;
 };
+const PROGRESS_OFF_STORAGE_KEY = 'detroit-axle-progress-off-evals-v3';
+
 function normalizeOffEvalIndexes(indexes: number[]) {
   return Array.from(
     new Set(
@@ -395,27 +397,6 @@ function AuditsListSupabase() {
   useEffect(() => {
     void loadAuditsAndProfiles();
   }, []);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('agent-daily-status-sync')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'agent_daily_status',
-        },
-        () => {
-          void loadAuditsAndProfiles();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [todayStatusDate]);
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       if (
@@ -428,6 +409,29 @@ function AuditsListSupabase() {
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = window.localStorage.getItem(PROGRESS_OFF_STORAGE_KEY);
+      if (!stored) return;
+      const parsed = JSON.parse(stored) as Record<string, number[]>;
+      const sanitized: Record<string, number[]> = {};
+      Object.entries(parsed || {}).forEach(([key, value]) => {
+        sanitized[key] = normalizeOffEvalIndexes(Array.isArray(value) ? value : []);
+      });
+      setManualOffEvalIndexesByAgent(sanitized);
+    } catch {
+      setManualOffEvalIndexesByAgent({});
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(
+      PROGRESS_OFF_STORAGE_KEY,
+      JSON.stringify(manualOffEvalIndexesByAgent)
+    );
+  }, [manualOffEvalIndexesByAgent]);
   async function loadAuditsAndProfiles() {
     setLoading(true);
     setErrorMessage('');
@@ -460,7 +464,8 @@ function AuditsListSupabase() {
         supabase
           .from('agent_daily_status')
           .select('agent_id, team, status_date, status')
-          .eq('status_date', todayStatusDate),
+          .eq('status_date', todayStatusDate)
+          .eq('status', 'OFF'),
       ]);
     setLoading(false);
     if (auditsResult.error) {
@@ -484,28 +489,10 @@ function AuditsListSupabase() {
     setCurrentProfile((currentProfileResult.data as CurrentProfile) || null);
 
     const nextOffTodayMap: Record<string, boolean> = {};
-    const nextManualOffMap: Record<string, number[]> = {};
-
     ((offTodayResult.data as AgentDailyStatus[]) || []).forEach((item) => {
-      const key = getAgentProgressKey(item.agent_id, item.team);
-
-      if (item.status === 'OFF') {
-        nextOffTodayMap[key] = true;
-        return;
-      }
-
-      const parsedIndex = parseOffEvalStatusIndex(item.status);
-      if (parsedIndex === null) return;
-
-      const currentIndexes = nextManualOffMap[key] || [];
-      nextManualOffMap[key] = normalizeOffEvalIndexes([
-        ...currentIndexes,
-        parsedIndex,
-      ]);
+      nextOffTodayMap[getAgentProgressKey(item.agent_id, item.team)] = true;
     });
-
     setOffTodayByAgent(nextOffTodayMap);
-    setManualOffEvalIndexesByAgent(nextManualOffMap);
   }
   const profileDisplayNameByKey = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -664,19 +651,6 @@ function AuditsListSupabase() {
   function getAgentProgressKey(agentId?: string | null, team?: string | null) {
     return `${agentId || ''}||${team || ''}`;
   }
-  function getOffEvalStatusValue(index: number) {
-    return `OFF_EVAL_${index + 1}`;
-  }
-
-  function parseOffEvalStatusIndex(statusValue?: string | null) {
-    const match = String(statusValue || '').match(/^OFF_EVAL_(\d+)$/);
-    if (!match) return null;
-    const parsed = Number(match[1]) - 1;
-    return Number.isInteger(parsed) && parsed >= 0 && parsed < MAX_PROGRESS_EVALS
-      ? parsed
-      : null;
-  }
-
   function matchesProfileSearch(profile: AgentProfile, search: string) {
     if (!search) return true;
     const label = getAgentLabel(profile).toLowerCase();
@@ -720,56 +694,84 @@ function AuditsListSupabase() {
     return `${normalized.length} evals selected`;
   }
 
-  async function syncAgentOffState(
+
+type ProgressDisplayCell = {
+  score: number | null;
+  label: string;
+  isOff?: boolean;
+};
+
+function buildShiftedEvaluations(
+  evaluations: ImportedEvaluation[],
+  offIndexes: number[]
+): ProgressDisplayCell[] {
+  const normalizedOffIndexes = normalizeOffEvalIndexes(offIndexes);
+  const offSet = new Set(normalizedOffIndexes);
+  const source = evaluations.slice(0, MAX_PROGRESS_EVALS);
+  const shifted: ProgressDisplayCell[] = [];
+  let evalPointer = 0;
+
+  for (let index = 0; index < MAX_PROGRESS_EVALS; index += 1) {
+    if (offSet.has(index)) {
+      shifted.push({
+        score: null,
+        label: 'OFF',
+        isOff: true,
+      });
+      continue;
+    }
+
+    const nextEvaluation = source[evalPointer];
+    if (nextEvaluation) {
+      shifted.push({
+        score: nextEvaluation.score,
+        label: nextEvaluation.label,
+      });
+      evalPointer += 1;
+    } else {
+      shifted.push({
+        score: null,
+        label: '',
+      });
+    }
+  }
+
+  return shifted;
+}
+
+  async function syncAgentOffPresence(
     agentId: string,
     team: 'Calls' | 'Tickets' | 'Sales',
-    nextIndexes: number[]
+    shouldHaveOff: boolean
   ) {
-    const existingStatuses = [
-      'OFF',
-      ...Array.from({ length: MAX_PROGRESS_EVALS }, (_, index) =>
-        getOffEvalStatusValue(index)
-      ),
-    ];
+    if (shouldHaveOff) {
+      const { error } = await supabase
+        .from('agent_daily_status')
+        .upsert(
+          {
+            agent_id: agentId,
+            team,
+            status_date: todayStatusDate,
+            status: 'OFF',
+            created_by_user_id: currentProfile?.id || null,
+            created_by_name: currentProfile?.agent_name || null,
+          },
+          { onConflict: 'agent_id,team,status_date' }
+        );
 
-    const { error: deleteError } = await supabase
+      if (error) throw error;
+      return;
+    }
+
+    const { error } = await supabase
       .from('agent_daily_status')
       .delete()
       .eq('agent_id', agentId)
       .eq('team', team)
       .eq('status_date', todayStatusDate)
-      .in('status', existingStatuses);
+      .eq('status', 'OFF');
 
-    if (deleteError) throw deleteError;
-
-    if (nextIndexes.length === 0) {
-      return;
-    }
-
-    const rows: AgentDailyStatus[] = [
-      {
-        agent_id: agentId,
-        team,
-        status_date: todayStatusDate,
-        status: 'OFF',
-        created_by_user_id: currentProfile?.id || null,
-        created_by_name: currentProfile?.agent_name || null,
-      },
-      ...normalizeOffEvalIndexes(nextIndexes).map((index) => ({
-        agent_id: agentId,
-        team,
-        status_date: todayStatusDate,
-        status: getOffEvalStatusValue(index),
-        created_by_user_id: currentProfile?.id || null,
-        created_by_name: currentProfile?.agent_name || null,
-      })),
-    ];
-
-    const { error: insertError } = await supabase
-      .from('agent_daily_status')
-      .insert(rows);
-
-    if (insertError) throw insertError;
+    if (error) throw error;
   }
 
   async function toggleAgentOffToday(
@@ -812,7 +814,7 @@ function AuditsListSupabase() {
       : normalizeOffEvalIndexes([...currentIndexes, ...targetIndexes]);
 
     try {
-      await syncAgentOffState(agentId, team, nextIndexes);
+      await syncAgentOffPresence(agentId, team, nextIndexes.length > 0);
 
       setManualOffEvalIndexesByAgent((prev) => {
         const next = { ...prev };
@@ -1181,17 +1183,14 @@ const evaluationProgressData = useMemo(() => {
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-  const maxEvaluations = Math.max(
-    1,
-    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
-  );
 
   const evaluationColumns = Array.from(
-    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    { length: MAX_PROGRESS_EVALS },
     (_, index) => {
-      const group = PROGRESS_GROUPS.find(
-        (item) => index >= item.start && index < item.end
-      ) || PROGRESS_GROUPS[0];
+      const group =
+        PROGRESS_GROUPS.find(
+          (item) => index >= item.start && index < item.end
+        ) || PROGRESS_GROUPS[0];
 
       return {
         index,
@@ -1284,6 +1283,16 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
 }
 
 
+function getShiftedRowEvaluations(
+  row: (typeof evaluationProgressData.rows)[number]
+) {
+  return buildShiftedEvaluations(
+    row.evaluations,
+    getRowEffectiveOffIndexes(row)
+  );
+}
+
+
   function getOffEvalCellStyle(isSelectedTarget: boolean) {
     return {
       ...progressOffEvalCellStyle,
@@ -1295,14 +1304,15 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
     row: (typeof evaluationProgressData.rows)[number],
     column: ProgressColumn
   ) {
-    const evaluation = row.evaluations[column.index] || {
+    const shiftedEvaluations = getShiftedRowEvaluations(row);
+    const evaluation = shiftedEvaluations[column.index] || {
       score: null,
       label: '',
+      isOff: false,
     };
     const hasValue =
       evaluation.score !== null && Number.isFinite(evaluation.score);
-    const rowOffIndexes = getRowEffectiveOffIndexes(row);
-    const isOffCell = rowOffIndexes.includes(column.index);
+    const isOffCell = evaluation.isOff === true;
     const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
 
     if (isOffCell) {
@@ -1331,7 +1341,11 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
         }}
         title={
           isSelectedTarget
-            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
+            ? `${column.label} is selected for OFF control${
+                hasValue
+                  ? ` • ${evaluation.label || `${evaluation.score}%`}`
+                  : ''
+              }`
             : hasValue
             ? evaluation.label || `${evaluation.score}%`
             : 'No evaluation'
