@@ -1146,35 +1146,9 @@ const evaluationProgressData = useMemo(() => {
     }
   });
 
-  Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
-    if (teamFilter && importedRow.team !== teamFilter) return;
-    if (normalizedSearch) {
-      const haystack = [
-        importedRow.agent_name,
-        importedRow.display_name || '',
-        importedRow.agent_id,
-      ]
-        .join(' ')
-        .toLowerCase();
-      if (!haystack.includes(normalizedSearch)) return;
-    }
-
-    const existing = groupedRows.get(key) || {
-      agent_id: importedRow.agent_id,
-      agent_name: importedRow.agent_name,
-      display_name: importedRow.display_name,
-      team: importedRow.team,
-      evaluations: [],
-    };
-
-    groupedRows.set(key, existing);
-  });
-
   const rows = Array.from(groupedRows.values())
     .map((row) => {
       const key = getAgentProgressKey(row.agent_id, row.team);
-      const imported = importedProgressByAgent[key] || null;
-
       const dbEvaluations = [...row.evaluations]
         .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
         .slice(-MAX_PROGRESS_EVALS)
@@ -1183,20 +1157,15 @@ const evaluationProgressData = useMemo(() => {
           label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
         }));
 
-      const evaluations = imported?.evaluations?.length
-        ? imported.evaluations.slice(0, MAX_PROGRESS_EVALS)
-        : dbEvaluations;
-
+      const evaluations = dbEvaluations;
       const scoredItems = evaluations.filter((item) => item.score !== null);
       const averageScore =
-        imported?.averageScore ??
-        (scoredItems.length > 0
+        scoredItems.length > 0
           ? scoredItems.reduce((sum, item) => sum + (item.score ?? 0), 0) / scoredItems.length
-          : null);
+          : null;
 
       const latestScore =
-        imported?.latestScore ??
-        (scoredItems.length > 0 ? scoredItems.slice(-1)[0]?.score ?? null : null);
+        scoredItems.length > 0 ? scoredItems.slice(-1)[0]?.score ?? null : null;
 
       const latestAuditDate =
         row.evaluations.length > 0
@@ -1207,17 +1176,15 @@ const evaluationProgressData = useMemo(() => {
 
       return {
         agent_id: row.agent_id,
-        agent_name: imported?.agent_name || row.agent_name,
-        display_name: imported?.display_name ?? row.display_name,
+        agent_name: row.agent_name,
+        display_name: row.display_name,
         team: row.team,
         evaluations,
         averageScore:
           averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
         latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
         latestAuditDate,
-        offToday:
-          imported?.offToday === true ||
-          !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
+        offToday: !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)],
       };
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
@@ -1779,11 +1746,11 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
             disabled={importingBoard}
             style={secondaryButton}
           >
-            {importingBoard ? 'Importing...' : 'Import Progress CSV'}
+            {importingBoard ? 'Importing...' : 'Import Progress CSV (local only)'}
           </button>
           {importedFileName ? (
             <button type="button" onClick={clearImportedProgress} style={secondaryButton}>
-              Clear Imported Board
+              Clear Imported CSV
             </button>
           ) : null}
           <button
@@ -1963,7 +1930,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
           Team Progress Board
         </h3>
         <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted, #475569)' }}>
-          This board uses the currently filtered audits, and OFF markers are now read from shared agent_daily_status rows using the current team and date filters.
+          This board uses only shared Supabase audit data and shared agent_daily_status OFF markers for the current team and date filters.
         </p>
       </div>
       <div style={progressMetaRowStyle}>
