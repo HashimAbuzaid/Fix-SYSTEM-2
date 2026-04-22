@@ -1227,13 +1227,8 @@ const evaluationProgressData = useMemo(() => {
     })
     .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
 
-  const maxEvaluations = Math.max(
-    1,
-    ...rows.map((row) => Math.min(MAX_PROGRESS_EVALS, row.evaluations.length || 0))
-  );
-
   const evaluationColumns = Array.from(
-    { length: Math.min(maxEvaluations, MAX_PROGRESS_EVALS) },
+    { length: MAX_PROGRESS_EVALS },
     (_, index) => {
       const group = PROGRESS_GROUPS.find(
         (item) => index >= item.start && index < item.end
