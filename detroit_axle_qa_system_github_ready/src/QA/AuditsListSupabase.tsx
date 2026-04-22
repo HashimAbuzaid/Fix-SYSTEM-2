@@ -384,7 +384,6 @@ function AuditsListSupabase() {
   });
   const [selectedOffEvalIndexes, setSelectedOffEvalIndexes] = useState<number[]>([0]);
   const [manualOffEvalIndexesByAgent, setManualOffEvalIndexesByAgent] = useState<Record<string, number[]>>({});
-  const [agentDailyStatuses, setAgentDailyStatuses] = useState<AgentDailyStatus[]>([]);
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -393,10 +392,6 @@ function AuditsListSupabase() {
   const isAdmin = currentProfile?.role === 'admin';
   const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
   const todayStatusDate = getTodayDateValue();
-  useEffect(() => {
-    rebuildOffStateMaps(agentDailyStatuses);
-  }, [agentDailyStatuses, teamFilter, dateFrom, dateTo]);
-
   useEffect(() => {
     void loadAuditsAndProfiles();
   }, []);
@@ -420,7 +415,7 @@ function AuditsListSupabase() {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [todayStatusDate]);
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       if (
@@ -465,7 +460,7 @@ function AuditsListSupabase() {
         supabase
           .from('agent_daily_status')
           .select('agent_id, team, status_date, status')
-          .order('status_date', { ascending: false }),
+          .eq('status_date', todayStatusDate),
       ]);
     setLoading(false);
     if (auditsResult.error) {
@@ -487,7 +482,30 @@ function AuditsListSupabase() {
     setAudits((auditsResult.data as AuditItem[]) || []);
     setProfiles((profilesResult.data as AgentProfile[]) || []);
     setCurrentProfile((currentProfileResult.data as CurrentProfile) || null);
-    setAgentDailyStatuses((offTodayResult.data as AgentDailyStatus[]) || []);
+
+    const nextOffTodayMap: Record<string, boolean> = {};
+    const nextManualOffMap: Record<string, number[]> = {};
+
+    ((offTodayResult.data as AgentDailyStatus[]) || []).forEach((item) => {
+      const key = getAgentProgressKey(item.agent_id, item.team);
+
+      if (item.status === 'OFF') {
+        nextOffTodayMap[key] = true;
+        return;
+      }
+
+      const parsedIndex = parseOffEvalStatusIndex(item.status);
+      if (parsedIndex === null) return;
+
+      const currentIndexes = nextManualOffMap[key] || [];
+      nextManualOffMap[key] = normalizeOffEvalIndexes([
+        ...currentIndexes,
+        parsedIndex,
+      ]);
+    });
+
+    setOffTodayByAgent(nextOffTodayMap);
+    setManualOffEvalIndexesByAgent(nextManualOffMap);
   }
   const profileDisplayNameByKey = useMemo(() => {
     const map = new Map<string, string | null>();
@@ -659,42 +677,6 @@ function AuditsListSupabase() {
       : null;
   }
 
-  function getScopedDailyStatuses(statusRows: AgentDailyStatus[]) {
-    return statusRows.filter((item) => {
-      const matchesTeam = teamFilter ? item.team === teamFilter : true;
-      const matchesDateFrom = dateFrom ? item.status_date >= dateFrom : true;
-      const matchesDateTo = dateTo ? item.status_date <= dateTo : true;
-      return matchesTeam && matchesDateFrom && matchesDateTo;
-    });
-  }
-
-  function rebuildOffStateMaps(statusRows: AgentDailyStatus[]) {
-    const nextOffTodayMap: Record<string, boolean> = {};
-    const nextManualOffMap: Record<string, number[]> = {};
-
-    getScopedDailyStatuses(statusRows).forEach((item) => {
-      const key = getAgentProgressKey(item.agent_id, item.team);
-
-      if (item.status === 'OFF') {
-        nextOffTodayMap[key] = true;
-        return;
-      }
-
-      const parsedIndex = parseOffEvalStatusIndex(item.status);
-      if (parsedIndex === null) return;
-
-      nextOffTodayMap[key] = true;
-      const currentIndexes = nextManualOffMap[key] || [];
-      nextManualOffMap[key] = normalizeOffEvalIndexes([
-        ...currentIndexes,
-        parsedIndex,
-      ]);
-    });
-
-    setOffTodayByAgent(nextOffTodayMap);
-    setManualOffEvalIndexesByAgent(nextManualOffMap);
-  }
-
   function matchesProfileSearch(profile: AgentProfile, search: string) {
     if (!search) return true;
     const label = getAgentLabel(profile).toLowerCase();
@@ -832,47 +814,24 @@ function AuditsListSupabase() {
     try {
       await syncAgentOffState(agentId, team, nextIndexes);
 
-      setAgentDailyStatuses((prev) => {
-        const existingStatuses = new Set([
-          'OFF',
-          ...Array.from({ length: MAX_PROGRESS_EVALS }, (_, index) =>
-            getOffEvalStatusValue(index)
-          ),
-        ]);
-
-        const filtered = prev.filter(
-          (item) =>
-            !(
-              item.agent_id === agentId &&
-              item.team === team &&
-              item.status_date === todayStatusDate &&
-              existingStatuses.has(item.status)
-            )
-        );
-
-        if (nextIndexes.length === 0) {
-          return filtered;
+      setManualOffEvalIndexesByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = nextIndexes;
+        } else {
+          delete next[key];
         }
+        return next;
+      });
 
-        return [
-          ...filtered,
-          {
-            agent_id: agentId,
-            team,
-            status_date: todayStatusDate,
-            status: 'OFF',
-            created_by_user_id: currentProfile?.id || null,
-            created_by_name: currentProfile?.agent_name || null,
-          },
-          ...normalizeOffEvalIndexes(nextIndexes).map((index) => ({
-            agent_id: agentId,
-            team,
-            status_date: todayStatusDate,
-            status: getOffEvalStatusValue(index),
-            created_by_user_id: currentProfile?.id || null,
-            created_by_name: currentProfile?.agent_name || null,
-          })),
-        ];
+      setOffTodayByAgent((prev) => {
+        const next = { ...prev };
+        if (nextIndexes.length > 0) {
+          next[key] = true;
+        } else {
+          delete next[key];
+        }
+        return next;
       });
 
       setSuccessMessage(
@@ -1963,7 +1922,7 @@ function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[num
           Team Progress Board
         </h3>
         <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted, #475569)' }}>
-          This board uses the currently filtered audits, and OFF markers are now read from shared agent_daily_status rows using the current team and date filters.
+          This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
         </p>
       </div>
       <div style={progressMetaRowStyle}>
