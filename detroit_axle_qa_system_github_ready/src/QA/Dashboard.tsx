@@ -1202,7 +1202,7 @@ function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title
                 </div>
                 {/* Mini bar */}
                 <div style={{ height: '3px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${barPct}%`, background: `linear-gradient(90deg, ${color}, ${color}90)`, borderRadius: '999px', transition: 'width 600ms cubic-bezier(.22,1,.36,1)' }} />
+                  <div style={{ height: '100%', width: `${barPct}%`, background: `linear-gradient(90deg, ${color}, ${color}85)`, borderRadius: '999px', transition: 'width 600ms cubic-bezier(.22,1,.36,1)' }} />
                 </div>
               </div>
             );
