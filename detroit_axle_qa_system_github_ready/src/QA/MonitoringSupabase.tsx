@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 
 type MonitoringStatus = 'active' | 'resolved';
@@ -40,6 +40,94 @@ type MonitoringItem = {
   resolved_by_email: string | null;
 };
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
+function getMonitoringThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          document.documentElement.getAttribute('data-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--screen-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
+    '--screen-muted': isLight ? '#475569' : '#cbd5e1',
+    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
+    '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
+    '--screen-panel-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'var(--screen-panel-bg)',
+    '--screen-card-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
+      : 'var(--screen-card-bg)',
+    '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.52)',
+    '--screen-field-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.70)',
+    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
+    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.96)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.74)',
+    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.24)',
+    '--screen-error-border': isLight ? 'rgba(248,113,113,0.28)' : 'rgba(248,113,113,0.22)',
+    '--screen-error-text': isLight ? '#b91c1c' : '#fecaca',
+    '--screen-empty-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.24)',
+    '--screen-status-active': '#2563eb',
+    '--screen-status-resolved': '#166534',
+    '--screen-status-warn': '#92400e',
+  };
+}
+
 function MonitoringSupabase() {
   const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
     null
@@ -65,6 +153,8 @@ function MonitoringSupabase() {
   const [searchText, setSearchText] = useState('');
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getMonitoringThemeVars(), [themeRefreshKey]);
 
   useEffect(() => {
     void loadMonitoringPage();
@@ -276,16 +366,16 @@ function MonitoringSupabase() {
   }, [items, statusFilter, teamFilter, searchText]);
 
   if (loading) {
-    return <div style={{ color: '#cbd5e1' }}>Loading monitoring...</div>;
+    return <div style={{ color: 'var(--screen-muted)' }}>Loading monitoring...</div>;
   }
 
   return (
-    <div style={{ color: '#e5eefb' }}>
+    <div style={{ color: 'var(--screen-field-text)' }}>
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Operational Alerts</div>
           <h2 style={{ marginBottom: '8px' }}>Monitoring</h2>
-          <p style={{ margin: 0, color: '#94a3b8' }}>
+          <p style={{ margin: 0, color: 'var(--screen-subtle)' }}>
             Create manual order watch items linked to an agent through profiles.
           </p>
         </div>
@@ -310,7 +400,7 @@ function MonitoringSupabase() {
                 onClick={() => setIsAgentPickerOpen((prev) => !prev)}
                 style={pickerButtonStyle}
               >
-                <span style={{ color: selectedAgent ? '#f8fafc' : '#94a3b8' }}>
+                <span style={{ color: selectedAgent ? 'var(--screen-heading)' : 'var(--screen-subtle)' }}>
                   {selectedAgent
                     ? getAgentLabel(selectedAgent)
                     : 'Select agent'}
@@ -462,14 +552,14 @@ function MonitoringSupabase() {
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <div
                     style={statusPillStyle(
-                      item.status === 'active' ? '#2563eb' : '#166534'
+                      item.status === 'active' ? 'var(--screen-status-active)' : 'var(--screen-status-resolved)'
                     )}
                   >
                     {item.status}
                   </div>
                   <div
                     style={statusPillStyle(
-                      item.acknowledged_by_agent ? '#166534' : '#92400e'
+                      item.acknowledged_by_agent ? 'var(--screen-status-resolved)' : 'var(--screen-status-warn)'
                     )}
                   >
                     {item.acknowledged_by_agent
@@ -530,7 +620,7 @@ const pageHeaderStyle = {
   marginBottom: '18px',
 };
 const sectionEyebrow = {
-  color: '#60a5fa',
+  color: 'var(--screen-accent)',
   fontSize: '12px',
   fontWeight: 800,
   letterSpacing: '0.16em',
@@ -539,8 +629,8 @@ const sectionEyebrow = {
 };
 const panelStyle = {
   background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-  border: '1px solid rgba(148,163,184,0.14)',
+    'var(--screen-panel-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '22px',
   padding: '22px',
 };
@@ -553,7 +643,7 @@ const filterGridStyle = {
 const labelStyle = {
   display: 'block',
   marginBottom: '8px',
-  color: '#cbd5e1',
+  color: 'var(--screen-muted)',
   fontWeight: 700,
   fontSize: '13px',
 };
@@ -561,30 +651,30 @@ const fieldStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.16)',
-  background: 'rgba(15,23,42,0.7)',
-  color: '#e5eefb',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-field-bg)',
+  color: 'var(--screen-field-text)',
 };
 const pickerButtonStyle = {
   width: '100%',
   padding: '12px 14px',
   borderRadius: '12px',
-  border: '1px solid rgba(148,163,184,0.16)',
-  background: 'rgba(15,23,42,0.7)',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-field-bg)',
   textAlign: 'left' as const,
   cursor: 'pointer',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'center',
-  color: '#e5eefb',
+  color: 'var(--screen-field-text)',
 };
 const pickerMenuStyle = {
   position: 'absolute' as const,
   top: 'calc(100% + 8px)',
   left: 0,
   right: 0,
-  background: 'rgba(15,23,42,0.96)',
-  border: '1px solid rgba(148,163,184,0.16)',
+  background: 'var(--screen-menu-bg)',
+  border: '1px solid var(--screen-border-strong)',
   borderRadius: '16px',
   boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
   zIndex: 20,
@@ -592,7 +682,7 @@ const pickerMenuStyle = {
 };
 const pickerSearchWrapStyle = {
   padding: '12px',
-  borderBottom: '1px solid rgba(148,163,184,0.12)',
+  borderBottom: '1px solid var(--screen-border)',
 };
 const pickerListStyle = {
   maxHeight: '280px',
@@ -604,22 +694,22 @@ const pickerListStyle = {
 const pickerInfoStyle = {
   padding: '12px',
   borderRadius: '8px',
-  backgroundColor: 'rgba(15,23,42,0.68)',
-  color: '#94a3b8',
+  backgroundColor: 'var(--screen-soft-fill)',
+  color: 'var(--screen-subtle)',
 };
 const pickerOptionStyle = {
   padding: '12px',
   borderRadius: '8px',
   border: '1px solid rgba(148,163,184,0.12)',
-  backgroundColor: 'rgba(15,23,42,0.6)',
+  backgroundColor: 'var(--screen-soft-fill)',
   textAlign: 'left' as const,
   cursor: 'pointer',
   fontWeight: 500,
-  color: '#e5eefb',
+  color: 'var(--screen-field-text)',
 };
 const pickerOptionActiveStyle = {
-  border: '1px solid #2563eb',
-  backgroundColor: 'rgba(37,99,235,0.18)',
+  border: '1px solid var(--screen-accent)',
+  backgroundColor: 'rgba(37,99,235,0.12)',
 };
 
 const actionRowStyle = {
@@ -639,8 +729,8 @@ const primaryButton = {
 };
 const secondaryButton = {
   padding: '12px 16px',
-  background: 'rgba(15,23,42,0.74)',
-  color: '#e5eefb',
+  background: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-field-text)',
   border: '1px solid rgba(148,163,184,0.18)',
   borderRadius: '14px',
   cursor: 'pointer',
@@ -650,24 +740,24 @@ const errorBanner = {
   marginTop: '16px',
   padding: '12px 14px',
   borderRadius: '10px',
-  backgroundColor: 'rgba(127,29,29,0.24)',
-  border: '1px solid rgba(248,113,113,0.22)',
-  color: '#fecaca',
+  backgroundColor: 'var(--screen-error-bg)',
+  border: '1px solid var(--screen-error-border)',
+  color: 'var(--screen-error-text)',
 };
 const emptyStateStyle = {
   padding: '18px',
   borderRadius: '16px',
-  border: '1px dashed rgba(148,163,184,0.24)',
-  backgroundColor: 'rgba(15,23,42,0.52)',
-  color: '#94a3b8',
+  border: '1px dashed var(--screen-empty-border)',
+  backgroundColor: 'var(--screen-soft-fill)',
+  color: 'var(--screen-subtle)',
   textAlign: 'center' as const,
 };
 const itemCardStyle = {
   padding: '18px',
   borderRadius: '18px',
-  border: '1px solid rgba(148,163,184,0.14)',
+  border: '1px solid var(--screen-border)',
   background:
-    'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.66) 100%)',
+    'var(--screen-card-bg)',
 };
 const itemTopRowStyle = {
   display: 'flex',
@@ -677,17 +767,17 @@ const itemTopRowStyle = {
   flexWrap: 'wrap' as const,
   marginBottom: '12px',
 };
-const orderStyle = { fontSize: '18px', fontWeight: 800, color: '#f8fafc' };
-const itemMetaStyle = { color: '#94a3b8', fontSize: '13px', marginTop: '6px' };
+const orderStyle = { fontSize: '18px', fontWeight: 800, color: 'var(--screen-heading)' };
+const itemMetaStyle = { color: 'var(--screen-subtle)', fontSize: '13px', marginTop: '6px' };
 const commentStyle = {
-  color: '#e2e8f0',
+  color: 'var(--screen-text)',
   lineHeight: 1.55,
   marginBottom: '12px',
 };
 const detailGridStyle = {
   display: 'grid',
   gap: '8px',
-  color: '#cbd5e1',
+  color: 'var(--screen-muted)',
   fontSize: '13px',
 };
 const statusPillStyle = (backgroundColor: string) => ({

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 
 type ProfileRole = 'admin' | 'qa' | 'agent' | 'supervisor';
@@ -26,6 +26,97 @@ function roleNeedsDisplayName(role: ProfileRole) {
   return role === 'agent';
 }
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
+function getAccountsThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          document.documentElement.getAttribute('data-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--screen-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
+    '--screen-muted': isLight ? '#475569' : '#cbd5e1',
+    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
+    '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
+    '--screen-accent-soft': isLight ? '#1d4ed8' : '#93c5fd',
+    '--screen-panel-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
+    '--screen-card-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.97) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.74) 0%, rgba(15,23,42,0.56) 100%)',
+    '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.60)',
+    '--screen-field-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.70)',
+    '--screen-field-text': isLight ? '#334155' : '#e5eefb',
+    '--screen-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.14)',
+    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.18)',
+    '--screen-table-head-bg': isLight ? 'rgba(241,245,255,0.98)' : 'rgba(15,23,42,0.42)',
+    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.74)',
+    '--screen-secondary-btn-text': isLight ? '#475569' : '#e5eefb',
+    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.24)',
+    '--screen-error-border': isLight ? 'rgba(248,113,113,0.28)' : 'rgba(248,113,113,0.22)',
+    '--screen-error-text': isLight ? '#b91c1c' : '#fecaca',
+    '--screen-success-bg': isLight ? 'rgba(240,253,244,0.98)' : 'rgba(22,101,52,0.16)',
+    '--screen-success-border': isLight ? 'rgba(74,222,128,0.28)' : 'rgba(74,222,128,0.20)',
+    '--screen-success-text': isLight ? '#166534' : '#bbf7d0',
+    '--screen-warning-bg': isLight ? 'rgba(255,251,235,0.98)' : 'rgba(146,64,14,0.16)',
+    '--screen-warning-border': isLight ? 'rgba(251,191,36,0.30)' : 'rgba(251,191,36,0.20)',
+    '--screen-warning-text': isLight ? '#92400e' : '#fde68a',
+  };
+}
+
 function AccountsSupabase() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +133,9 @@ function AccountsSupabase() {
   const [displayName, setDisplayName] = useState('');
   const [team, setTeam] = useState<'Calls' | 'Tickets' | 'Sales' | ''>('');
   const [email, setEmail] = useState('');
+
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getAccountsThemeVars(), [themeRefreshKey]);
 
   useEffect(() => {
     void loadProfiles();
@@ -305,12 +399,12 @@ function AccountsSupabase() {
   }
 
   return (
-    <div style={{ color: '#e5eefb' }}>
+    <div data-no-theme-invert="true" style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}>
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Access Management</div>
           <h2 style={{ margin: 0, fontSize: '30px' }}>Accounts</h2>
-          <p style={{ margin: '10px 0 0 0', color: '#94a3b8' }}>
+          <p style={{ margin: '10px 0 0 0', color: 'var(--screen-subtle)' }}>
             Create and manage profile rows after the user already exists in
             Supabase Authentication.
           </p>
@@ -331,7 +425,7 @@ function AccountsSupabase() {
       ) : null}
 
       <div style={panelStyle}>
-        <h3 style={{ marginTop: 0, color: '#f8fafc' }}>
+        <h3 style={{ marginTop: 0, color: 'var(--screen-heading)' }}>
           {editingProfileId ? 'Edit Profile' : 'Create Profile'}
         </h3>
 
@@ -462,9 +556,9 @@ function AccountsSupabase() {
       <div style={{ marginTop: '32px' }}>
         <div style={sectionEyebrow}>Saved Profiles</div>
         {loading ? (
-          <p style={{ color: '#94a3b8' }}>Loading accounts...</p>
+          <p style={{ color: 'var(--screen-subtle)' }}>Loading accounts...</p>
         ) : profiles.length === 0 ? (
-          <p style={{ color: '#94a3b8' }}>No profiles found.</p>
+          <p style={{ color: 'var(--screen-subtle)' }}>No profiles found.</p>
         ) : (
           <div style={tableWrapStyle}>
             <table style={tableStyle}>
@@ -544,7 +638,7 @@ const pageHeaderStyle = {
 };
 
 const sectionEyebrow = {
-  color: '#60a5fa',
+  color: 'var(--screen-accent)',
   fontSize: '12px',
   fontWeight: 800,
   textTransform: 'uppercase' as const,
@@ -554,11 +648,11 @@ const sectionEyebrow = {
 
 const panelStyle = {
   background:
-    'linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%)',
-  border: '1px solid rgba(148, 163, 184, 0.14)',
+    'var(--screen-panel-bg)',
+  border: '1px solid var(--screen-border)',
   borderRadius: '24px',
   padding: '22px',
-  boxShadow: '0 18px 40px rgba(2, 6, 23, 0.35)',
+  boxShadow: 'var(--screen-shadow)',
   backdropFilter: 'blur(14px)',
 };
 
@@ -576,7 +670,7 @@ const labelStyle = {
   display: 'block',
   marginBottom: '8px',
   fontSize: '13px',
-  color: '#cbd5e1',
+  color: 'var(--screen-muted)',
   fontWeight: 700,
 };
 
@@ -584,9 +678,9 @@ const fieldStyle = {
   width: '100%',
   padding: '14px 16px',
   borderRadius: '16px',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  background: 'rgba(15, 23, 42, 0.7)',
-  color: '#e5eefb',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-field-bg)',
+  color: 'var(--screen-field-text)',
 };
 
 const actionRowStyle = {
@@ -610,9 +704,9 @@ const primaryButton = {
 const secondaryButton = {
   padding: '14px 18px',
   borderRadius: '16px',
-  border: '1px solid rgba(148, 163, 184, 0.16)',
-  background: 'rgba(15, 23, 42, 0.74)',
-  color: '#e5eefb',
+  border: '1px solid var(--screen-border-strong)',
+  background: 'var(--screen-secondary-btn-bg)',
+  color: 'var(--screen-secondary-btn-text)',
   fontWeight: 700,
   cursor: 'pointer',
 };
@@ -620,9 +714,9 @@ const secondaryButton = {
 const tableWrapStyle = {
   overflowX: 'auto' as const,
   borderRadius: '20px',
-  border: '1px solid rgba(148, 163, 184, 0.14)',
+  border: '1px solid var(--screen-border)',
   background:
-    'linear-gradient(180deg, rgba(15, 23, 42, 0.74) 0%, rgba(15, 23, 42, 0.56) 100%)',
+    'var(--screen-card-bg)',
 };
 
 const tableStyle = {
@@ -635,16 +729,16 @@ const headerCell = {
   padding: '14px 16px',
   textAlign: 'left' as const,
   whiteSpace: 'nowrap' as const,
-  color: '#93c5fd',
-  borderBottom: '1px solid rgba(148, 163, 184, 0.14)',
-  backgroundColor: 'rgba(15, 23, 42, 0.42)',
+  color: 'var(--screen-accent-soft)',
+  borderBottom: '1px solid var(--screen-border)',
+  backgroundColor: 'var(--screen-table-head-bg)',
 };
 
 const bodyCell = {
   padding: '14px 16px',
   verticalAlign: 'top' as const,
-  color: '#e5eefb',
-  borderBottom: '1px solid rgba(148, 163, 184, 0.1)',
+  color: 'var(--screen-field-text)',
+  borderBottom: '1px solid var(--screen-border)',
 };
 
 const smallPrimaryButton = {
@@ -671,27 +765,27 @@ const errorBannerStyle = {
   marginBottom: '16px',
   padding: '14px 16px',
   borderRadius: '16px',
-  border: '1px solid rgba(248, 113, 113, 0.22)',
-  background: 'rgba(127, 29, 29, 0.24)',
-  color: '#fecaca',
+  border: '1px solid var(--screen-error-border)',
+  background: 'var(--screen-error-bg)',
+  color: 'var(--screen-error-text)',
 };
 
 const successBannerStyle = {
   marginBottom: '16px',
   padding: '14px 16px',
   borderRadius: '16px',
-  border: '1px solid rgba(74, 222, 128, 0.2)',
-  background: 'rgba(22, 101, 52, 0.16)',
-  color: '#bbf7d0',
+  border: '1px solid var(--screen-success-border)',
+  background: 'var(--screen-success-bg)',
+  color: 'var(--screen-success-text)',
 };
 
 const warningCardStyle = {
   marginTop: '24px',
   borderRadius: '16px',
   padding: '16px 18px',
-  border: '1px solid rgba(251, 191, 36, 0.2)',
-  background: 'rgba(146, 64, 14, 0.16)',
-  color: '#fde68a',
+  border: '1px solid var(--screen-warning-border)',
+  background: 'var(--screen-warning-bg)',
+  color: 'var(--screen-warning-text)',
 };
 
 export default AccountsSupabase;

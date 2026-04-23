@@ -232,6 +232,44 @@ function openNativeDatePicker(target: HTMLInputElement) {
 }
 
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
 function getSupervisorThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -310,7 +348,8 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const pageRootRef = useRef<HTMLDivElement | null>(null);
-  const themeVars = getSupervisorThemeVars();
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getSupervisorThemeVars(), [themeRefreshKey]);
   const [auditsVisible, setAuditsVisible] = useState(true);
 
   useEffect(() => {
@@ -1086,7 +1125,7 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
                         ? '#b45309'
                         : parsedPlan.reviewStage === 'Agent Responded' || parsedPlan.reviewStage === 'Acknowledged'
                         ? '#2563eb'
-                        : '#475569';
+                        : 'var(--da-subtle-text, #64748b)';
 
                     return (
                       <div key={`inbox-${item.id}`} style={supervisorFeedbackEntryStyle}>
@@ -1360,7 +1399,7 @@ function SupervisorPortal({ currentUser, initialTab = 'overview', hideInternalTa
                             <span
                               style={{
                                 ...pillStyle,
-                                backgroundColor: audit.shared_with_agent ? '#166534' : '#475569',
+                                backgroundColor: audit.shared_with_agent ? '#166534' : 'var(--da-subtle-text, #64748b)',
                                 marginTop: '8px',
                               }}
                             >

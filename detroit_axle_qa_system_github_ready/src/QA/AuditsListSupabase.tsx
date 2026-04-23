@@ -235,6 +235,129 @@ function getEvalBandStyle(
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
+function getAuditsListThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          document.documentElement.getAttribute('data-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--al-text': isLight ? '#334155' : '#e5eefb',
+    '--al-muted': isLight ? '#475569' : '#cbd5e1',
+    '--al-subtle': isLight ? '#64748b' : '#94a3b8',
+    '--al-title': isLight ? '#0f172a' : '#f8fafc',
+    '--al-heading-soft': isLight ? '#1e293b' : '#f1f5f9',
+    '--al-accent': isLight ? '#2563eb' : '#60a5fa',
+    '--al-accent-soft': isLight ? '#1d4ed8' : '#93c5fd',
+    '--al-panel-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
+      : 'linear-gradient(180deg, rgba(15,23,42,0.80) 0%, rgba(15,23,42,0.65) 100%)',
+    '--al-panel-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.12)',
+    '--al-surface': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.70)',
+    '--al-surface-soft': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.50)',
+    '--al-surface-muted': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.40)',
+    '--al-card-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(10,17,35,0.50)',
+    '--al-table-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(10,17,35,0.60)',
+    '--al-table-head': isLight ? 'rgba(241,245,255,0.98)' : 'rgba(6,12,28,0.95)',
+    '--al-field-bg': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.70)',
+    '--al-field-bg-strong': isLight
+      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,255,0.98) 100%)'
+      : 'rgba(15,23,42,0.80)',
+    '--al-field-text': isLight ? '#334155' : '#e2e8f0',
+    '--al-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.18)',
+    '--al-border-soft': isLight ? 'rgba(203,213,225,0.72)' : 'rgba(148,163,184,0.10)',
+    '--al-border-faint': isLight ? 'rgba(203,213,225,0.56)' : 'rgba(148,163,184,0.07)',
+    '--al-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--al-chip-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.60)',
+    '--al-chip-text': isLight ? '#475569' : '#94a3b8',
+    '--al-chip-muted-bg': isLight ? 'rgba(248,250,252,0.96)' : 'rgba(15,23,42,0.35)',
+    '--al-chip-muted-text': isLight ? '#94a3b8' : '#475569',
+    '--al-chip-active-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.22)',
+    '--al-chip-active-text': isLight ? '#1d4ed8' : '#93c5fd',
+    '--al-info-bg': isLight ? 'rgba(59,130,246,0.10)' : 'rgba(30,64,175,0.16)',
+    '--al-info-border': isLight ? 'rgba(147,197,253,0.30)' : 'rgba(147,197,253,0.18)',
+    '--al-info-text': isLight ? '#1d4ed8' : '#93c5fd',
+    '--al-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.22)',
+    '--al-error-border': isLight ? 'rgba(248,113,113,0.28)' : 'rgba(252,165,165,0.22)',
+    '--al-error-text': isLight ? '#b91c1c' : '#fca5a5',
+    '--al-success-bg': isLight ? 'rgba(240,253,244,0.98)' : 'rgba(22,101,52,0.22)',
+    '--al-success-border': isLight ? 'rgba(134,239,172,0.30)' : 'rgba(134,239,172,0.22)',
+    '--al-success-text': isLight ? '#166534' : '#86efac',
+    '--al-danger-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(185,28,28,0.20)',
+    '--al-danger-border': isLight ? 'rgba(248,113,113,0.28)' : 'rgba(239,68,68,0.24)',
+    '--al-danger-text': isLight ? '#b91c1c' : '#fca5a5',
+    '--al-progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(16,185,129,0.14)',
+    '--al-progress-strong-text': isLight ? '#166534' : '#34d399',
+    '--al-progress-strong-border': isLight ? 'rgba(34,197,94,0.26)' : 'rgba(52,211,153,0.25)',
+    '--al-progress-medium-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.14)',
+    '--al-progress-medium-text': isLight ? '#92400e' : '#fbbf24',
+    '--al-progress-medium-border': isLight ? 'rgba(245,158,11,0.26)' : 'rgba(251,191,36,0.25)',
+    '--al-progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.14)',
+    '--al-progress-weak-text': isLight ? '#991b1b' : '#f87171',
+    '--al-progress-weak-border': isLight ? 'rgba(239,68,68,0.24)' : 'rgba(248,113,113,0.25)',
+    '--al-progress-empty-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.40)',
+    '--al-progress-empty-text': isLight ? '#94a3b8' : '#475569',
+    '--al-progress-empty-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.10)',
+    '--al-off-bg': isLight ? 'rgba(124,58,237,0.10)' : 'rgba(124,58,237,0.16)',
+    '--al-off-text': isLight ? '#7c3aed' : '#c4b5fd',
+    '--al-off-border': isLight ? 'rgba(139,92,246,0.26)' : 'rgba(196,181,253,0.22)',
+    '--al-highlight-bg': isLight
+      ? 'linear-gradient(135deg, rgba(219,234,254,0.70), rgba(255,255,255,0.98))'
+      : 'linear-gradient(135deg, rgba(37,99,235,0.18), rgba(15,23,42,0.40))',
+  };
+}
+
 function AuditsListSupabase() {
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
@@ -272,6 +395,8 @@ function AuditsListSupabase() {
   const importInputRef = useRef<HTMLInputElement | null>(null);
   const deferredSearch = useDeferredValue(searchText);
   const deferredAgentSearch = useDeferredValue(agentSearch);
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getAuditsListThemeVars(), [themeRefreshKey]);
 
   const isAdmin = currentProfile?.role === 'admin';
   const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
@@ -702,26 +827,26 @@ function AuditsListSupabase() {
     if (r === 'Pass') return '#10b981';
     if (r === 'Borderline') return '#f59e0b';
     if (r === 'Fail' || r === 'Auto-Fail') return '#ef4444';
-    return '#64748b';
+    return 'var(--al-subtle)';
   }
 
   function getTeamAccent(team: string): string {
     if (team === 'Calls') return '#3b82f6';
     if (team === 'Tickets') return '#8b5cf6';
     if (team === 'Sales') return '#10b981';
-    return '#64748b';
+    return 'var(--al-subtle)';
   }
 
   // ─── RENDER ────────────────────────────────────────────────────────────────
   if (loading) return (
-    <div style={s.loadingWrap}>
+    <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), ...s.loadingWrap }}>
       <div style={s.loadingSpinner} />
       <span style={s.loadingText}>Loading audits…</span>
     </div>
   );
 
   return (
-    <div style={s.root}>
+    <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), ...s.root }}>
       {/* ── Page Header ── */}
       <div style={s.pageHeader}>
         <div>
@@ -793,12 +918,12 @@ function AuditsListSupabase() {
             </div>
             <div style={s.statsRow}>
               {[
-                { label: 'Filtered', val: filteredAudits.length, color: '#60a5fa' },
-                { label: 'Shared (filtered)', val: sharedFiltered, color: '#34d399' },
-                { label: 'Hidden (filtered)', val: hiddenFiltered, color: '#f87171' },
+                { label: 'Filtered', val: filteredAudits.length, color: 'var(--al-accent)' },
+                { label: 'Shared (filtered)', val: sharedFiltered, color: 'var(--al-progress-strong-text)' },
+                { label: 'Hidden (filtered)', val: hiddenFiltered, color: 'var(--al-progress-weak-text)' },
                 { label: 'Total', val: audits.length, color: '#a78bfa' },
-                { label: 'Shared (all)', val: sharedAll, color: '#34d399' },
-                { label: 'Hidden (all)', val: hiddenAll, color: '#f87171' },
+                { label: 'Shared (all)', val: sharedAll, color: 'var(--al-progress-strong-text)' },
+                { label: 'Hidden (all)', val: hiddenAll, color: 'var(--al-progress-weak-text)' },
               ].map(stat => (
                 <div key={stat.label} style={s.statCard}>
                   <div style={{ ...s.statVal, color: stat.color }}>{stat.val}</div>
@@ -878,13 +1003,13 @@ function AuditsListSupabase() {
             <div style={s.tableWrap}>
               <div style={{ minWidth: '2600px' }}>
                 {/* Group header */}
-                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'rgba(15,23,42,0.6)', borderBottom: '1px solid rgba(148,163,184,0.10)', padding: '10px 16px 0' }}>
+                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'var(--al-chip-bg)', borderBottom: '1px solid rgba(148,163,184,0.10)', padding: '10px 16px 0' }}>
                   <div style={{ ...s.groupHeaderCell, gridColumn: 'span 3' }}>Agent Snapshot</div>
                   {visibleGroupSpans.map(g => <div key={g.key} style={{ ...s.groupHeaderCell, gridColumn: `span ${g.count}` }}>{g.label}</div>)}
                   <div style={{ ...s.groupHeaderCell, gridColumn: 'span 2' }}>Summary</div>
                 </div>
                 {/* Column header */}
-                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'rgba(15,23,42,0.5)', borderBottom: '1px solid rgba(148,163,184,0.12)', position: 'sticky', top: 0, zIndex: 2 }}>
+                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'var(--al-surface-soft)', borderBottom: '1px solid var(--al-border)', position: 'sticky', top: 0, zIndex: 2 }}>
                   <div style={{ ...s.th, ...s.stickyAgent }}>Agent</div>
                   <div style={{ ...s.th, ...s.stickyTeam }}>Team</div>
                   <div style={{ ...s.th, ...s.stickyToday }}>Today</div>
@@ -900,7 +1025,7 @@ function AuditsListSupabase() {
                   const hasOff = offIdx.length > 0;
                   const allOff = selectedOffEvalIndexes.length > 0 && selectedOffEvalIndexes.every(i => offIdx.includes(i));
                   return (
-                    <div key={agentKey(row.agent_id, row.team)} style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, borderBottom: '1px solid rgba(148,163,184,0.07)', padding: '10px 16px' }}>
+                    <div key={agentKey(row.agent_id, row.team)} style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, borderBottom: '1px solid var(--al-border-faint)', padding: '10px 16px' }}>
                       <div style={{ ...s.agentCell, ...s.stickyAgent }}>
                         <div style={s.agentName}>{row.agent_name}</div>
                         <div style={s.agentSub}>{row.display_name || '—'} · {row.agent_id}</div>
@@ -970,7 +1095,7 @@ function AuditsListSupabase() {
                       <span style={{ ...s.scoreBadge, ...getEvalBandStyle(band) }}>{score.toFixed(2)}%</span>
                     </div>
                     <div>
-                      <span style={{ ...s.statusPill, background: audit.shared_with_agent ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)', color: audit.shared_with_agent ? '#34d399' : '#94a3b8', borderColor: audit.shared_with_agent ? 'rgba(52,211,153,0.3)' : 'rgba(148,163,184,0.2)' }}>
+                      <span style={{ ...s.statusPill, background: audit.shared_with_agent ? 'var(--al-progress-strong-bg)' : 'var(--al-chip-muted-bg)', color: audit.shared_with_agent ? 'var(--al-progress-strong-text)' : 'var(--al-subtle)', borderColor: audit.shared_with_agent ? 'var(--al-progress-strong-border)' : 'var(--al-border)' }}>
                         {audit.shared_with_agent ? '● Shared' : '○ Hidden'}
                       </span>
                       {audit.shared_at && <div style={{ ...s.agentSub, marginTop: '4px' }}>{formatDate(audit.shared_at)}</div>}
@@ -1012,16 +1137,16 @@ function AuditsListSupabase() {
                               <label style={s.label}>Agent</label>
                               <div ref={agentPickerRef} style={{ position: 'relative' }}>
                                 <button onClick={() => setIsAgentPickerOpen(p => !p)} style={s.pickerBtn}>
-                                  <span style={{ color: selectedAgent ? 'var(--color-text)' : '#64748b' }}>{selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent'}</span>
+                                  <span style={{ color: selectedAgent ? 'var(--al-text)' : 'var(--al-subtle)' }}>{selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent'}</span>
                                   <span>▾</span>
                                 </button>
                                 {isAgentPickerOpen && (
                                   <div style={s.pickerMenu}>
-                                    <div style={{ padding: '10px', borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
+                                    <div style={{ padding: '10px', borderBottom: '1px solid var(--al-border)' }}>
                                       <input type="text" value={agentSearch} onChange={e => setAgentSearch(e.target.value)} placeholder="Search agents…" style={s.input} />
                                     </div>
                                     <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '8px', display: 'grid', gap: '6px' }}>
-                                      {visibleAgents.length === 0 ? <div style={{ padding: '12px', color: '#64748b' }}>No agents found</div> : visibleAgents.map(p => (
+                                      {visibleAgents.length === 0 ? <div style={{ padding: '12px', color: 'var(--al-subtle)' }}>No agents found</div> : visibleAgents.map(p => (
                                         <button key={p.id} onClick={() => { setSelectedAgentProfileId(p.id); setAgentSearch(getAgentLabel(p)); setIsAgentPickerOpen(false); }} style={{ ...s.pickerOption, ...(selectedAgentProfileId === p.id ? s.pickerOptionActive : {}) }}>{getAgentLabel(p)}</button>
                                       ))}
                                     </div>
@@ -1098,7 +1223,7 @@ function AuditsListSupabase() {
                           </div>
                           <div style={{ ...s.detailCard, marginBottom: '18px' }}>
                             <div style={s.detailLabel}>Full Comment</div>
-                            <div style={{ color: 'var(--color-text)', fontSize: '14px', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{audit.comments?.trim() || '—'}</div>
+                            <div style={{ color: 'var(--al-text)', fontSize: '14px', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{audit.comments?.trim() || '—'}</div>
                           </div>
                           <div style={s.eyebrow}>Score Details</div>
                           <div style={{ display: 'grid', gap: '8px' }}>
@@ -1134,20 +1259,20 @@ function AuditsListSupabase() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const s: Record<string, CSSProperties> = {
-  root: { color: 'var(--color-text, #e2e8f0)', fontFamily: "'DM Sans', 'Syne', system-ui, sans-serif" },
-  loadingWrap: { display: 'flex', alignItems: 'center', gap: '12px', padding: '40px', color: '#94a3b8' },
-  loadingSpinner: { width: '20px', height: '20px', border: '2px solid rgba(148,163,184,0.2)', borderTop: '2px solid #60a5fa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  root: { color: 'var(--al-text)', fontFamily: "'DM Sans', 'Syne', system-ui, sans-serif" },
+  loadingWrap: { display: 'flex', alignItems: 'center', gap: '12px', padding: '40px', color: 'var(--al-subtle)' },
+  loadingSpinner: { width: '20px', height: '20px', border: '2px solid rgba(148,163,184,0.2)', borderTop: '2px solid var(--al-accent)', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
   loadingText: { fontSize: '14px', fontWeight: 600 },
 
   pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' },
-  eyebrow: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '8px' },
-  pageTitle: { margin: '0 0 6px', fontSize: '24px', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em', fontFamily: "'Syne', system-ui, sans-serif" },
-  pageSubtitle: { margin: 0, fontSize: '13px', color: '#64748b' },
+  eyebrow: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: 'var(--al-accent)', marginBottom: '8px' },
+  pageTitle: { margin: '0 0 6px', fontSize: '24px', fontWeight: 800, color: 'var(--al-heading-soft)', letterSpacing: '-0.02em', fontFamily: "'Syne', system-ui, sans-serif" },
+  pageSubtitle: { margin: 0, fontSize: '13px', color: 'var(--al-subtle)' },
   headerActions: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' },
 
   panel: {
-    background: 'linear-gradient(180deg, rgba(15,23,42,0.80) 0%, rgba(15,23,42,0.65) 100%)',
-    border: '1px solid rgba(148,163,184,0.12)',
+    background: 'var(--al-panel-bg)',
+    border: '1px solid var(--al-panel-border)',
     borderRadius: '20px',
     padding: '20px 22px',
     backdropFilter: 'blur(12px)',
@@ -1159,122 +1284,122 @@ const s: Record<string, CSSProperties> = {
   filterFieldNarrow: { flex: '0 1 190px' },
 
   searchWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
-  searchIcon: { position: 'absolute', left: '14px', fontSize: '16px', color: '#64748b', zIndex: 1, fontStyle: 'normal' },
-  searchInput: { width: '100%', padding: '11px 14px 11px 40px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', fontSize: '13px', outline: 'none' },
+  searchIcon: { position: 'absolute', left: '14px', fontSize: '16px', color: 'var(--al-subtle)', zIndex: 1, fontStyle: 'normal' },
+  searchInput: { width: '100%', padding: '11px 14px 11px 40px', borderRadius: '14px', border: '1px solid var(--al-border)', background: 'var(--al-field-bg)', color: 'var(--al-field-text)', fontSize: '13px', outline: 'none' },
 
-  label: { display: 'block', marginBottom: '7px', fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.04em', textTransform: 'uppercase' },
-  input: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', fontSize: '13px', boxSizing: 'border-box', outline: 'none' },
-  select: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.80)', color: '#e2e8f0', fontSize: '13px', appearance: 'none', outline: 'none' },
+  label: { display: 'block', marginBottom: '7px', fontSize: '12px', fontWeight: 700, color: 'var(--al-subtle)', letterSpacing: '0.04em', textTransform: 'uppercase' },
+  input: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid var(--al-border)', background: 'var(--al-field-bg)', color: 'var(--al-field-text)', fontSize: '13px', boxSizing: 'border-box', outline: 'none' },
+  select: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid var(--al-border)', background: 'var(--al-field-bg-strong)', color: 'var(--al-field-text)', fontSize: '13px', appearance: 'none', outline: 'none' },
 
   btnPrimary: { padding: '10px 18px', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
-  btnSecondary: { padding: '10px 16px', background: 'rgba(15,23,42,0.70)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.20)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
-  btnAccent: { padding: '10px 16px', background: 'linear-gradient(135deg,rgba(37,99,235,0.28),rgba(37,99,235,0.14))', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.30)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnSecondary: { padding: '10px 16px', background: 'var(--al-field-bg)', color: 'var(--al-muted)', border: '1px solid var(--al-border)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnAccent: { padding: '10px 16px', background: 'var(--al-chip-active-bg)', color: 'var(--al-accent-soft)', border: '1px solid var(--al-info-border)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
   btnDanger: { padding: '10px 18px', background: 'linear-gradient(135deg,#b91c1c,#991b1b)', color: '#fff', border: '1px solid rgba(252,165,165,0.20)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
-  btnMini: { padding: '7px 12px', background: 'rgba(15,23,42,0.70)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.18)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
-  btnMiniPrimary: { padding: '7px 12px', background: 'rgba(37,99,235,0.20)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.28)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
-  btnMiniDanger: { padding: '7px 12px', background: 'rgba(185,28,28,0.20)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.24)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnMini: { padding: '7px 12px', background: 'var(--al-field-bg)', color: 'var(--al-muted)', border: '1px solid var(--al-border)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnMiniPrimary: { padding: '7px 12px', background: 'rgba(37,99,235,0.20)', color: 'var(--al-accent-soft)', border: '1px solid rgba(59,130,246,0.28)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnMiniDanger: { padding: '7px 12px', background: 'rgba(185,28,28,0.20)', color: 'var(--al-danger-text)', border: '1px solid var(--al-danger-border)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
   btnGroup: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
 
-  bannerError: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'rgba(127,29,29,0.22)', border: '1px solid rgba(252,165,165,0.22)', color: '#fca5a5', fontSize: '13px', fontWeight: 600 },
-  bannerSuccess: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'rgba(22,101,52,0.22)', border: '1px solid rgba(134,239,172,0.22)', color: '#86efac', fontSize: '13px', fontWeight: 600 },
+  bannerError: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'var(--al-error-bg)', border: '1px solid var(--al-error-border)', color: 'var(--al-danger-text)', fontSize: '13px', fontWeight: 600 },
+  bannerSuccess: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'var(--al-success-bg)', border: '1px solid var(--al-success-border)', color: 'var(--al-success-text)', fontSize: '13px', fontWeight: 600 },
   bannerIcon: { fontSize: '16px', flexShrink: 0 },
-  infoBanner: { marginTop: '14px', padding: '14px 18px', borderRadius: '14px', background: 'rgba(30,64,175,0.16)', border: '1px solid rgba(147,197,253,0.18)', color: '#93c5fd', fontSize: '13px', fontWeight: 600 },
+  infoBanner: { marginTop: '14px', padding: '14px 18px', borderRadius: '14px', background: 'var(--al-info-bg)', border: '1px solid var(--al-info-border)', color: 'var(--al-accent-soft)', fontSize: '13px', fontWeight: 600 },
 
   releaseHeader: { display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '16px' },
-  releaseDesc: { margin: '6px 0 0', fontSize: '13px', color: '#64748b' },
-  sectionTitle: { margin: '0 0 4px', fontSize: '18px', fontWeight: 800, color: '#f1f5f9', fontFamily: "'Syne', system-ui, sans-serif" },
+  releaseDesc: { margin: '6px 0 0', fontSize: '13px', color: 'var(--al-subtle)' },
+  sectionTitle: { margin: '0 0 4px', fontSize: '18px', fontWeight: 800, color: 'var(--al-heading-soft)', fontFamily: "'Syne', system-ui, sans-serif" },
   statsRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' },
-  statCard: { padding: '10px 14px', borderRadius: '12px', background: 'rgba(15,23,42,0.50)', border: '1px solid rgba(148,163,184,0.10)', minWidth: '80px', textAlign: 'center' },
+  statCard: { padding: '10px 14px', borderRadius: '12px', background: 'var(--al-surface-soft)', border: '1px solid var(--al-border-soft)', minWidth: '80px', textAlign: 'center' },
   statVal: { fontSize: '22px', fontWeight: 800, fontFamily: "'Syne', system-ui, sans-serif" },
-  statLabel: { fontSize: '11px', color: '#64748b', fontWeight: 600, marginTop: '2px' },
+  statLabel: { fontSize: '11px', color: 'var(--al-subtle)', fontWeight: 600, marginTop: '2px' },
 
-  tableWrap: { overflowX: 'auto', borderRadius: '18px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(10,17,35,0.60)' },
+  tableWrap: { overflowX: 'auto', borderRadius: '18px', border: '1px solid var(--al-border-soft)', background: 'var(--al-table-bg)' },
 
   // Audit table
   auditRow: { display: 'grid', gridTemplateColumns: '220px 120px 160px minmax(220px,1fr) 110px 170px 170px minmax(240px,1.5fr) 240px', gap: '14px', alignItems: 'center', padding: '14px 18px' },
-  auditHeader: { position: 'sticky', top: 0, zIndex: 1, background: 'rgba(6,12,28,0.95)', borderBottom: '1px solid rgba(148,163,184,0.12)' },
-  auditEntry: { borderBottom: '1px solid rgba(148,163,184,0.07)' },
+  auditHeader: { position: 'sticky', top: 0, zIndex: 1, background: 'var(--al-table-head)', borderBottom: '1px solid var(--al-border)' },
+  auditEntry: { borderBottom: '1px solid var(--al-border-faint)' },
   actionCell: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
 
-  agentName: { fontSize: '14px', fontWeight: 600, color: '#e2e8f0', lineHeight: 1.4 },
-  agentSub: { fontSize: '12px', color: '#64748b', marginTop: '3px', lineHeight: 1.4 },
+  agentName: { fontSize: '14px', fontWeight: 600, color: 'var(--al-field-text)', lineHeight: 1.4 },
+  agentSub: { fontSize: '12px', color: 'var(--al-subtle)', marginTop: '3px', lineHeight: 1.4 },
 
-  th: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+  th: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--al-chip-muted-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
 
   scoreBadge: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '76px', padding: '6px 10px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
   statusPill: { display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid' },
 
-  teamPill: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', background: 'rgba(15,23,42,0.50)' },
+  teamPill: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', background: 'var(--al-surface-soft)' },
 
   evalBand: {
-    strong: { background: 'rgba(16,185,129,0.14)', color: '#34d399', borderColor: 'rgba(52,211,153,0.25)' } as CSSProperties,
-    medium: { background: 'rgba(245,158,11,0.14)', color: '#fbbf24', borderColor: 'rgba(251,191,36,0.25)' } as CSSProperties,
-    weak:   { background: 'rgba(239,68,68,0.14)', color: '#f87171', borderColor: 'rgba(248,113,113,0.25)' } as CSSProperties,
-    empty:  { background: 'rgba(15,23,42,0.40)', color: '#475569', borderColor: 'rgba(148,163,184,0.10)' } as CSSProperties,
+    strong: { background: 'var(--al-progress-strong-bg)', color: 'var(--al-progress-strong-text)', borderColor: 'var(--al-progress-strong-border)' } as CSSProperties,
+    medium: { background: 'var(--al-progress-medium-bg)', color: 'var(--al-progress-medium-text)', borderColor: 'var(--al-progress-medium-border)' } as CSSProperties,
+    weak:   { background: 'var(--al-progress-weak-bg)', color: 'var(--al-progress-weak-text)', borderColor: 'var(--al-progress-weak-border)' } as CSSProperties,
+    empty:  { background: 'var(--al-surface-muted)', color: 'var(--al-chip-muted-text)', borderColor: 'var(--al-progress-empty-border)' } as CSSProperties,
   } as any,
 
   expandedWrap: { padding: '0 18px 18px' },
-  expandedPanel: { borderRadius: '16px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(10,17,35,0.50)', padding: '18px' },
+  expandedPanel: { borderRadius: '16px', border: '1px solid var(--al-border-soft)', background: 'rgba(10,17,35,0.50)', padding: '18px' },
   editGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px' },
 
-  metricRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.40)' },
-  metricName: { fontSize: '13px', fontWeight: 700, color: '#e2e8f0' },
+  metricRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--al-border-soft)', background: 'var(--al-surface-muted)' },
+  metricName: { fontSize: '13px', fontWeight: 700, color: 'var(--al-field-text)' },
 
-  scoreSummary: { marginTop: '18px', padding: '16px 20px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(37,99,235,0.18),rgba(15,23,42,0.40))', border: '1px solid rgba(96,165,250,0.18)' },
-  scorePreviewVal: { fontSize: '32px', fontWeight: 800, color: '#f1f5f9', marginTop: '6px', fontFamily: "'Syne', system-ui, sans-serif" },
+  scoreSummary: { marginTop: '18px', padding: '16px 20px', borderRadius: '14px', background: 'var(--al-highlight-bg)', border: '1px solid var(--al-info-border)' },
+  scorePreviewVal: { fontSize: '32px', fontWeight: 800, color: 'var(--al-heading-soft)', marginTop: '6px', fontFamily: "'Syne', system-ui, sans-serif" },
 
-  pickerBtn: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontFamily: 'inherit' },
-  pickerMenu: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'rgba(6,12,28,0.97)', border: '1px solid rgba(148,163,184,0.14)', borderRadius: '16px', boxShadow: '0 20px 48px rgba(0,0,0,0.50)', zIndex: 20, overflow: 'hidden', backdropFilter: 'blur(16px)' },
-  pickerOption: { padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.08)', background: 'rgba(15,23,42,0.50)', textAlign: 'left', cursor: 'pointer', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' },
-  pickerOptionActive: { background: 'rgba(37,99,235,0.28)', borderColor: 'rgba(96,165,250,0.30)', color: '#93c5fd' },
+  pickerBtn: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid var(--al-border)', background: 'var(--al-field-bg)', color: 'var(--al-field-text)', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontFamily: 'inherit' },
+  pickerMenu: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'var(--al-table-head)', border: '1px solid rgba(148,163,184,0.14)', borderRadius: '16px', boxShadow: 'var(--al-shadow)', zIndex: 20, overflow: 'hidden', backdropFilter: 'blur(16px)' },
+  pickerOption: { padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.08)', background: 'var(--al-surface-soft)', textAlign: 'left', cursor: 'pointer', color: 'var(--al-field-text)', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' },
+  pickerOptionActive: { background: 'rgba(37,99,235,0.28)', borderColor: 'rgba(96,165,250,0.30)', color: 'var(--al-accent-soft)' },
 
   detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px', marginBottom: '14px' },
-  detailCard: { padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.40)' },
-  detailLabel: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' },
-  detailVal: { fontSize: '14px', fontWeight: 600, color: '#e2e8f0' },
+  detailCard: { padding: '12px 14px', borderRadius: '12px', border: '1px solid var(--al-border-soft)', background: 'var(--al-surface-muted)' },
+  detailLabel: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--al-chip-muted-text)', marginBottom: '6px' },
+  detailVal: { fontSize: '14px', fontWeight: 600, color: 'var(--al-field-text)' },
 
-  scoreDetailRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '11px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.09)', background: 'rgba(15,23,42,0.35)' },
+  scoreDetailRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '11px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.09)', background: 'var(--al-chip-muted-bg)' },
   resultBadge: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', whiteSpace: 'nowrap', flexShrink: 0 },
-  noteCard: { marginTop: '8px', padding: '9px 11px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.50)' },
-  noteLabel: { fontSize: '10px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '4px' },
-  noteText: { fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55, whiteSpace: 'pre-wrap' },
+  noteCard: { marginTop: '8px', padding: '9px 11px', borderRadius: '10px', border: '1px solid var(--al-border-soft)', background: 'var(--al-surface-soft)' },
+  noteLabel: { fontSize: '10px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--al-accent)', marginBottom: '4px' },
+  noteText: { fontSize: '13px', color: 'var(--al-field-text)', lineHeight: 1.55, whiteSpace: 'pre-wrap' },
 
-  emptyState: { marginTop: '14px', padding: '22px', borderRadius: '16px', border: '1px dashed rgba(148,163,184,0.14)', background: 'rgba(15,23,42,0.40)', color: '#475569', textAlign: 'center', fontSize: '14px' },
+  emptyState: { marginTop: '14px', padding: '22px', borderRadius: '16px', border: '1px dashed var(--al-border)', background: 'var(--al-surface-muted)', color: 'var(--al-chip-muted-text)', textAlign: 'center', fontSize: '14px' },
 
   // Progress board
   progressHeader: { display: 'flex', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' },
   metaPills: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' },
-  metaPill: { padding: '6px 11px', borderRadius: '999px', background: 'rgba(15,23,42,0.60)', border: '1px solid rgba(148,163,184,0.12)', fontSize: '12px', fontWeight: 700, color: '#94a3b8' },
+  metaPill: { padding: '6px 11px', borderRadius: '999px', background: 'var(--al-chip-bg)', border: '1px solid var(--al-panel-border)', fontSize: '12px', fontWeight: 700, color: 'var(--al-subtle)' },
 
   progressControls: { display: 'grid', gap: '12px', marginBottom: '14px' },
   controlBlock: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
-  controlLabel: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#475569', minWidth: '100px', flexShrink: 0 },
+  controlLabel: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--al-chip-muted-text)', minWidth: '100px', flexShrink: 0 },
   controlRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
-  chip: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.16)', background: 'rgba(15,23,42,0.60)', color: '#94a3b8', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
-  chipActive: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(96,165,250,0.30)', background: 'rgba(37,99,235,0.22)', color: '#93c5fd', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
-  chipMuted: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.35)', color: '#475569', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: 0.85 },
-  offTargetBadge: { display: 'inline-flex', alignItems: 'center', padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.14)', background: 'rgba(15,23,42,0.50)', fontSize: '12px', fontWeight: 700, color: '#e2e8f0' },
-  progressHint: { margin: '0 0 14px', fontSize: '12px', color: '#475569', lineHeight: 1.6 },
+  chip: { padding: '7px 13px', borderRadius: '999px', border: '1px solid var(--al-border)', background: 'var(--al-chip-bg)', color: 'var(--al-subtle)', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  chipActive: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(96,165,250,0.30)', background: 'rgba(37,99,235,0.22)', color: 'var(--al-accent-soft)', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  chipMuted: { padding: '7px 13px', borderRadius: '999px', border: '1px solid var(--al-border-soft)', background: 'var(--al-chip-muted-bg)', color: 'var(--al-chip-muted-text)', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: 0.85 },
+  offTargetBadge: { display: 'inline-flex', alignItems: 'center', padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.14)', background: 'var(--al-surface-soft)', fontSize: '12px', fontWeight: 700, color: 'var(--al-field-text)' },
+  progressHint: { margin: '0 0 14px', fontSize: '12px', color: 'var(--al-chip-muted-text)', lineHeight: 1.6 },
 
   progressRow: { display: 'grid', alignItems: 'stretch', gap: '8px' },
-  groupHeaderCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)', fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '6px' },
+  groupHeaderCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '36px', borderRadius: '10px', background: 'var(--al-surface-soft)', border: '1px solid rgba(148,163,184,0.08)', fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--al-accent)', marginBottom: '6px' },
 
-  stickyAgent: { position: 'sticky', left: 0, zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)', justifyContent: 'flex-start' },
-  stickyTeam: { position: 'sticky', left: '288px', zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
-  stickyToday: { position: 'sticky', left: '416px', zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
+  stickyAgent: { position: 'sticky', left: 0, zIndex: 2, background: 'var(--al-table-head)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)', justifyContent: 'flex-start' },
+  stickyTeam: { position: 'sticky', left: '288px', zIndex: 2, background: 'var(--al-table-head)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
+  stickyToday: { position: 'sticky', left: '416px', zIndex: 2, background: 'var(--al-table-head)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
 
   agentCell: { display: 'grid', alignContent: 'center' },
   metaCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
 
   evalCell: { minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
-  evalOff: { background: 'rgba(124,58,237,0.16)', color: '#c4b5fd', borderColor: 'rgba(196,181,253,0.22)' },
+  evalOff: { background: 'var(--al-off-bg)', color: 'var(--al-off-text)', borderColor: 'var(--al-off-border)' },
   evalSelected: { boxShadow: '0 0 0 2px rgba(96,165,250,0.30) inset' },
-  evalHeader: { minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(148,163,184,0.12)', color: '#475569', cursor: 'pointer', fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', fontFamily: 'inherit' },
-  evalHeaderActive: { background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(52,211,153,0.30)', color: '#34d399' },
+  evalHeader: { minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', background: 'transparent', border: '1px solid var(--al-panel-border)', color: 'var(--al-chip-muted-text)', cursor: 'pointer', fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', fontFamily: 'inherit' },
+  evalHeaderActive: { background: 'var(--al-progress-strong-bg)', border: '1px solid rgba(52,211,153,0.30)', color: 'var(--al-progress-strong-text)' },
 
-  offBtn: { padding: '7px 11px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.16)', background: 'rgba(15,23,42,0.60)', color: '#94a3b8', cursor: 'pointer', fontWeight: 700, fontSize: '11px', fontFamily: 'inherit' },
-  offBtnActive: { background: 'rgba(124,58,237,0.18)', color: '#c4b5fd', borderColor: 'rgba(196,181,253,0.24)' },
-  offPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: '999px', background: 'rgba(124,58,237,0.16)', color: '#c4b5fd', border: '1px solid rgba(196,181,253,0.22)', fontWeight: 800, fontSize: '12px' },
+  offBtn: { padding: '7px 11px', borderRadius: '10px', border: '1px solid var(--al-border)', background: 'var(--al-chip-bg)', color: 'var(--al-subtle)', cursor: 'pointer', fontWeight: 700, fontSize: '11px', fontFamily: 'inherit' },
+  offBtnActive: { background: 'rgba(124,58,237,0.18)', color: 'var(--al-off-text)', borderColor: 'rgba(196,181,253,0.24)' },
+  offPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: '999px', background: 'var(--al-off-bg)', color: 'var(--al-off-text)', border: '1px solid rgba(196,181,253,0.22)', fontWeight: 800, fontSize: '12px' },
   avgPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '80px', padding: '7px 12px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
 };
 

@@ -135,6 +135,44 @@ type ProcedureCaseItem = {
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
 
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
 function getReportsThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -204,7 +242,8 @@ function ReportsSupabase() {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
-  const themeVars = getReportsThemeVars();
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getReportsThemeVars(), [themeRefreshKey]);
 
   useEffect(() => {
     void loadReportsData();
@@ -717,7 +756,7 @@ function ReportsSupabase() {
   }
 
   if (loading) {
-    return <div style={{ color: '#e5eefb' }}>Loading reports...</div>;
+    return <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), color: 'var(--screen-text)' }}>Loading reports...</div>;
   }
 
   return (
@@ -729,7 +768,7 @@ function ReportsSupabase() {
         <div>
           <div style={sectionEyebrow}>Reporting</div>
           <h2 style={{ margin: 0 }}>Reports</h2>
-          <p style={{ margin: '10px 0 0 0', color: '#94a3b8' }}>
+          <p style={{ margin: '10px 0 0 0', color: 'var(--screen-muted)' }}>
             Filter by date, team, and agent to build detailed performance
             reports.
           </p>
@@ -783,7 +822,7 @@ function ReportsSupabase() {
                 onClick={() => setIsAgentPickerOpen((prev) => !prev)}
                 style={pickerButtonStyle}
               >
-                <span style={{ color: selectedAgent ? '#e5eefb' : '#94a3b8' }}>
+                <span style={{ color: selectedAgent ? 'var(--screen-text)' : 'var(--screen-muted)' }}>
                   {selectedAgent
                     ? getAgentLabel(selectedAgent)
                     : 'Select agent'}

@@ -258,6 +258,44 @@ function getResultColor(result: string): string {
   return '#64748b';
 }
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
 function getThemeVars(): Record<string, string> {
   const themeMode = typeof document !== 'undefined'
     ? (document.body.dataset.theme || document.documentElement.dataset.theme ||
@@ -322,7 +360,8 @@ function NewAuditSupabase() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
-  const themeVars = getThemeVars();
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getThemeVars(), [themeRefreshKey]);
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -912,7 +951,7 @@ const lockedBadge: CSSProperties = {
 
 const qaNoteLabelStyle: CSSProperties = {
   fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em',
-  textTransform: 'uppercase', color: '#60a5fa', marginBottom: '6px',
+  textTransform: 'uppercase', color: 'var(--na-accent)', marginBottom: '6px',
 };
 
 const qaTextarea: CSSProperties = {

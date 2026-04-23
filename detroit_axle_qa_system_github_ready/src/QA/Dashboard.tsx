@@ -245,6 +245,44 @@ function openNativeDatePicker(input: HTMLInputElement | null | undefined) {
 
 
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
 function getDashboardThemeVars(): Record<string, string> {
   const themeMode =
     typeof document !== 'undefined'
@@ -360,7 +398,8 @@ function Dashboard({
   const dateFromInputRef = useRef<HTMLInputElement | null>(null);
   const dateToInputRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
-  const themeVars = getDashboardThemeVars();
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getDashboardThemeVars(), [themeRefreshKey]);
   const roleSpotlight = useMemo(() => {
     const role = currentUser?.role || 'qa';
 
@@ -1331,7 +1370,7 @@ function Dashboard({
 
   if (loading && !hasAnyData) {
     return (
-      <div style={{ padding: '20px 0', color: '#cbd5e1' }}>
+      <div style={{ padding: '20px 0', color: 'var(--da-muted-text, #cbd5e1)' }}>
         Loading dashboard...
       </div>
     );
