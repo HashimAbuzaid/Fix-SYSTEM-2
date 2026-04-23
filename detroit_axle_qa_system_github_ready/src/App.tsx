@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -1018,10 +1018,7 @@ function AppShell() {
     typeof window === 'undefined' ? 1440 : window.innerWidth
   );
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
-  const [isSidebarFocusExpanded, setIsSidebarFocusExpanded] = useState(false);
   const [hoveredPath, setHoveredPath] = useState<RoutePath | null>(null);
-  const sidebarPanelRef = useRef<HTMLDivElement | null>(null);
-  const sidebarPointerDownRef = useRef(false);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -1050,47 +1047,9 @@ function AppShell() {
   useEffect(() => {
     if (isCompactLayout) {
       setIsSidebarExpanded(false);
-      setIsSidebarFocusExpanded(false);
       setHoveredPath(null);
     }
   }, [isCompactLayout]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const resetPointerState = () => {
-      sidebarPointerDownRef.current = false;
-    };
-    window.addEventListener('pointerup', resetPointerState);
-    window.addEventListener('pointercancel', resetPointerState);
-    return () => {
-      window.removeEventListener('pointerup', resetPointerState);
-      window.removeEventListener('pointercancel', resetPointerState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || isCompactLayout || !isSidebarExpanded) return;
-
-    const syncSidebarHoverState = (event: MouseEvent) => {
-      const panel = sidebarPanelRef.current;
-      if (!panel) return;
-
-      const rect = panel.getBoundingClientRect();
-      const isInsidePanel =
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom;
-
-      if (!isInsidePanel) {
-        setIsSidebarExpanded(false);
-        setHoveredPath(null);
-      }
-    };
-
-    window.addEventListener('mousemove', syncSidebarHoverState);
-    return () => window.removeEventListener('mousemove', syncSidebarHoverState);
-  }, [isCompactLayout, isSidebarExpanded]);
 
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } = auth;
 
@@ -1141,7 +1100,7 @@ function AppShell() {
   const hasSidebarRail = isStaff || isSupervisor;
   const navItems = buildNavItems(profile);
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
-  const expandedSidebar = !isCompactLayout && (isSidebarExpanded || isSidebarFocusExpanded);
+  const expandedSidebar = !isCompactLayout && isSidebarExpanded;
   const userInitials = getUserInitials(profile);
 
   // Active group color
@@ -1410,6 +1369,24 @@ function AppShell() {
     flexShrink: 0,
   };
 
+  const headerSidebarToggleBtnStyle: CSSProperties = {
+    display: hasSidebarRail && !isCompactLayout ? 'grid' : 'none',
+    placeItems: 'center',
+    width: '40px',
+    height: '40px',
+    borderRadius: '12px',
+    border: expandedSidebar
+      ? `1px solid ${activeGroupColor}55`
+      : (isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.8)'),
+    background: expandedSidebar
+      ? `${activeGroupColor}14`
+      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)'),
+    color: expandedSidebar ? activeGroupColor : (isDark ? '#94a3b8' : '#64748b'),
+    cursor: 'pointer',
+    flexShrink: 0,
+    transition: 'all 160ms ease',
+  };
+
   const headerThemeBtnStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -1456,6 +1433,22 @@ function AppShell() {
         <header style={headerShellStyle}>
           {/* Left: Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsSidebarExpanded((prev) => !prev);
+                setHoveredPath(null);
+              }}
+              aria-label={expandedSidebar ? 'Collapse sidebar' : 'Expand sidebar'}
+              title={expandedSidebar ? 'Collapse sidebar' : 'Expand sidebar'}
+              style={headerSidebarToggleBtnStyle}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+                <line x1="4" y1="7" x2="20" y2="7" />
+                <line x1="4" y1="12" x2="20" y2="12" />
+                <line x1="4" y1="17" x2="20" y2="17" />
+              </svg>
+            </button>
             <div style={{
               width: '5px',
               height: '40px',
@@ -1593,28 +1586,8 @@ function AppShell() {
               </>
             ) : (
               <div style={desktopShellStyle}>
-                <aside
-                  style={sidebarDockStyle}
-                  onMouseEnter={() => setIsSidebarExpanded(true)}
-                  onMouseLeave={() => { setIsSidebarExpanded(false); setHoveredPath(null); }}
-                  onPointerDownCapture={() => {
-                    sidebarPointerDownRef.current = true;
-                  }}
-                  onFocusCapture={() => {
-                    if (sidebarPointerDownRef.current) {
-                      sidebarPointerDownRef.current = false;
-                      return;
-                    }
-                    setIsSidebarFocusExpanded(true);
-                  }}
-                  onBlurCapture={(e) => {
-                    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
-                      setIsSidebarFocusExpanded(false);
-                      setHoveredPath(null);
-                    }
-                  }}
-                >
-                  <div ref={sidebarPanelRef} style={sidebarPanelStyle}>
+                <aside style={sidebarDockStyle}>
+                  <div style={sidebarPanelStyle}>
                     {/* Sidebar header */}
                     <div style={railHeaderStyle}>
                       <div style={railLogoWrapStyle}>
