@@ -95,8 +95,11 @@ type ImportedProgressRow = {
   averageScore?: number | null;
 };
 
+type BulkReleaseRow = Pick<AuditItem, 'id' | 'shared_with_agent' | 'shared_at'>;
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_PROGRESS_EVALS = 24;
+const BULK_RELEASE_CHUNK_SIZE = 200;
 const PROGRESS_GROUPS = [
   { key: 'g1', label: 'Eval 1–8',  start: 0,  end: 8  },
   { key: 'g2', label: 'Eval 9–16', start: 8,  end: 16 },
@@ -780,20 +783,54 @@ function AuditsListSupabase() {
     setSuccessMessage(data.shared_with_agent ? 'Audit shared successfully.' : 'Audit hidden successfully.');
   }
 
+  async function updateReleaseStateInChunks(ids: string[], share: boolean) {
+    const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+    const updates = new Map<string, BulkReleaseRow>();
+    const sharedAt = share ? new Date().toISOString() : null;
+
+    for (let start = 0; start < uniqueIds.length; start += BULK_RELEASE_CHUNK_SIZE) {
+      const chunk = uniqueIds.slice(start, start + BULK_RELEASE_CHUNK_SIZE);
+      const { data, error } = await supabase
+        .from('audits')
+        .update({
+          shared_with_agent: share,
+          shared_at: sharedAt,
+        })
+        .in('id', chunk)
+        .select('id, shared_with_agent, shared_at');
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if (!data?.length) {
+        throw new Error('Bulk release update did not persist.');
+      }
+
+      (data as BulkReleaseRow[]).forEach((row) => {
+        updates.set(row.id, row);
+      });
+    }
+
+    return updates;
+  }
+
   async function handleBulkShare(share: boolean) {
     setErrorMessage(''); setSuccessMessage('');
     if (!isAdmin) { setErrorMessage('Only admin can bulk release.'); return; }
     if (filteredAudits.length === 0) { setErrorMessage('No audits match filters.'); return; }
     if (!window.confirm(share ? `Share ${filteredAudits.length} filtered audits?` : `Hide ${filteredAudits.length} filtered audits?`)) return;
     setBulkSaving(true);
-    const ids = filteredAudits.map(a => a.id);
-    const { data, error } = await supabase.from('audits').update({ shared_with_agent: share, shared_at: share ? new Date().toISOString() : null }).in('id', ids).select('id, shared_with_agent, shared_at');
-    setBulkSaving(false);
-    if (error) { setErrorMessage(error.message); return; }
-    if (!data?.length) { setErrorMessage('Bulk share did not persist.'); return; }
-    const um = new Map(data.map(r => [r.id, { shared_with_agent: r.shared_with_agent, shared_at: r.shared_at }]));
-    setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
-    setSuccessMessage(share ? `${data.length} audits shared.` : `${data.length} audits hidden.`);
+    try {
+      const ids = filteredAudits.map(a => a.id);
+      const um = await updateReleaseStateInChunks(ids, share);
+      setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
+      setSuccessMessage(share ? `${um.size} audits shared.` : `${um.size} audits hidden.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Bulk release failed.');
+    } finally {
+      setBulkSaving(false);
+    }
   }
 
   async function handleHideAll() {
@@ -802,13 +839,15 @@ function AuditsListSupabase() {
     if (audits.length === 0) { setErrorMessage('No audits to hide.'); return; }
     if (!window.confirm(`Hide all ${audits.length} audits?`)) return;
     setBulkSaving(true);
-    const { data, error } = await supabase.from('audits').update({ shared_with_agent: false, shared_at: null }).in('id', audits.map(a => a.id)).select('id, shared_with_agent, shared_at');
-    setBulkSaving(false);
-    if (error) { setErrorMessage(error.message); return; }
-    if (!data?.length) { setErrorMessage('Hide all did not persist.'); return; }
-    const um = new Map(data.map(r => [r.id, { shared_with_agent: r.shared_with_agent, shared_at: r.shared_at }]));
-    setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
-    setSuccessMessage(`${data.length} audits hidden.`);
+    try {
+      const um = await updateReleaseStateInChunks(audits.map(a => a.id), false);
+      setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
+      setSuccessMessage(`${um.size} audits hidden.`);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Hide all failed.');
+    } finally {
+      setBulkSaving(false);
+    }
   }
 
   async function handleDelete(id: string) {
