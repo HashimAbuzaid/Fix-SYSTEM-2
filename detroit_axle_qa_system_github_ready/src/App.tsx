@@ -804,54 +804,41 @@ function SupervisorRoutes({
 // LoadingScreen — orbital ring design
 // ─────────────────────────────────────────────────────────────
 function LoadingScreen({
+  styles,
   theme,
   message = 'Preparing your workspace…',
 }: {
+  styles: ReturnType<typeof createStyles>;
   theme: ReturnType<typeof getThemePalette>;
   message?: string;
 }) {
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--da-loader-shell-bg)',
-        display: 'grid',
-        placeItems: 'center',
-        zIndex: 9999,
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: '18%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'min(720px, 78vw)',
-          height: '320px',
-          background: 'radial-gradient(ellipse, var(--da-loader-glow) 0%, transparent 72%)',
-          pointerEvents: 'none',
-          opacity: theme.bodyBackground.includes('241,245,249') ? 0.9 : 1,
-        }}
-      />
-
-      <div className="da-themed-loader-card da-themed-loader-card--overlay" style={{ animation: 'da-fade-up 0.4s ease both' }}>
-        <div className="da-themed-loader">
-          <div className="da-themed-loader__art" aria-hidden="true">
-            <div className="da-themed-loader__glow" />
-            <div className="da-themed-loader__rotor">
-              <div className="da-themed-loader__rotor-face" />
-              <div className="da-themed-loader__hub" />
-            </div>
-            <div className="da-themed-loader__caliper" />
-            <div className="da-themed-loader__spark" />
-          </div>
-
-          <div className="da-themed-loader__copy">
-            <div className="da-themed-loader__eyebrow">Detroit Axle</div>
-            <div className="da-themed-loader__label">{message}</div>
-            <div className="da-themed-loader__sub">Brake-ready workspace loading</div>
-          </div>
+    <div style={styles.loadingShell}>
+      <div style={styles.loadingCard}>
+        <img src={LOGO_MARK_SRC} alt="Detroit Axle" style={styles.loadingBrandMark} />
+        <h2
+          style={{
+            margin: '0 0 6px 0',
+            fontSize: '22px',
+            fontWeight: 800,
+            color: theme.loadingText,
+            fontFamily: "'Syne', sans-serif",
+            letterSpacing: '-0.02em',
+          }}
+        >
+          Detroit Axle QA
+        </h2>
+        <p style={styles.loadingSubtext}>{message}</p>
+        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '4px' }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                ...styles.loadingDot,
+                animation: `da-pulse-dot 1.2s ease-in-out ${i * 160}ms infinite`,
+              }}
+            />
+          ))}
         </div>
       </div>
     </div>
@@ -1113,7 +1100,7 @@ function AppShell() {
     return Object.entries(groups) as [string, NavItem[]][];
   }, [profile]);
 
-  if (loading) return <LoadingScreen theme={theme} />;
+  if (loading) return <LoadingScreen styles={styles} theme={theme} />;
   if (recoveryMode) return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
   if (!auth.session) return <Login />;
 
