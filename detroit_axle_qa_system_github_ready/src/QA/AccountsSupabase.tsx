@@ -556,7 +556,26 @@ function AccountsSupabase() {
       <div style={{ marginTop: '32px' }}>
         <div style={sectionEyebrow}>Saved Profiles</div>
         {loading ? (
-          <p style={{ color: 'var(--screen-subtle)' }}>Loading accounts...</p>
+          <div className="da-themed-loader-shell da-themed-loader-shell--inline">
+            <div className="da-themed-loader-card">
+              <div className="da-themed-loader da-themed-loader--compact">
+                <div className="da-themed-loader__art" aria-hidden="true">
+                  <div className="da-themed-loader__glow" />
+                  <div className="da-themed-loader__rotor">
+                    <div className="da-themed-loader__rotor-face" />
+                    <div className="da-themed-loader__caliper" />
+                    <div className="da-themed-loader__hub" />
+                    <div className="da-themed-loader__spark" />
+                  </div>
+                </div>
+                <div className="da-themed-loader__copy">
+                  <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                  <div className="da-themed-loader__label">Loading accounts...</div>
+                  <div className="da-themed-loader__sub">Syncing profile records</div>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : profiles.length === 0 ? (
           <p style={{ color: 'var(--screen-subtle)' }}>No profiles found.</p>
         ) : (

@@ -166,7 +166,26 @@ function DigitalTrophyCabinet({
       <div style={eyebrowStyle}>Achievements</div>
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       {loading ? (
-        <p style={{ color: 'var(--screen-muted, #94a3b8)' }}>Loading trophies...</p>
+        <div className="da-themed-loader-shell da-themed-loader-shell--inline">
+          <div className="da-themed-loader-card">
+            <div className="da-themed-loader da-themed-loader--compact">
+              <div className="da-themed-loader__art" aria-hidden="true">
+                <div className="da-themed-loader__glow" />
+                <div className="da-themed-loader__rotor">
+                  <div className="da-themed-loader__rotor-face" />
+                  <div className="da-themed-loader__caliper" />
+                  <div className="da-themed-loader__hub" />
+                  <div className="da-themed-loader__spark" />
+                </div>
+              </div>
+              <div className="da-themed-loader__copy">
+                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                <div className="da-themed-loader__label">Loading trophies...</div>
+                <div className="da-themed-loader__sub">Unlocking achievement stats</div>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
         <div style={gridStyle}>
           {trophies.map((trophy) => (

@@ -1370,8 +1370,27 @@ function Dashboard({
 
   if (loading && !hasAnyData) {
     return (
-      <div style={{ padding: '20px 0', color: 'var(--da-muted-text, #cbd5e1)' }}>
-        Loading dashboard...
+      <div data-no-theme-invert="true" style={{ color: 'var(--da-page-text, #e5eefb)', ...(themeVars as CSSProperties) }}>
+        <div className="da-themed-loader-shell da-themed-loader-shell--page">
+          <div className="da-themed-loader-card">
+            <div className="da-themed-loader">
+              <div className="da-themed-loader__art" aria-hidden="true">
+                <div className="da-themed-loader__glow" />
+                <div className="da-themed-loader__rotor">
+                  <div className="da-themed-loader__rotor-face" />
+                  <div className="da-themed-loader__caliper" />
+                  <div className="da-themed-loader__hub" />
+                  <div className="da-themed-loader__spark" />
+                </div>
+              </div>
+              <div className="da-themed-loader__copy">
+                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                <div className="da-themed-loader__label">Loading dashboard...</div>
+                <div className="da-themed-loader__sub">Gathering quality, volume, and recognition data</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

@@ -756,7 +756,30 @@ function ReportsSupabase() {
   }
 
   if (loading) {
-    return <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), color: 'var(--screen-text)' }}>Loading reports...</div>;
+    return (
+      <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), color: 'var(--screen-text)' }}>
+        <div className="da-themed-loader-shell da-themed-loader-shell--page">
+          <div className="da-themed-loader-card">
+            <div className="da-themed-loader">
+              <div className="da-themed-loader__art" aria-hidden="true">
+                <div className="da-themed-loader__glow" />
+                <div className="da-themed-loader__rotor">
+                  <div className="da-themed-loader__rotor-face" />
+                  <div className="da-themed-loader__caliper" />
+                  <div className="da-themed-loader__hub" />
+                  <div className="da-themed-loader__spark" />
+                </div>
+              </div>
+              <div className="da-themed-loader__copy">
+                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                <div className="da-themed-loader__label">Loading reports...</div>
+                <div className="da-themed-loader__sub">Calculating trends and scorecards</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

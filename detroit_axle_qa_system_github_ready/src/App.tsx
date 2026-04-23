@@ -128,6 +128,245 @@ function useGlobalStyles() {
         0%, 100% { opacity: 0.8; }
         50% { opacity: 1; }
       }
+      @keyframes da-loader-rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes da-loader-pulse {
+        0%, 100% { transform: scale(0.96); opacity: 0.78; }
+        50% { transform: scale(1.04); opacity: 1; }
+      }
+      @keyframes da-loader-shine {
+        0% { transform: rotate(0deg); opacity: 0.38; }
+        100% { transform: rotate(360deg); opacity: 0.9; }
+      }
+
+      :root {
+        --da-loader-shell-bg: linear-gradient(180deg, rgba(6,12,26,0.98) 0%, rgba(10,18,40,0.94) 100%);
+        --da-loader-card-bg: linear-gradient(180deg, rgba(12,22,44,0.96) 0%, rgba(9,16,34,0.94) 100%);
+        --da-loader-card-border: rgba(96,165,250,0.16);
+        --da-loader-copy-bg: rgba(15,23,42,0.52);
+        --da-loader-copy-border: rgba(96,165,250,0.16);
+        --da-loader-title: #f8fafc;
+        --da-loader-text: #cbd5e1;
+        --da-loader-muted: #93c5fd;
+        --da-loader-rotor-outer: rgba(191,219,254,0.26);
+        --da-loader-rotor-inner: rgba(148,163,184,0.18);
+        --da-loader-metal: #dbe7f5;
+        --da-loader-slot: rgba(8,15,30,0.72);
+        --da-loader-hub: #0f172a;
+        --da-loader-bolt: rgba(148,163,184,0.92);
+        --da-loader-caliper-top: #2563eb;
+        --da-loader-caliper-bottom: #7c3aed;
+        --da-loader-glow: rgba(37,99,235,0.2);
+        --da-loader-accent: #60a5fa;
+      }
+
+      html[data-theme-mode='light'],
+      html[data-theme='light'],
+      body[data-theme='light'],
+      body[data-theme-mode='light'] {
+        --da-loader-shell-bg: linear-gradient(180deg, rgba(241,245,249,0.98) 0%, rgba(226,232,240,0.98) 100%);
+        --da-loader-card-bg: linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,250,252,0.98) 100%);
+        --da-loader-card-border: rgba(59,130,246,0.16);
+        --da-loader-copy-bg: rgba(241,245,249,0.88);
+        --da-loader-copy-border: rgba(59,130,246,0.12);
+        --da-loader-title: #0f172a;
+        --da-loader-text: #475569;
+        --da-loader-muted: #2563eb;
+        --da-loader-rotor-outer: rgba(148,163,184,0.2);
+        --da-loader-rotor-inner: rgba(148,163,184,0.14);
+        --da-loader-metal: #f8fafc;
+        --da-loader-slot: rgba(148,163,184,0.26);
+        --da-loader-hub: #dbeafe;
+        --da-loader-bolt: rgba(71,85,105,0.7);
+        --da-loader-caliper-top: #2563eb;
+        --da-loader-caliper-bottom: #8b5cf6;
+        --da-loader-glow: rgba(59,130,246,0.16);
+        --da-loader-accent: #2563eb;
+      }
+
+      .da-themed-loader-shell {
+        display: grid;
+        place-items: center;
+        width: 100%;
+      }
+      .da-themed-loader-shell--page {
+        min-height: min(420px, 52vh);
+      }
+      .da-themed-loader-shell--inline {
+        min-height: 180px;
+        padding: 16px 0;
+      }
+      .da-themed-loader-card {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 22px 26px;
+        border-radius: 28px;
+        border: 1px solid var(--da-loader-card-border);
+        background: var(--da-loader-card-bg);
+        box-shadow: 0 24px 56px rgba(15,23,42,0.14);
+        backdrop-filter: blur(18px);
+      }
+      .da-themed-loader-card--overlay {
+        padding: 36px 40px;
+        box-shadow: 0 32px 72px rgba(15,23,42,0.24);
+      }
+      .da-themed-loader {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        color: var(--da-loader-text);
+      }
+      .da-themed-loader--compact {
+        gap: 14px;
+      }
+      .da-themed-loader__art {
+        position: relative;
+        width: 74px;
+        height: 74px;
+        flex-shrink: 0;
+        display: grid;
+        place-items: center;
+      }
+      .da-themed-loader--compact .da-themed-loader__art {
+        width: 60px;
+        height: 60px;
+      }
+      .da-themed-loader__glow {
+        position: absolute;
+        inset: 10px;
+        border-radius: 999px;
+        background: radial-gradient(circle, var(--da-loader-glow) 0%, transparent 70%);
+        filter: blur(6px);
+        animation: da-loader-pulse 1.8s ease-in-out infinite;
+      }
+      .da-themed-loader__rotor {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        animation: da-loader-rotate 1.35s linear infinite;
+      }
+      .da-themed-loader__rotor-face {
+        position: absolute;
+        inset: 10px;
+        border-radius: 999px;
+        border: 2px solid var(--da-loader-rotor-outer);
+        background:
+          radial-gradient(circle at center, transparent 0 14px, var(--da-loader-rotor-inner) 14px 15px, transparent 15px 24px, var(--da-loader-rotor-outer) 24px 26px, transparent 26px 100%),
+          repeating-conic-gradient(from 0deg, transparent 0deg 18deg, var(--da-loader-slot) 18deg 28deg, transparent 28deg 60deg),
+          radial-gradient(circle at center, rgba(255,255,255,0.16) 0%, transparent 72%);
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
+      }
+      .da-themed-loader__rotor-face::before {
+        content: '';
+        position: absolute;
+        inset: 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08);
+      }
+      .da-themed-loader__rotor-face::after {
+        content: '';
+        position: absolute;
+        inset: -3px;
+        border-radius: 999px;
+        border-top: 2px solid rgba(255,255,255,0.4);
+        border-right: 2px solid transparent;
+        border-bottom: 2px solid transparent;
+        border-left: 2px solid transparent;
+        opacity: 0.65;
+        animation: da-loader-shine 1.8s linear infinite;
+      }
+      .da-themed-loader__hub {
+        position: absolute;
+        inset: 24px;
+        border-radius: 999px;
+        background: radial-gradient(circle at 35% 35%, var(--da-loader-metal) 0%, var(--da-loader-hub) 70%);
+        border: 1px solid rgba(255,255,255,0.14);
+        box-shadow:
+          0 0 0 4px rgba(148,163,184,0.14),
+          0 0 0 10px rgba(148,163,184,0.08);
+      }
+      .da-themed-loader__hub::before {
+        content: '';
+        position: absolute;
+        inset: 8px;
+        border-radius: 999px;
+        background: var(--da-loader-bolt);
+        box-shadow: 0 -10px 0 0 var(--da-loader-bolt), 0 10px 0 0 var(--da-loader-bolt), 10px 0 0 0 var(--da-loader-bolt), -10px 0 0 0 var(--da-loader-bolt);
+        opacity: 0.9;
+      }
+      .da-themed-loader__caliper {
+        position: absolute;
+        top: 16px;
+        right: 3px;
+        width: 22px;
+        height: 34px;
+        border-radius: 12px 14px 14px 12px;
+        background: linear-gradient(180deg, var(--da-loader-caliper-top) 0%, var(--da-loader-caliper-bottom) 100%);
+        border: 1px solid rgba(255,255,255,0.18);
+        box-shadow: 0 8px 20px rgba(37,99,235,0.2);
+      }
+      .da-themed-loader__caliper::before,
+      .da-themed-loader__caliper::after {
+        content: '';
+        position: absolute;
+        left: 4px;
+        right: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(255,255,255,0.18);
+      }
+      .da-themed-loader__caliper::before { top: 8px; }
+      .da-themed-loader__caliper::after { bottom: 8px; }
+      .da-themed-loader__spark {
+        position: absolute;
+        width: 8px;
+        height: 8px;
+        top: 8px;
+        left: 10px;
+        border-radius: 999px;
+        background: var(--da-loader-accent);
+        box-shadow: 0 0 14px rgba(96,165,250,0.65);
+      }
+      .da-themed-loader__copy {
+        display: grid;
+        gap: 6px;
+        min-width: 0;
+        padding: 12px 14px;
+        border-radius: 18px;
+        border: 1px solid var(--da-loader-copy-border);
+        background: var(--da-loader-copy-bg);
+      }
+      .da-themed-loader--compact .da-themed-loader__copy {
+        padding: 10px 12px;
+      }
+      .da-themed-loader__eyebrow {
+        color: var(--da-loader-muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        font-family: 'DM Sans', sans-serif;
+      }
+      .da-themed-loader__label {
+        color: var(--da-loader-title);
+        font-size: 16px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        font-family: 'Bricolage Grotesque', sans-serif;
+        white-space: nowrap;
+      }
+      .da-themed-loader--compact .da-themed-loader__label {
+        font-size: 14px;
+      }
+      .da-themed-loader__sub {
+        color: var(--da-loader-text);
+        font-size: 12px;
+        font-weight: 500;
+        font-family: 'DM Sans', sans-serif;
+      }
 
       /* Date input picker icon theming */
       input[type="date"]::-webkit-calendar-picker-indicator {
@@ -558,117 +797,48 @@ function LoadingScreen({
   theme: ReturnType<typeof getThemePalette>;
   message?: string;
 }) {
-  const isDark = theme.bodyBackground.includes('5,9') || theme.bodyBackground.includes('10,12');
-  const bg = isDark ? '#060c1a' : '#f1f5f9';
-  const cardBg = isDark ? 'rgba(10,18,40,0.95)' : 'rgba(255,255,255,0.97)';
-  const textColor = isDark ? '#f1f5f9' : '#0f172a';
-  const subtextColor = isDark ? '#64748b' : '#94a3b8';
-  const ringOuter = isDark ? 'rgba(37,99,235,0.3)' : 'rgba(37,99,235,0.15)';
-  const ringInner = 'rgba(37,99,235,0.7)';
-
   return (
-    <div style={{
-      position: 'fixed',
-      inset: 0,
-      background: bg,
-      display: 'grid',
-      placeItems: 'center',
-      zIndex: 9999,
-    }}>
-      {/* Ambient glow */}
-      <div style={{
-        position: 'absolute',
-        top: '20%',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        width: '600px',
-        height: '300px',
-        background: 'radial-gradient(ellipse, rgba(37,99,235,0.12) 0%, transparent 70%)',
-        pointerEvents: 'none',
-      }} />
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--da-loader-shell-bg)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 9999,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: '18%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'min(720px, 78vw)',
+          height: '320px',
+          background: 'radial-gradient(ellipse, var(--da-loader-glow) 0%, transparent 72%)',
+          pointerEvents: 'none',
+          opacity: theme.bodyBackground.includes('241,245,249') ? 0.9 : 1,
+        }}
+      />
 
-      <div style={{
-        position: 'relative',
-        background: cardBg,
-        border: isDark ? '1px solid rgba(148,163,184,0.1)' : '1px solid rgba(203,213,225,0.8)',
-        borderRadius: '32px',
-        padding: '48px 56px',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: '24px',
-        backdropFilter: 'blur(24px)',
-        boxShadow: isDark
-          ? '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)'
-          : '0 40px 80px rgba(15,23,42,0.1)',
-        animation: 'da-fade-up 0.4s ease both',
-      }}>
-        {/* Orbital ring animation */}
-        <div style={{ position: 'relative', width: '72px', height: '72px' }}>
-          {/* Outer ring */}
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            border: `2px solid ${ringOuter}`,
-            borderTopColor: ringInner,
-            animation: 'da-spin-ring 1s linear infinite',
-          }} />
-          {/* Inner ring */}
-          <div style={{
-            position: 'absolute',
-            inset: '12px',
-            borderRadius: '50%',
-            border: `2px solid ${ringOuter}`,
-            borderBottomColor: 'rgba(139,92,246,0.8)',
-            animation: 'da-spin-ring-reverse 0.7s linear infinite',
-          }} />
-          {/* Logo mark center */}
-          <div style={{
-            position: 'absolute',
-            inset: '22px',
-            borderRadius: '50%',
-            background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
-            display: 'grid',
-            placeItems: 'center',
-          }}>
-            <img src={LOGO_MARK_SRC} alt="" style={{ width: '20px', height: '20px', objectFit: 'contain', opacity: 0.8 }} />
+      <div className="da-themed-loader-card da-themed-loader-card--overlay" style={{ animation: 'da-fade-up 0.4s ease both' }}>
+        <div className="da-themed-loader">
+          <div className="da-themed-loader__art" aria-hidden="true">
+            <div className="da-themed-loader__glow" />
+            <div className="da-themed-loader__rotor">
+              <div className="da-themed-loader__rotor-face" />
+              <div className="da-themed-loader__caliper" />
+              <div className="da-themed-loader__hub" />
+              <div className="da-themed-loader__spark" />
+            </div>
           </div>
-        </div>
 
-        {/* Brand */}
-        <div style={{ textAlign: 'center' }}>
-          <div style={{
-            fontFamily: "'Bricolage Grotesque', sans-serif",
-            fontSize: '22px',
-            fontWeight: 800,
-            color: textColor,
-            letterSpacing: '-0.03em',
-            marginBottom: '6px',
-          }}>
-            Detroit Axle <span style={{ color: '#3b82f6' }}>QA</span>
+          <div className="da-themed-loader__copy">
+            <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+            <div className="da-themed-loader__label">{message}</div>
+            <div className="da-themed-loader__sub">Brake-ready workspace loading</div>
           </div>
-          <div style={{
-            fontFamily: "'DM Sans', sans-serif",
-            fontSize: '13px',
-            color: subtextColor,
-            fontWeight: 500,
-          }}>
-            {message}
-          </div>
-        </div>
-
-        {/* Progress dots */}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} style={{
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: '#3b82f6',
-              animation: `da-pulse-dot 1.4s ease-in-out ${i * 200}ms infinite`,
-            }} />
-          ))}
         </div>
       </div>
     </div>

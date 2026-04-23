@@ -1307,7 +1307,30 @@ function AuditsImportSupabase() {
   );
 
   if (loading) {
-    return <div style={{ color: 'var(--screen-text)' }}>Loading audit import tools...</div>;
+    return (
+      <div data-no-theme-invert="true" style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}>
+        <div className="da-themed-loader-shell da-themed-loader-shell--page">
+          <div className="da-themed-loader-card">
+            <div className="da-themed-loader">
+              <div className="da-themed-loader__art" aria-hidden="true">
+                <div className="da-themed-loader__glow" />
+                <div className="da-themed-loader__rotor">
+                  <div className="da-themed-loader__rotor-face" />
+                  <div className="da-themed-loader__caliper" />
+                  <div className="da-themed-loader__hub" />
+                  <div className="da-themed-loader__spark" />
+                </div>
+              </div>
+              <div className="da-themed-loader__copy">
+                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                <div className="da-themed-loader__label">Loading audit import tools...</div>
+                <div className="da-themed-loader__sub">Aligning upload and duplicate checks</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (

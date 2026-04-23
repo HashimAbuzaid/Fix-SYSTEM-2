@@ -369,9 +369,28 @@ function MonitoringSupabase() {
     return (
       <div
         data-no-theme-invert="true"
-        style={{ color: 'var(--screen-muted)', ...(themeVars as CSSProperties) }}
+        style={{ color: 'var(--screen-field-text)', ...(themeVars as CSSProperties) }}
       >
-        Loading monitoring...
+        <div className="da-themed-loader-shell da-themed-loader-shell--page">
+          <div className="da-themed-loader-card">
+            <div className="da-themed-loader">
+              <div className="da-themed-loader__art" aria-hidden="true">
+                <div className="da-themed-loader__glow" />
+                <div className="da-themed-loader__rotor">
+                  <div className="da-themed-loader__rotor-face" />
+                  <div className="da-themed-loader__caliper" />
+                  <div className="da-themed-loader__hub" />
+                  <div className="da-themed-loader__spark" />
+                </div>
+              </div>
+              <div className="da-themed-loader__copy">
+                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+                <div className="da-themed-loader__label">Loading monitoring...</div>
+                <div className="da-themed-loader__sub">Scanning live issue tracking</div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
