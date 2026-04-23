@@ -94,7 +94,6 @@ type SalesRecord = {
 type QuantityLeader = { label: string; quantity: number };
 type QualityLeader = { label: string; averageQuality: number; auditsCount: number };
 type HybridLeader = { label: string; quantity: number; averageQuality: number; rsd: number; combinedScore: number };
-type TeamCardData = { title: string; quantityLabel: string; quantityValue: string; qualityLabel: string; qualityValue: string; auditedAgents: number; leader: string };
 type RankedAuditSummary = { label: string; averageQuality: number; auditsCount: number };
 type DashboardCachePayload = {
   audits: AuditItem[]; profiles: AgentProfile[]; callsRecords: CallsRecord[];
@@ -126,11 +125,6 @@ function shiftDateStringByMonths(d: string, offset: number) {
 function getPercentChange(cur: number, prev: number) {
   if (prev === 0) return cur === 0 ? 0 : 100;
   return ((cur - prev) / prev) * 100;
-}
-
-function formatPercentDelta(cur: number, prev: number) {
-  const d = getPercentChange(cur, prev);
-  return `${d > 0 ? '+' : ''}${d.toFixed(1)}%`;
 }
 
 function getDaysOld(v?: string | null) {
@@ -666,7 +660,7 @@ function Dashboard({
   return (
     <div className="dash-root" style={$.root}>
       {/* ── Live Ticker Banner ── */}
-      <TickerBanner ticker={ticker} C={C} light={light} />
+      <TickerBanner ticker={ticker} C={C} />
 
       {/* ── Hero Header ── */}
       <HeroHeader
@@ -689,7 +683,7 @@ function Dashboard({
       )}
 
       {/* ── Section Nav ── */}
-      <SectionNav active={activeSection} onChange={setActiveSection} C={C} light={light} />
+      <SectionNav active={activeSection} onChange={setActiveSection} C={C} />
 
       {/* ── Overview Section ── */}
       {activeSection === 'overview' && (
@@ -710,8 +704,7 @@ function Dashboard({
             <TeamPerfCard
               C={C} light={light}
               title="Calls" color={C.callsColor}
-              volume={totalCalls} prevVolume={prevCallsTotal} volumeLabel="calls"
-              avgQual={callsAvgQual} prevAvgQual={prevCallsQual}
+              volume={totalCalls} prevVolume={prevCallsTotal}               avgQual={callsAvgQual} prevAvgQual={prevCallsQual}
               auditedAgents={auditedCallsKeys.size}
               topPerformer={callsHybridTop[0]?.label || callsQualTop[0]?.label || '—'}
               sparkData={pseudoSparkline('calls' + totalCalls, 10)}
@@ -720,8 +713,7 @@ function Dashboard({
             <TeamPerfCard
               C={C} light={light}
               title="Tickets" color={C.ticketsColor}
-              volume={totalTickets} prevVolume={prevTicketsTotal} volumeLabel="tickets"
-              avgQual={ticketsAvgQual} prevAvgQual={prevTicketsQual}
+              volume={totalTickets} prevVolume={prevTicketsTotal}               avgQual={ticketsAvgQual} prevAvgQual={prevTicketsQual}
               auditedAgents={auditedTicketsKeys.size}
               topPerformer={ticketsHybridTop[0]?.label || ticketsQualTop[0]?.label || '—'}
               sparkData={pseudoSparkline('tickets' + totalTickets, 10)}
@@ -730,7 +722,7 @@ function Dashboard({
             <TeamPerfCard
               C={C} light={light}
               title="Sales" color={C.salesColor}
-              volume={totalSales} prevVolume={prevSalesTotal} volumeLabel="revenue" isRevenue
+              volume={totalSales} prevVolume={prevSalesTotal} isRevenue
               avgQual={salesAvgQual} prevAvgQual={prevSalesQual}
               auditedAgents={new Set(salesAudits.map(a => getAgentKey(a.agent_id, a.agent_name))).size}
               topPerformer={salesTop[0]?.label || '—'}
@@ -787,7 +779,7 @@ function Dashboard({
 }
 
 // ─── TickerBanner ────────────────────────────────────────────────────────────
-function TickerBanner({ ticker, C, light }: { ticker: string; C: any; light: boolean }) {
+function TickerBanner({ ticker, C }: { ticker: string; C: any }) {
   return (
     <div style={{
       height: '36px', display: 'flex', alignItems: 'center', gap: '20px',
@@ -891,7 +883,7 @@ function HeroHeader({ C, light, dateFrom, dateTo, setDateFrom, setDateTo, dateFr
 }
 
 // ─── SectionNav ──────────────────────────────────────────────────────────────
-function SectionNav({ active, onChange, C, light }: { active: string; onChange: (s: any) => void; C: any; light: boolean }) {
+function SectionNav({ active, onChange, C }: { active: string; onChange: (s: any) => void; C: any }) {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '◈' },
     { id: 'action', label: 'Action Center', icon: '⚡' },
@@ -965,7 +957,7 @@ function KPIStrip({ C, light, totalAudits, prevAudits, avgQuality, prevAvgQualit
 }
 
 // ─── TeamPerfCard ────────────────────────────────────────────────────────────
-function TeamPerfCard({ C, light, title, color, volume, prevVolume, volumeLabel, isRevenue, avgQual, prevAvgQual, auditedAgents, topPerformer, sparkData, auditCount }: any) {
+function TeamPerfCard({ C, light, title, color, volume, prevVolume, isRevenue, avgQual, prevAvgQual, auditedAgents, topPerformer, sparkData, auditCount }: any) {
   const volDelta = getPercentChange(volume, prevVolume);
   const qualDelta = getPercentChange(avgQual, prevAvgQual);
   const sparkMax = Math.max(...sparkData);
@@ -1093,7 +1085,7 @@ function ActionCenter({ C, light, items, onNavigate, agingReqs, overdueFb, aging
               { label: 'Reports', path: '/reports' },
               { label: 'Heatmap', path: '/team-heatmap' },
             ].map(l => (
-              <button key={l.path} className="dash-btn" onClick={() => navigate(l.path)} style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+              <button key={l.path} className="dash-btn" onClick={() => onNavigate(l.path)} style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
                 {l.label} →
               </button>
             ))}
@@ -1143,28 +1135,28 @@ function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, calls
 
       {boardType === 'combined' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} light={light} type="hybrid" />
-          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} light={light} type="hybrid" />
+          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} type="hybrid" />
+          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} type="hybrid" />
         </div>
       )}
       {boardType === 'quantity' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} light={light} type="quantity" unit="calls" />
-          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} light={light} type="quantity" unit="tickets" />
-          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} light={light} type="quantity" unit="usd" />
+          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} type="quantity" unit="calls" />
+          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} type="quantity" unit="tickets" />
+          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} type="quantity" unit="usd" />
         </div>
       )}
       {boardType === 'quality' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} light={light} type="quality" />
-          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} light={light} type="quality" />
+          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} type="quality" />
+          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} type="quality" />
         </div>
       )}
     </div>
   );
 }
 
-function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title: string; color: string; items: any[]; C: any; light: boolean; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
+function LeaderboardPanel({ title, color, items, C, type, unit }: { title: string; color: string; items: any[]; C: any; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
   const maxVal = items.length ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity)) : 1;
 
   return (
