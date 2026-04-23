@@ -75,9 +75,7 @@ function countsTowardScore(metric: Metric) {
 }
 
 function shouldShowMetricComment(result: string) {
-  return (
-    result === 'Borderline' || result === 'Fail' || result === 'Auto-Fail'
-  );
+  return result === 'Borderline' || result === 'Fail' || result === 'Auto-Fail';
 }
 
 const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
@@ -140,11 +138,8 @@ const salesMetrics: Metric[] = [
 
 function pickPreferredName(values: Array<string | null | undefined>) {
   for (const value of values) {
-    if (typeof value === 'string' && value.trim()) {
-      return value.trim();
-    }
+    if (typeof value === 'string' && value.trim()) return value.trim();
   }
-
   return 'Unknown User';
 }
 
@@ -166,7 +161,6 @@ function canAutoFail(metricName: string) {
 function getMetricOptions(metric: Metric) {
   if (metric.options?.length) return metric.options;
   if (isLockedToNA(metric.name)) return ['N/A'];
-
   const options = ['N/A', 'Pass', 'Borderline', 'Fail'];
   if (canAutoFail(metric.name)) options.push('Auto-Fail');
   return options;
@@ -179,11 +173,9 @@ function getMetricStoredValue(metric: Metric, scores: Record<string, string>) {
 
 function createDefaultScores(teamValue: TeamType) {
   const defaults: Record<string, string> = {};
-
   getMetricsForTeam(teamValue).forEach((metric) => {
     defaults[metric.name] = metric.defaultValue ?? 'N/A';
   });
-
   return defaults;
 }
 
@@ -203,83 +195,49 @@ function createEmptyDraft(teamValue: TeamType = ''): AuditDraft {
   };
 }
 
-function getMissingRequiredMetricLabels(
-  teamValue: TeamType,
-  scores: Record<string, string>
-) {
+function getMissingRequiredMetricLabels(teamValue: TeamType, scores: Record<string, string>) {
   return getMetricsForTeam(teamValue)
     .filter((metric) => Array.isArray(metric.options) && metric.defaultValue === '')
     .filter((metric) => !getMetricStoredValue(metric, scores))
     .map((metric) => metric.name);
 }
 
-function getAdjustedScoreData(
-  team: TeamType,
-  scores: Record<string, string>,
-  metricComments: Record<string, string>
-) {
+function getAdjustedScoreData(team: TeamType, scores: Record<string, string>, metricComments: Record<string, string>) {
   const metrics = getMetricsForTeam(team);
   const scoredMetrics = metrics.filter((item) => countsTowardScore(item));
-
   const activeMetrics = scoredMetrics.filter((item) => {
     const itemResult = getMetricStoredValue(item, scores);
     return itemResult !== 'N/A' && itemResult !== '';
   });
-
-  const activeTotalWeight = activeMetrics.reduce(
-    (sum, item) => sum + item.pass,
-    0
-  );
+  const activeTotalWeight = activeMetrics.reduce((sum, item) => sum + item.pass, 0);
   const fullTotalWeight = scoredMetrics.reduce((sum, item) => sum + item.pass, 0);
 
   const scoreDetails = metrics.map((metric) => {
     const result = getMetricStoredValue(metric, scores);
     const scored = countsTowardScore(metric);
-
     const adjustedWeight =
       !scored || result === 'N/A' || result === '' || activeTotalWeight === 0
         ? 0
         : (metric.pass / activeTotalWeight) * fullTotalWeight;
-
     let earned = 0;
-
-    if (scored && result === 'Pass') {
-      earned = adjustedWeight;
-    } else if (scored && result === 'Borderline') {
-      earned =
-        metric.pass > 0
-          ? adjustedWeight * (metric.borderline / metric.pass)
-          : 0;
-    }
-
+    if (scored && result === 'Pass') earned = adjustedWeight;
+    else if (scored && result === 'Borderline')
+      earned = metric.pass > 0 ? adjustedWeight * (metric.borderline / metric.pass) : 0;
     return {
-      metric: metric.name,
-      result,
-      pass: metric.pass,
-      borderline: metric.borderline,
-      adjustedWeight,
-      earned,
-      counts_toward_score: scored,
-      metric_comment:
-        scored && shouldShowMetricComment(result)
-          ? (metricComments[metric.name] || '').trim() || null
-          : null,
+      metric: metric.name, result, pass: metric.pass, borderline: metric.borderline,
+      adjustedWeight, earned, counts_toward_score: scored,
+      metric_comment: scored && shouldShowMetricComment(result)
+        ? (metricComments[metric.name] || '').trim() || null : null,
     };
   });
 
   const hasAutoFail = scoreDetails.some(
-    (item) =>
-      item.counts_toward_score !== false &&
-      canAutoFail(item.metric) &&
-      item.result === 'Auto-Fail'
+    (item) => item.counts_toward_score !== false && canAutoFail(item.metric) && item.result === 'Auto-Fail'
   );
-
   const qualityScore = hasAutoFail
     ? '0.00'
-    : scoreDetails
-        .filter((item) => item.counts_toward_score !== false)
-        .reduce((sum, item) => sum + item.earned, 0)
-        .toFixed(2);
+    : scoreDetails.filter((item) => item.counts_toward_score !== false)
+        .reduce((sum, item) => sum + item.earned, 0).toFixed(2);
 
   return { scoreDetails, qualityScore, hasAutoFail };
 }
@@ -289,99 +247,81 @@ function openNativeDatePicker(target: HTMLInputElement) {
   input.showPicker?.();
 }
 
+function getResultColor(result: string): string {
+  if (result === 'Pass') return '#10b981';
+  if (result === 'Borderline') return '#f59e0b';
+  if (result === 'Fail') return '#ef4444';
+  if (result === 'Auto-Fail') return '#dc2626';
+  if (result === 'N/A') return '#64748b';
+  if (result === 'Yes') return '#10b981';
+  if (result === 'No') return '#ef4444';
+  return '#64748b';
+}
 
 function getThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
-          window.localStorage.getItem('detroit-axle-theme') ||
-          window.sessionStorage.getItem('detroit-axle-theme') ||
-          ''
-        ).toLowerCase()
-      : '';
-
+  const themeMode = typeof document !== 'undefined'
+    ? (document.body.dataset.theme || document.documentElement.dataset.theme ||
+       window.localStorage.getItem('detroit-axle-theme-mode') ||
+       window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+       window.localStorage.getItem('detroit-axle-theme') ||
+       window.sessionStorage.getItem('detroit-axle-theme') || '').toLowerCase()
+    : '';
   const isLight = themeMode === 'light' || themeMode === 'white';
-
   return {
-    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
-    '--screen-heading': isLight ? '#081225' : '#f8fafc',
-    '--screen-muted': isLight ? '#475569' : '#94a3b8',
-    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
-    '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
-    '--screen-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
-    '--screen-card-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
-    '--screen-card-soft-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)'
-      : 'rgba(15,23,42,0.58)',
-    '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)'
-      : 'rgba(15,23,42,0.78)',
-    '--screen-field-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
-    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.22)',
-    '--screen-table-head-bg': isLight
-      ? 'linear-gradient(180deg, rgba(241,245,255,1) 0%, rgba(235,241,252,0.98) 100%)'
-      : 'rgba(2,6,23,0.92)',
-    '--screen-pill-bg': isLight ? 'rgba(239,246,255,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
-    '--screen-secondary-btn-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-select-option-bg': isLight ? '#ffffff' : '#0f172a',
-    '--screen-select-option-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
-    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.30)' : 'rgba(96,165,250,0.26)',
-    '--screen-score-pill-text': isLight ? '#1d4ed8' : '#dbeafe',
-    '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
-    '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-highlight-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,247,255,0.98) 100%)'
-      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.52) 100%)',
-    '--progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.16)',
-    '--progress-strong-border': isLight ? 'rgba(34,197,94,0.24)' : 'rgba(134,239,172,0.20)',
-    '--progress-strong-text': isLight ? '#166534' : '#bbf7d0',
-    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.16)',
-    '--progress-medium-border': isLight ? 'rgba(245,158,11,0.24)' : 'rgba(252,211,77,0.20)',
-    '--progress-medium-text': isLight ? '#92400e' : '#fde68a',
-    '--progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.16)',
-    '--progress-weak-border': isLight ? 'rgba(239,68,68,0.24)' : 'rgba(252,165,165,0.20)',
-    '--progress-weak-text': isLight ? '#991b1b' : '#fecaca',
-    '--progress-empty-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.42)',
-    '--progress-empty-text': isLight ? '#64748b' : '#94a3b8',
-    '--progress-off-bg': isLight ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.18)',
-    '--progress-off-border': isLight ? 'rgba(124,58,237,0.24)' : 'rgba(196,181,253,0.22)',
-    '--progress-off-text': isLight ? '#6d28d9' : '#ddd6fe',
+    '--na-bg': isLight ? '#f8fafc' : '#080d1a',
+    '--na-surface': isLight ? '#ffffff' : '#0d1526',
+    '--na-surface-2': isLight ? '#f1f5f9' : '#111927',
+    '--na-surface-3': isLight ? '#e2e8f0' : '#162030',
+    '--na-border': isLight ? 'rgba(148,163,184,0.3)' : 'rgba(148,163,184,0.08)',
+    '--na-border-strong': isLight ? 'rgba(148,163,184,0.6)' : 'rgba(148,163,184,0.14)',
+    '--na-text': isLight ? '#0f172a' : '#e2eaf7',
+    '--na-text-2': isLight ? '#334155' : '#94a3b8',
+    '--na-text-3': isLight ? '#64748b' : '#475569',
+    '--na-accent': isLight ? '#2563eb' : '#3b82f6',
+    '--na-accent-dim': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.10)',
+    '--na-accent-glow': isLight ? 'rgba(37,99,235,0.20)' : 'rgba(59,130,246,0.18)',
+    '--na-field-bg': isLight ? '#ffffff' : 'rgba(13,21,38,0.8)',
+    '--na-field-text': isLight ? '#0f172a' : '#e2eaf7',
+    '--na-option-bg': isLight ? '#ffffff' : '#0d1526',
+    '--na-option-text': isLight ? '#0f172a' : '#e2eaf7',
+    '--na-shadow-sm': isLight ? '0 1px 3px rgba(0,0,0,0.08)' : '0 1px 3px rgba(0,0,0,0.4)',
+    '--na-shadow-md': isLight ? '0 4px 16px rgba(0,0,0,0.08)' : '0 4px 16px rgba(0,0,0,0.4)',
+    '--na-shadow-lg': isLight ? '0 12px 40px rgba(0,0,0,0.10)' : '0 12px 40px rgba(0,0,0,0.5)',
   };
 }
 
+// Score gauge mini component
+function ScoreGauge({ score, size = 80 }: { score: number; size?: number }) {
+  const pct = Math.min(100, Math.max(0, score));
+  const r = (size - 8) / 2;
+  const circ = 2 * Math.PI * r;
+  const dashOffset = circ * (1 - pct / 100);
+  const color = pct >= 90 ? '#10b981' : pct >= 75 ? '#f59e0b' : '#ef4444';
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(148,163,184,0.12)" strokeWidth="6" />
+      <circle
+        cx={size/2} cy={size/2} r={r} fill="none"
+        stroke={color} strokeWidth="6"
+        strokeDasharray={circ} strokeDashoffset={dashOffset}
+        strokeLinecap="round"
+        style={{ transition: 'stroke-dashoffset 0.6s cubic-bezier(0.34,1.56,0.64,1), stroke 0.3s ease' }}
+      />
+    </svg>
+  );
+}
 
 function NewAuditSupabase() {
-  const [draft, setDraft] = usePersistentState<AuditDraft>(
-    'detroit-axle-new-audit-draft',
-    createEmptyDraft('')
-  );
-
+  const [draft, setDraft] = usePersistentState<AuditDraft>('detroit-axle-new-audit-draft', createEmptyDraft(''));
   const [saving, setSaving] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
   const [agentLoadError, setAgentLoadError] = useState('');
-  const [creatorSummary, setCreatorSummary] = useState<CreatorSummary | null>(
-    null
-  );
+  const [creatorSummary, setCreatorSummary] = useState<CreatorSummary | null>(null);
   const [lastAudit, setLastAudit] = useState<LastAuditSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
-
   const themeVars = getThemeVars();
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
 
@@ -393,14 +333,10 @@ function NewAuditSupabase() {
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
-      if (
-        agentPickerRef.current &&
-        !agentPickerRef.current.contains(event.target as Node)
-      ) {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(event.target as Node)) {
         setIsAgentPickerOpen(false);
       }
     }
-
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
@@ -408,16 +344,11 @@ function NewAuditSupabase() {
   async function loadAgentProfiles(options?: { force?: boolean }) {
     setLoadingAgents(true);
     setAgentLoadError('');
-
     try {
-      const data = await getCachedAgentProfiles(undefined, {
-        force: options?.force,
-      });
+      const data = await getCachedAgentProfiles(undefined, { force: options?.force });
       setAgentProfiles(data);
     } catch (error) {
-      setAgentLoadError(
-        error instanceof Error ? error.message : 'Could not load agents.'
-      );
+      setAgentLoadError(error instanceof Error ? error.message : 'Could not load agents.');
     } finally {
       setLoadingAgents(false);
     }
@@ -425,87 +356,27 @@ function NewAuditSupabase() {
 
   async function loadCurrentCreatorSummary() {
     const { data: authData, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !authData.user) {
-      setCreatorSummary(null);
-      return;
-    }
-
+    if (authError || !authData.user) { setCreatorSummary(null); return; }
     const authUser = authData.user;
     const authMetadata = (authUser.user_metadata || {}) as AuthMetadata;
-
-    const { data: profileData, error: profileError } = await supabase
-      .from('profiles')
-      .select('id, role, agent_name, display_name, email')
-      .eq('id', authUser.id)
-      .maybeSingle();
-
+    const { data: profileData, error: profileError } = await supabase.from('profiles')
+      .select('id, role, agent_name, display_name, email').eq('id', authUser.id).maybeSingle();
     if (profileError || !profileData) {
-      setCreatorSummary({
-        userId: authUser.id,
-        name: pickPreferredName([
-          authMetadata.display_name,
-          authMetadata.full_name,
-          authMetadata.name,
-          authUser.email,
-        ]),
-        role: '',
-        email: authUser.email || '',
-      });
+      setCreatorSummary({ userId: authUser.id, name: pickPreferredName([authMetadata.display_name, authMetadata.full_name, authMetadata.name, authUser.email]), role: '', email: authUser.email || '' });
       return;
     }
-
     const creatorProfile = profileData as CreatorProfile;
-
-    setCreatorSummary({
-      userId: creatorProfile.id,
-      name: pickPreferredName([
-        authMetadata.display_name,
-        authMetadata.full_name,
-        authMetadata.name,
-        creatorProfile.display_name,
-        creatorProfile.agent_name,
-        creatorProfile.email,
-        authUser.email,
-      ]),
-      role: creatorProfile.role,
-      email: creatorProfile.email || authUser.email || '',
-    });
+    setCreatorSummary({ userId: creatorProfile.id, name: pickPreferredName([authMetadata.display_name, authMetadata.full_name, authMetadata.name, creatorProfile.display_name, creatorProfile.agent_name, creatorProfile.email, authUser.email]), role: creatorProfile.role, email: creatorProfile.email || authUser.email || '' });
   }
 
   async function loadLastAuditSummary() {
     const { data: authData, error: authError } = await supabase.auth.getUser();
-
-    if (authError || !authData.user) {
-      setLastAudit(null);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from('audits')
-      .select(
-        'id, agent_name, agent_id, team, case_type, audit_date, quality_score'
-      )
-      .eq('created_by_user_id', authData.user.id)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (error || !data) {
-      setLastAudit(null);
-      return;
-    }
-
-    setLastAudit({
-      id: data.id,
-      agentName: data.agent_name || '-',
-      agentId: data.agent_id || null,
-      team: (data.team || '') as TeamType,
-      caseType: data.case_type || '-',
-      auditDate: data.audit_date || '',
-      qualityScore:
-        typeof data.quality_score === 'number' ? data.quality_score : Number(data.quality_score),
-    });
+    if (authError || !authData.user) { setLastAudit(null); return; }
+    const { data, error } = await supabase.from('audits')
+      .select('id, agent_name, agent_id, team, case_type, audit_date, quality_score')
+      .eq('created_by_user_id', authData.user.id).order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (error || !data) { setLastAudit(null); return; }
+    setLastAudit({ id: data.id, agentName: data.agent_name || '-', agentId: data.agent_id || null, team: (data.team || '') as TeamType, caseType: data.case_type || '-', auditDate: data.audit_date || '', qualityScore: typeof data.quality_score === 'number' ? data.quality_score : Number(data.quality_score) });
   }
 
   function handleRefreshAgents() {
@@ -514,651 +385,389 @@ function NewAuditSupabase() {
   }
 
   function getAgentLabel(profile: AgentProfile) {
-    return profile.display_name
-      ? `${profile.agent_name} - ${profile.display_name}`
-      : `${profile.agent_name} - ${profile.agent_id}`;
+    return profile.display_name ? `${profile.agent_name} — ${profile.display_name}` : `${profile.agent_name} · ${profile.agent_id}`;
   }
 
-  const teamAgents = useMemo(() => {
-    return agentProfiles.filter(
-      (profile) =>
-        profile.role === 'agent' &&
-        profile.team === draft.team &&
-        profile.agent_id &&
-        profile.agent_name
-    );
-  }, [agentProfiles, draft.team]);
+  const teamAgents = useMemo(() => agentProfiles.filter((p) => p.role === 'agent' && p.team === draft.team && p.agent_id && p.agent_name), [agentProfiles, draft.team]);
 
   const visibleAgents = useMemo(() => {
     const search = draft.agentSearch.trim().toLowerCase();
-
     if (!search) return teamAgents;
-
-    return teamAgents.filter((profile) => {
-      const label = getAgentLabel(profile);
-
-      return (
-        profile.agent_name.toLowerCase().includes(search) ||
-        (profile.agent_id || '').toLowerCase().includes(search) ||
-        (profile.display_name || '').toLowerCase().includes(search) ||
-        label.toLowerCase().includes(search)
-      );
+    return teamAgents.filter((p) => {
+      const label = getAgentLabel(p);
+      return p.agent_name.toLowerCase().includes(search) || (p.agent_id || '').toLowerCase().includes(search) || (p.display_name || '').toLowerCase().includes(search) || label.toLowerCase().includes(search);
     });
   }, [teamAgents, draft.agentSearch]);
 
-  const selectedAgent =
-    teamAgents.find((profile) => profile.id === draft.selectedAgentProfileId) ||
-    null;
+  const selectedAgent = teamAgents.find((p) => p.id === draft.selectedAgentProfileId) || null;
 
-  const adjustedData = useMemo(() => {
-    return getAdjustedScoreData(draft.team, draft.scores, draft.metricComments);
-  }, [draft.team, draft.scores, draft.metricComments]);
+  const adjustedData = useMemo(() => getAdjustedScoreData(draft.team, draft.scores, draft.metricComments), [draft.team, draft.scores, draft.metricComments]);
 
-  function setDraftField<K extends keyof AuditDraft>(
-    key: K,
-    value: AuditDraft[K]
-  ) {
-    setDraft((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+  function setDraftField<K extends keyof AuditDraft>(key: K, value: AuditDraft[K]) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
   }
 
   function setTeamAndReset(nextTeam: TeamType) {
-    setErrorMessage('');
-    setSuccessMessage('');
-    setIsAgentPickerOpen(false);
+    setErrorMessage(''); setSuccessMessage(''); setIsAgentPickerOpen(false);
     setDraft(createEmptyDraft(nextTeam));
   }
 
   function handleScoreChange(metricName: string, value: string) {
     if (isLockedToNA(metricName)) {
-      setDraft((prev) => ({
-        ...prev,
-        scores: {
-          ...prev.scores,
-          [metricName]: 'N/A',
-        },
-        metricComments: {
-          ...prev.metricComments,
-          [metricName]: '',
-        },
-      }));
+      setDraft((prev) => ({ ...prev, scores: { ...prev.scores, [metricName]: 'N/A' }, metricComments: { ...prev.metricComments, [metricName]: '' } }));
       return;
     }
-
     setDraft((prev) => {
       const nextMetricComments = { ...prev.metricComments };
-      if (!shouldShowMetricComment(value)) {
-        delete nextMetricComments[metricName];
-      }
-
-      return {
-        ...prev,
-        scores: {
-          ...prev.scores,
-          [metricName]: value,
-        },
-        metricComments: nextMetricComments,
-      };
+      if (!shouldShowMetricComment(value)) delete nextMetricComments[metricName];
+      return { ...prev, scores: { ...prev.scores, [metricName]: value }, metricComments: nextMetricComments };
     });
   }
 
   function handleMetricCommentChange(metricName: string, value: string) {
-    setDraft((prev) => ({
-      ...prev,
-      metricComments: {
-        ...prev.metricComments,
-        [metricName]: value,
-      },
-    }));
+    setDraft((prev) => ({ ...prev, metricComments: { ...prev.metricComments, [metricName]: value } }));
   }
 
   function handleSelectAgent(profile: AgentProfile) {
-    setDraft((prev) => ({
-      ...prev,
-      selectedAgentProfileId: profile.id,
-      agentSearch: getAgentLabel(profile),
-    }));
+    setDraft((prev) => ({ ...prev, selectedAgentProfileId: profile.id, agentSearch: getAgentLabel(profile) }));
     setIsAgentPickerOpen(false);
   }
-
-
 
   async function handleSave() {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!draft.team) {
-      setErrorMessage('Please choose a team.');
-      return;
-    }
-
-    if (!selectedAgent) {
-      setErrorMessage('Please choose an agent.');
-      return;
-    }
-
-    if (!draft.caseType || !draft.auditDate) {
-      setErrorMessage('Please fill Case Type and Audit Date.');
-      return;
-    }
-
-    if (
-      (draft.team === 'Calls' || draft.team === 'Sales') &&
-      !draft.orderNumber
-    ) {
-      setErrorMessage('Please fill Order Number for Calls and Sales.');
-      return;
-    }
-
-    if (draft.team === 'Tickets' && !draft.ticketId) {
-      setErrorMessage('Please fill Ticket ID for Tickets.');
-      return;
-    }
-
-    const missingRequiredMetricLabels = getMissingRequiredMetricLabels(
-      draft.team,
-      draft.scores
-    );
-    if (missingRequiredMetricLabels.length > 0) {
-      setErrorMessage(
-        `Please answer: ${missingRequiredMetricLabels.join(', ')}.`
-      );
-      return;
-    }
-
-    const missingMetricCommentLabels = getMetricsForTeam(draft.team)
-      .filter((metric) => countsTowardScore(metric))
-      .filter((metric) =>
-        shouldShowMetricComment(getMetricStoredValue(metric, draft.scores))
-      )
-      .filter((metric) => !(draft.metricComments[metric.name] || '').trim())
-      .map((metric) => metric.name);
-
-    if (missingMetricCommentLabels.length > 0) {
-      setErrorMessage(
-        `Please add a short QA note for: ${missingMetricCommentLabels.join(', ')}.`
-      );
-      return;
-    }
-
-    if (!selectedAgent.agent_id) {
-      setErrorMessage('Selected agent does not have an Agent ID.');
-      return;
-    }
-
+    setErrorMessage(''); setSuccessMessage('');
+    if (!draft.team) { setErrorMessage('Please choose a team.'); return; }
+    if (!selectedAgent) { setErrorMessage('Please choose an agent.'); return; }
+    if (!draft.caseType || !draft.auditDate) { setErrorMessage('Please fill Case Type and Audit Date.'); return; }
+    if ((draft.team === 'Calls' || draft.team === 'Sales') && !draft.orderNumber) { setErrorMessage('Please fill Order Number for Calls and Sales.'); return; }
+    if (draft.team === 'Tickets' && !draft.ticketId) { setErrorMessage('Please fill Ticket ID for Tickets.'); return; }
+    const missingRequired = getMissingRequiredMetricLabels(draft.team, draft.scores);
+    if (missingRequired.length > 0) { setErrorMessage(`Please answer: ${missingRequired.join(', ')}.`); return; }
+    const missingComments = getMetricsForTeam(draft.team).filter((m) => countsTowardScore(m)).filter((m) => shouldShowMetricComment(getMetricStoredValue(m, draft.scores))).filter((m) => !(draft.metricComments[m.name] || '').trim()).map((m) => m.name);
+    if (missingComments.length > 0) { setErrorMessage(`Please add a QA note for: ${missingComments.join(', ')}.`); return; }
+    if (!selectedAgent.agent_id) { setErrorMessage('Selected agent does not have an Agent ID.'); return; }
     setSaving(true);
-
     const { data: authData, error: authError } = await supabase.auth.getUser();
-
-    if (authError) {
-      setSaving(false);
-      setErrorMessage(authError.message);
-      return;
-    }
-
+    if (authError) { setSaving(false); setErrorMessage(authError.message); return; }
     const authUser = authData.user;
-
-    if (!authUser) {
-      setSaving(false);
-      setErrorMessage('Could not identify the logged-in user.');
-      return;
-    }
-
-    const { data: creatorProfileData, error: creatorProfileError } =
-      await supabase
-        .from('profiles')
-        .select('id, role, agent_name, display_name, email')
-        .eq('id', authUser.id)
-        .maybeSingle();
-
-    if (creatorProfileError) {
-      setSaving(false);
-      setErrorMessage(creatorProfileError.message);
-      return;
-    }
-
-    if (!creatorProfileData) {
-      setSaving(false);
-      setErrorMessage(
-        'Could not load the logged-in profile for creator tracking.'
-      );
-      return;
-    }
-
+    if (!authUser) { setSaving(false); setErrorMessage('Could not identify the logged-in user.'); return; }
+    const { data: creatorProfileData, error: creatorProfileError } = await supabase.from('profiles').select('id, role, agent_name, display_name, email').eq('id', authUser.id).maybeSingle();
+    if (creatorProfileError) { setSaving(false); setErrorMessage(creatorProfileError.message); return; }
+    if (!creatorProfileData) { setSaving(false); setErrorMessage('Could not load the logged-in profile.'); return; }
     const creatorProfile = creatorProfileData as CreatorProfile;
     const authMetadata = (authUser.user_metadata || {}) as AuthMetadata;
-
-    const createdByName = pickPreferredName([
-      authMetadata.display_name,
-      authMetadata.full_name,
-      authMetadata.name,
-      creatorProfile.display_name,
-      creatorProfile.agent_name,
-      creatorProfile.email,
-      authUser.email,
-    ]);
-
+    const createdByName = pickPreferredName([authMetadata.display_name, authMetadata.full_name, authMetadata.name, creatorProfile.display_name, creatorProfile.agent_name, creatorProfile.email, authUser.email]);
     const { error } = await supabase.from('audits').insert({
-      agent_id: selectedAgent.agent_id,
-      agent_name: selectedAgent.agent_name,
-      team: draft.team,
-      case_type: draft.caseType,
-      audit_date: draft.auditDate,
-      order_number:
-        draft.team === 'Calls' || draft.team === 'Sales'
-          ? draft.orderNumber
-          : null,
-      phone_number:
-        draft.team === 'Calls' || draft.team === 'Sales'
-          ? draft.phoneNumber || null
-          : null,
+      agent_id: selectedAgent.agent_id, agent_name: selectedAgent.agent_name,
+      team: draft.team, case_type: draft.caseType, audit_date: draft.auditDate,
+      order_number: draft.team === 'Calls' || draft.team === 'Sales' ? draft.orderNumber : null,
+      phone_number: draft.team === 'Calls' || draft.team === 'Sales' ? draft.phoneNumber || null : null,
       ticket_id: draft.team === 'Tickets' ? draft.ticketId : null,
-      quality_score: Number(adjustedData.qualityScore),
-      comments: draft.comments,
-      score_details: adjustedData.scoreDetails,
-      created_by_user_id: creatorProfile.id,
-      created_by_name: createdByName,
-      created_by_email: creatorProfile.email || authUser.email || null,
+      quality_score: Number(adjustedData.qualityScore), comments: draft.comments,
+      score_details: adjustedData.scoreDetails, created_by_user_id: creatorProfile.id,
+      created_by_name: createdByName, created_by_email: creatorProfile.email || authUser.email || null,
       created_by_role: creatorProfile.role,
     });
-
     setSaving(false);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    if (error) { setErrorMessage(error.message); return; }
     const savedTeam = draft.team;
-    setIsAgentPickerOpen(false);
-    setDraft(createEmptyDraft(savedTeam));
+    setIsAgentPickerOpen(false); setDraft(createEmptyDraft(savedTeam));
     setSuccessMessage('Audit saved successfully. Draft cleared.');
-    void loadCurrentCreatorSummary();
-    void loadLastAuditSummary();
+    void loadCurrentCreatorSummary(); void loadLastAuditSummary();
   }
+
+  const scoreNum = parseFloat(adjustedData.qualityScore);
+  const scoreColor = scoreNum >= 90 ? '#10b981' : scoreNum >= 75 ? '#f59e0b' : '#ef4444';
 
   function renderScorecard(title: string, metrics: Metric[]) {
     return (
-      <div style={{ marginTop: '30px' }}>
-        <div style={sectionEyebrow}>{title}</div>
-
-        <div style={{ display: 'grid', gap: '15px' }}>
+      <div style={{ marginTop: '28px' }}>
+        <div style={sectionLabel}>{title}</div>
+        <div style={{ display: 'grid', gap: '10px' }}>
           {metrics.map((metric) => {
             const metricOptions = getMetricOptions(metric);
             const metricValue = getMetricStoredValue(metric, draft.scores);
-            const showMetricComment =
-              countsTowardScore(metric) && shouldShowMetricComment(metricValue);
+            const showMetricComment = countsTowardScore(metric) && shouldShowMetricComment(metricValue);
+            const resultColor = getResultColor(metricValue);
+            const isMeaningful = metricValue !== 'N/A' && metricValue !== '';
 
             return (
-              <div key={metric.name} style={glassFieldCardStyle}>
-                <label style={labelStyle}>
-                  {countsTowardScore(metric)
-                    ? `${metric.name} (${metric.pass} pts)`
-                    : metric.name}
-                </label>
-                <select
-                  value={metricValue}
-                  onChange={(event) =>
-                    handleScoreChange(metric.name, event.target.value)
-                  }
-                  disabled={isLockedToNA(metric.name)}
-                  style={selectFieldStyle}
-                >
-                  {metricOptions.map((option) => (
-                    <option key={option || '__empty__'} value={option} style={selectOptionStyle}>
-                      {option || 'Select answer'}
-                    </option>
-                  ))}
-                </select>
-
-                {isLockedToNA(metric.name) && (
-                  <div style={helpTextStyle}>Locked to N/A</div>
-                )}
-
-                {showMetricComment ? (
-                  <div style={metricCommentWrapStyle}>
-                    <label style={metricCommentLabelStyle}>QA note for agent</label>
+              <div key={metric.name} style={{ ...metricCard, ...(isMeaningful ? { borderLeft: `3px solid ${resultColor}` } : {}) }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '160px' }}>
+                    <div style={metricName}>
+                      {metric.name}
+                      {countsTowardScore(metric) && (
+                        <span style={metricPts}>{metric.pass} pts</span>
+                      )}
+                    </div>
+                    {isLockedToNA(metric.name) && <div style={lockedBadge}>Locked · N/A</div>}
+                  </div>
+                  <div style={{ minWidth: '180px' }}>
+                    <select
+                      value={metricValue}
+                      onChange={(e) => handleScoreChange(metric.name, e.target.value)}
+                      disabled={isLockedToNA(metric.name)}
+                      style={{ ...selectField, borderColor: isMeaningful ? `${resultColor}44` : undefined, color: isMeaningful ? resultColor : undefined }}
+                    >
+                      {metricOptions.map((option) => (
+                        <option key={option || '__empty__'} value={option} style={{ backgroundColor: 'var(--na-option-bg)', color: 'var(--na-option-text)' }}>
+                          {option || 'Select answer'}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {showMetricComment && (
+                  <div style={{ marginTop: '10px' }}>
+                    <div style={qaNoteLabelStyle}>QA note for agent</div>
                     <textarea
                       value={draft.metricComments[metric.name] || ''}
-                      onChange={(event) =>
-                        handleMetricCommentChange(metric.name, event.target.value)
-                      }
+                      onChange={(e) => handleMetricCommentChange(metric.name, e.target.value)}
                       rows={2}
-                      placeholder="Leave a short note explaining the result"
-                      style={metricCommentFieldStyle}
+                      placeholder="Brief explanation for this result…"
+                      style={qaTextarea}
                     />
                   </div>
-                ) : null}
+                )}
               </div>
             );
           })}
         </div>
 
         {adjustedData.hasAutoFail && (
-          <div style={warningBannerStyle}>
-            Auto-Fail triggered. Final score is 0.00%.
+          <div style={autoFailBanner}>
+            <span style={{ fontSize: '16px' }}>⚠</span>
+            <span>Auto-Fail triggered — Final score: 0.00%</span>
           </div>
         )}
 
-        <div style={scoreCardStyle}>
-          <div style={scoreLabelStyle}>Quality Score</div>
-          <div style={scoreValueStyle}>{adjustedData.qualityScore}%</div>
+        <div style={scoreSummaryCard}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ position: 'relative', width: '80px', height: '80px', display: 'grid', placeItems: 'center' }}>
+              <ScoreGauge score={scoreNum} size={80} />
+              <div style={{ position: 'absolute', fontSize: '13px', fontWeight: 800, color: scoreColor }}>{adjustedData.qualityScore}%</div>
+            </div>
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--na-text-2)', marginBottom: '4px' }}>Quality Score</div>
+              <div style={{ fontSize: '36px', fontWeight: 900, color: scoreColor, letterSpacing: '-0.03em', lineHeight: 1 }}>{adjustedData.qualityScore}%</div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div
-      data-no-theme-invert="true"
-      style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
-    >
-      <div style={pageHeaderStyle}>
-        <div>
-          <div style={sectionEyebrow}>Audit Workspace</div>
-          <h2 style={{ margin: 0, fontSize: '30px', color: 'var(--screen-heading)' }}>New Audit</h2>
-          <p style={{ margin: '10px 0 0 0', color: 'var(--screen-muted, #475569)' }}>
-            Create Detroit Axle audits using the live agent directory from
-            profiles.
-          </p>
-        </div>
+  const CASE_TYPES = ['', 'Order status', 'General Inquiry', 'Exchange', 'Missing Parts', 'Refund - Store credit', 'Delivered but not received', 'FedEx Cases', 'Replacement', 'Warranty', 'Fitment issue', 'Damaged package', 'Cancellation'];
+  const TEAMS: Exclude<TeamType, ''>[] = ['Calls', 'Tickets', 'Sales'];
+  const teamAccents: Record<string, string> = { Calls: '#3b82f6', Tickets: '#8b5cf6', Sales: '#10b981' };
 
-        <button
-          type="button"
-          onClick={handleRefreshAgents}
-          style={secondaryButton}
-        >
-          Refresh Agents
+  return (
+    <div data-no-theme-invert="true" style={{ color: 'var(--na-text)', ...(themeVars as CSSProperties), fontFamily: "'DM Sans', 'Outfit', system-ui, sans-serif" }}>
+      {/* Page header */}
+      <div style={pageHeader}>
+        <div>
+          <div style={eyebrow}>Audit Workspace</div>
+          <h2 style={pageTitle}>New Audit</h2>
+          <p style={pageSub}>Create a Detroit Axle QA audit using the live agent directory.</p>
+        </div>
+        <button type="button" onClick={handleRefreshAgents} style={btnSecondary}>
+          ↻ Refresh Agents
         </button>
       </div>
 
-      {errorMessage ? <div style={errorBannerStyle}>{errorMessage}</div> : null}
-      {successMessage ? (
-        <div style={successBannerStyle}>{successMessage}</div>
-      ) : null}
+      {/* Banners */}
+      {errorMessage && <div style={errorBanner}><span>✕</span> {errorMessage}</div>}
+      {successMessage && <div style={successBanner}><span>✓</span> {successMessage}</div>}
 
-      <div style={panelStyle}>
-        <div style={teamButtonRowStyle}>
-          {(['Calls', 'Tickets', 'Sales'] as Exclude<TeamType, ''>[]).map(
-            (teamOption) => (
+      {/* Team selector */}
+      <div style={card}>
+        <div style={cardInner}>
+          <div style={sectionLabel}>Select Team</div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const }}>
+            {TEAMS.map((t) => (
               <button
-                key={teamOption}
+                key={t}
                 type="button"
-                onClick={() => setTeamAndReset(teamOption)}
+                onClick={() => setTeamAndReset(t)}
                 style={{
-                  ...teamButtonStyle,
-                  ...(draft.team === teamOption ? activeTeamButtonStyle : {}),
+                  ...teamBtn,
+                  ...(draft.team === t ? { background: teamAccents[t], color: '#fff', boxShadow: `0 4px 20px ${teamAccents[t]}44`, borderColor: `${teamAccents[t]}88` } : {}),
                 }}
               >
-                {teamOption}
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: draft.team === t ? 'rgba(255,255,255,0.6)' : teamAccents[t], flexShrink: 0 }} />
+                {t}
               </button>
-            )
-          )}
-        </div>
-
-        {draft.team && (
-          <div style={formGridStyle}>
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Agent</label>
-              <div ref={agentPickerRef} style={{ position: 'relative' }}>
-                <button
-                  type="button"
-                  onClick={() => setIsAgentPickerOpen((prev) => !prev)}
-                  style={pickerButtonStyle}
-                >
-                  <span
-                    style={{ color: selectedAgent ? 'var(--screen-text)' : 'var(--screen-muted)' }}
-                  >
-                    {selectedAgent
-                      ? getAgentLabel(selectedAgent)
-                      : 'Select agent'}
-                  </span>
-                  <span>▼</span>
-                </button>
-
-                {isAgentPickerOpen && (
-                  <div style={pickerMenuStyle}>
-                    <div style={pickerSearchWrapStyle}>
-                      <input
-                        type="text"
-                        value={draft.agentSearch}
-                        onChange={(event) =>
-                          setDraftField('agentSearch', event.target.value)
-                        }
-                        placeholder="Search by name, ID, or display name"
-                        style={fieldStyle}
-                      />
-                    </div>
-
-                    <div style={pickerListStyle}>
-                      {loadingAgents ? (
-                        <div style={pickerInfoStyle}>Loading agents...</div>
-                      ) : agentLoadError ? (
-                        <div style={pickerErrorStyle}>
-                          Could not load agents: {agentLoadError}
-                        </div>
-                      ) : visibleAgents.length === 0 ? (
-                        <div style={pickerInfoStyle}>No agents found</div>
-                      ) : (
-                        visibleAgents.map((profile) => (
-                          <button
-                            key={profile.id}
-                            type="button"
-                            onClick={() => handleSelectAgent(profile)}
-                            style={{
-                              ...pickerOptionStyle,
-                              ...(draft.selectedAgentProfileId === profile.id
-                                ? pickerOptionActiveStyle
-                                : {}),
-                            }}
-                          >
-                            {getAgentLabel(profile)}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={infoCardStyle}>
-              <p style={infoLineStyle}>
-                <strong>Agent Name:</strong> {selectedAgent?.agent_name || '-'}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Display Name:</strong>{' '}
-                {selectedAgent?.display_name || '-'}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Agent ID:</strong> {selectedAgent?.agent_id || '-'}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Team:</strong> {selectedAgent?.team || '-'}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Created By:</strong> {creatorSummary?.name || '-'}
-              </p>
-              <p style={infoLineStyle}>
-                <strong>Creator Role:</strong> {creatorSummary?.role || '-'}
-              </p>
-              <p style={{ ...infoLineStyle, marginBottom: 0 }}>
-                <strong>Creator Email:</strong> {creatorSummary?.email || '-'}
-              </p>
-            </div>
-
-            <div style={lastAuditCardStyle}>
-              <div style={lastAuditHeaderRowStyle}>
-                <div>
-                  <div style={lastAuditEyebrowStyle}>Tracking</div>
-                  <div style={lastAuditTitleStyle}>Last Audit Created</div>
-                </div>
-                <div style={lastAuditBadgeStyle}>
-                  {lastAudit?.qualityScore != null && Number.isFinite(lastAudit.qualityScore)
-                    ? `${Number(lastAudit.qualityScore).toFixed(2)}%`
-                    : '-'}
-                </div>
-              </div>
-
-              <div style={lastAuditGridStyle}>
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Agent</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {lastAudit ? lastAudit.agentName : '-'}
-                  </span>
-                </div>
-
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Agent ID</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {lastAudit?.agentId || '-'}
-                  </span>
-                </div>
-
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Team</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {lastAudit?.team || '-'}
-                  </span>
-                </div>
-
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Case Type</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {lastAudit?.caseType || '-'}
-                  </span>
-                </div>
-
-                <div style={lastAuditInfoItemStyle}>
-                  <span style={lastAuditInfoLabelStyle}>Audit Date</span>
-                  <span style={lastAuditInfoValueStyle}>
-                    {lastAudit?.auditDate || '-'}
-                  </span>
-                </div>
-
-              </div>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Case Type</label>
-              <select
-                value={draft.caseType}
-                onChange={(event) =>
-                  setDraftField('caseType', event.target.value)
-                }
-                style={selectFieldStyle}
-              >
-                {['', 'Order status', 'General Inquiry', 'Exchange', 'Missing Parts', 'Refund - Store credit', 'Delivered but not received', 'FedEx Cases', 'Replacement', 'Warranty', 'Fitment issue', 'Damaged package', 'Cancellation'].map((option) => (
-                  <option key={option || '__empty__'} value={option} style={selectOptionStyle}>
-                    {option || 'Select Case Type'}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label style={labelStyle}>Audit Date</label>
-              <input
-                type="date"
-                value={draft.auditDate}
-                onChange={(event) =>
-                  setDraftField('auditDate', event.target.value)
-                }
-                onClick={(event) => openNativeDatePicker(event.currentTarget)}
-                onFocus={(event) => openNativeDatePicker(event.currentTarget)}
-                style={fieldStyle}
-              />
-            </div>
-
-            {(draft.team === 'Calls' || draft.team === 'Sales') && (
-              <>
-                <div>
-                  <label style={labelStyle}>Order Number</label>
-                  <input
-                    type="text"
-                    value={draft.orderNumber}
-                    onChange={(event) =>
-                      setDraftField('orderNumber', event.target.value)
-                    }
-                    style={fieldStyle}
-                  />
-                </div>
-
-                <div>
-                  <label style={labelStyle}>Phone Number</label>
-                  <input
-                    type="text"
-                    value={draft.phoneNumber}
-                    onChange={(event) =>
-                      setDraftField('phoneNumber', event.target.value)
-                    }
-                    style={fieldStyle}
-                  />
-                </div>
-              </>
-            )}
-
-            {draft.team === 'Tickets' && (
-              <div>
-                <label style={labelStyle}>Ticket ID</label>
-                <input
-                  type="text"
-                  value={draft.ticketId}
-                  onChange={(event) =>
-                    setDraftField('ticketId', event.target.value)
-                  }
-                  style={fieldStyle}
-                />
-              </div>
-            )}
-
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Comments</label>
-              <textarea
-                value={draft.comments}
-                onChange={(event) =>
-                  setDraftField('comments', event.target.value)
-                }
-                rows={4}
-                style={fieldStyle}
-              />
-            </div>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
-      {draft.team === 'Calls' &&
-        renderScorecard('QA Evaluation - Calls', callsMetrics)}
-      {draft.team === 'Tickets' &&
-        renderScorecard('QA Evaluation - Tickets', ticketsMetrics)}
-      {draft.team === 'Sales' &&
-        renderScorecard('QA Evaluation - Sales', salesMetrics)}
+      {/* Main form */}
+      {draft.team && (
+        <div style={{ ...card, marginTop: '12px' }}>
+          <div style={cardInner}>
+            <div style={formGrid}>
+              {/* Agent picker */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={fieldLabel}>Agent</label>
+                <div ref={agentPickerRef} style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setIsAgentPickerOpen((p) => !p)}
+                    style={{ ...inputBase, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', textAlign: 'left', ...(selectedAgent ? { borderColor: `${teamAccents[draft.team] ?? '#3b82f6'}44` } : {}) }}
+                  >
+                    <span style={{ color: selectedAgent ? 'var(--na-text)' : 'var(--na-text-3)' }}>
+                      {selectedAgent ? getAgentLabel(selectedAgent) : 'Select an agent…'}
+                    </span>
+                    <span style={{ color: 'var(--na-text-3)', fontSize: '11px', transition: 'transform 0.2s', transform: isAgentPickerOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+                  </button>
 
-      <div style={actionRowStyle}>
+                  {isAgentPickerOpen && (
+                    <div style={pickerDropdown}>
+                      <div style={{ padding: '10px 10px 6px' }}>
+                        <input
+                          type="text"
+                          value={draft.agentSearch}
+                          onChange={(e) => setDraftField('agentSearch', e.target.value)}
+                          placeholder="Search by name, ID, or display name…"
+                          style={{ ...inputBase, fontSize: '13px' }}
+                          autoFocus
+                        />
+                      </div>
+                      <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '4px 8px 8px' }}>
+                        {loadingAgents ? (
+                          <div style={pickerEmpty}>Loading agents…</div>
+                        ) : agentLoadError ? (
+                          <div style={{ ...pickerEmpty, color: '#ef4444' }}>Error: {agentLoadError}</div>
+                        ) : visibleAgents.length === 0 ? (
+                          <div style={pickerEmpty}>No agents found</div>
+                        ) : visibleAgents.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => handleSelectAgent(p)}
+                            style={{ ...pickerOption, ...(draft.selectedAgentProfileId === p.id ? pickerOptionActive : {}) }}
+                          >
+                            <div style={{ fontWeight: 600, fontSize: '13px' }}>{p.agent_name}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--na-text-3)' }}>{p.display_name || p.agent_id}</div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Agent info + creator + last audit */}
+              <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+                <div style={infoChip}>
+                  <span style={infoChipLabel}>Agent Name</span>
+                  <span style={infoChipValue}>{selectedAgent?.agent_name || '—'}</span>
+                </div>
+                <div style={infoChip}>
+                  <span style={infoChipLabel}>Display Name</span>
+                  <span style={infoChipValue}>{selectedAgent?.display_name || '—'}</span>
+                </div>
+                <div style={infoChip}>
+                  <span style={infoChipLabel}>Agent ID</span>
+                  <span style={infoChipValue}>{selectedAgent?.agent_id || '—'}</span>
+                </div>
+                <div style={infoChip}>
+                  <span style={infoChipLabel}>Created By</span>
+                  <span style={infoChipValue}>{creatorSummary?.name || '—'}</span>
+                </div>
+                <div style={infoChip}>
+                  <span style={infoChipLabel}>Creator Role</span>
+                  <span style={infoChipValue}>{creatorSummary?.role || '—'}</span>
+                </div>
+              </div>
+
+              {/* Last audit tracker */}
+              {lastAudit && (
+                <div style={{ gridColumn: '1 / -1', ...lastAuditCard }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' as const, marginBottom: '14px' }}>
+                    <div>
+                      <div style={{ fontSize: '10px', fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase' as const, color: 'var(--na-accent)', marginBottom: '4px' }}>Last Audit Created</div>
+                      <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--na-text)' }}>{lastAudit.agentName}</div>
+                    </div>
+                    {lastAudit.qualityScore !== null && (
+                      <div style={{ fontSize: '22px', fontWeight: 900, color: lastAudit.qualityScore >= 90 ? '#10b981' : lastAudit.qualityScore >= 75 ? '#f59e0b' : '#ef4444' }}>
+                        {Number(lastAudit.qualityScore).toFixed(2)}%
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const }}>
+                    {[['Team', lastAudit.team], ['Case', lastAudit.caseType], ['Date', lastAudit.auditDate]].map(([k, v]) => (
+                      <div key={k} style={lastAuditMeta}>
+                        <span style={{ fontSize: '10px', color: 'var(--na-text-3)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const }}>{k}</span>
+                        <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--na-text)' }}>{v || '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Case Type */}
+              <div>
+                <label style={fieldLabel}>Case Type</label>
+                <select value={draft.caseType} onChange={(e) => setDraftField('caseType', e.target.value)} style={selectField}>
+                  {CASE_TYPES.map((o) => <option key={o || '__empty__'} value={o} style={{ backgroundColor: 'var(--na-option-bg)', color: 'var(--na-option-text)' }}>{o || 'Select Case Type'}</option>)}
+                </select>
+              </div>
+
+              {/* Audit Date */}
+              <div>
+                <label style={fieldLabel}>Audit Date</label>
+                <input type="date" value={draft.auditDate} onChange={(e) => setDraftField('auditDate', e.target.value)}
+                  onClick={(e) => openNativeDatePicker(e.currentTarget)} onFocus={(e) => openNativeDatePicker(e.currentTarget)} style={inputBase} />
+              </div>
+
+              {(draft.team === 'Calls' || draft.team === 'Sales') && <>
+                <div>
+                  <label style={fieldLabel}>Order Number</label>
+                  <input type="text" value={draft.orderNumber} onChange={(e) => setDraftField('orderNumber', e.target.value)} style={inputBase} />
+                </div>
+                <div>
+                  <label style={fieldLabel}>Phone Number</label>
+                  <input type="text" value={draft.phoneNumber} onChange={(e) => setDraftField('phoneNumber', e.target.value)} style={inputBase} />
+                </div>
+              </>}
+
+              {draft.team === 'Tickets' && (
+                <div>
+                  <label style={fieldLabel}>Ticket ID</label>
+                  <input type="text" value={draft.ticketId} onChange={(e) => setDraftField('ticketId', e.target.value)} style={inputBase} />
+                </div>
+              )}
+
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={fieldLabel}>Comments</label>
+                <textarea value={draft.comments} onChange={(e) => setDraftField('comments', e.target.value)} rows={3} style={{ ...inputBase, resize: 'vertical' as const }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Scorecards */}
+      {draft.team === 'Calls' && renderScorecard('QA Evaluation · Calls', callsMetrics)}
+      {draft.team === 'Tickets' && renderScorecard('QA Evaluation · Tickets', ticketsMetrics)}
+      {draft.team === 'Sales' && renderScorecard('QA Evaluation · Sales', salesMetrics)}
+
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' as const, marginTop: '24px' }}>
         <button
           onClick={handleSave}
           disabled={saving || !draft.team}
-          style={{
-            ...primaryButton,
-            opacity: !draft.team ? 0.72 : 1,
-          }}
+          style={{ ...btnPrimary, opacity: !draft.team ? 0.6 : 1 }}
         >
-          {saving ? 'Saving...' : 'Save Audit'}
+          {saving ? 'Saving…' : '✓ Save Audit'}
         </button>
-
         <button
           type="button"
-          onClick={() => {
-            const nextTeam = draft.team;
-            setIsAgentPickerOpen(false);
-            setDraft(createEmptyDraft(nextTeam));
-            setErrorMessage('');
-            setSuccessMessage('Draft cleared.');
-          }}
+          onClick={() => { setIsAgentPickerOpen(false); setDraft(createEmptyDraft(draft.team)); setErrorMessage(''); setSuccessMessage('Draft cleared.'); }}
           disabled={saving}
-          style={secondaryButton}
+          style={btnSecondary}
         >
           Clear Draft
         </button>
@@ -1167,379 +776,185 @@ function NewAuditSupabase() {
   );
 }
 
-const pageHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '16px',
-  alignItems: 'flex-start',
-  flexWrap: 'wrap' as const,
-  marginBottom: '20px',
+// ─── Styles ───────────────────────────────────────────────────
+
+const pageHeader: CSSProperties = {
+  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+  flexWrap: 'wrap', gap: '14px', marginBottom: '24px',
 };
 
-const panelStyle = {
-  background: 'var(--screen-panel-bg)',
-  border: '1px solid var(--screen-border)',
-  borderRadius: '24px',
-  padding: '22px',
-  boxShadow: 'var(--screen-shadow)',
-  backdropFilter: 'blur(14px)',
+const eyebrow: CSSProperties = {
+  fontSize: '11px', fontWeight: 700, letterSpacing: '0.16em',
+  textTransform: 'uppercase', color: 'var(--na-accent)', marginBottom: '6px',
 };
 
-const sectionEyebrow = {
-  color: 'var(--screen-accent)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.16em',
-  marginBottom: '12px',
+const pageTitle: CSSProperties = {
+  margin: 0, fontSize: '28px', fontWeight: 900, letterSpacing: '-0.025em',
+  color: 'var(--na-text)',
 };
 
-const teamButtonRowStyle = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-  marginBottom: '22px',
+const pageSub: CSSProperties = {
+  margin: '6px 0 0', fontSize: '14px', color: 'var(--na-text-2)',
 };
 
-const teamButtonStyle = {
-  padding: '12px 16px',
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-text)',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const activeTeamButtonStyle = {
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  boxShadow: '0 10px 24px rgba(37, 99, 235, 0.25)',
-};
-
-const formGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-  gap: '16px',
-};
-
-const wideFieldStyle = {
-  gridColumn: '1 / -1',
-};
-
-const labelStyle = {
-  display: 'block',
-  marginBottom: '8px',
-  fontSize: '13px',
-  color: 'var(--screen-text)',
-  fontWeight: 700,
-};
-
-const fieldStyle = {
-  width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-field-text)',
-};
-
-const selectFieldStyle = {
-  ...fieldStyle,
-  appearance: 'none' as const,
-  WebkitAppearance: 'none' as const,
-  MozAppearance: 'none' as const,
-  paddingRight: '44px',
-  backgroundImage:
-    'linear-gradient(45deg, transparent 50%, #cbd5e1 50%), linear-gradient(135deg, #cbd5e1 50%, transparent 50%)',
-  backgroundPosition: 'calc(100% - 22px) calc(50% - 3px), calc(100% - 16px) calc(50% - 3px)',
-  backgroundSize: '6px 6px, 6px 6px',
-  backgroundRepeat: 'no-repeat',
-  colorScheme: 'normal' as const,
-};
-
-const selectOptionStyle = {
-  backgroundColor: 'var(--screen-select-option-bg)',
-  color: 'var(--screen-select-option-text)',
-};
-
-const secondaryButton = {
-  padding: '12px 16px',
-  background: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  border: '1px solid var(--screen-border-strong)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const primaryButton = {
-  padding: '14px 18px',
-  borderRadius: '16px',
-  border: '1px solid rgba(96, 165, 250, 0.24)',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  fontWeight: 800,
-  cursor: 'pointer',
-  boxShadow: '0 16px 32px rgba(37, 99, 235, 0.28)',
-};
-
-const pickerButtonStyle = {
-  width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-field-text)',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-
-const pickerMenuStyle = {
-  position: 'absolute' as const,
-  top: 'calc(100% + 8px)',
-  left: 0,
-  right: 0,
-  background: 'var(--screen-menu-bg)',
-  border: '1px solid var(--screen-border-strong)',
+const card: CSSProperties = {
+  background: 'var(--na-surface)',
+  border: '1px solid var(--na-border)',
   borderRadius: '18px',
-  boxShadow: '0 18px 44px rgba(2, 6, 23, 0.45)',
-  zIndex: 20,
-  overflow: 'hidden',
-  backdropFilter: 'blur(16px)',
+  boxShadow: 'var(--na-shadow-md)',
 };
 
-const pickerSearchWrapStyle = {
-  padding: '12px',
-  borderBottom: '1px solid rgba(148, 163, 184, 0.12)',
+const cardInner: CSSProperties = { padding: '20px 22px' };
+
+const sectionLabel: CSSProperties = {
+  fontSize: '10px', fontWeight: 700, letterSpacing: '0.16em',
+  textTransform: 'uppercase', color: 'var(--na-accent)', marginBottom: '14px',
 };
 
-const pickerListStyle = {
-  maxHeight: '280px',
-  overflowY: 'auto' as const,
-  padding: '8px',
-  display: 'grid',
-  gap: '8px',
+const formGrid: CSSProperties = {
+  display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px',
 };
 
-const pickerInfoStyle = {
-  padding: '12px',
-  borderRadius: '12px',
-  backgroundColor: 'var(--screen-soft-fill)',
-  color: 'var(--screen-muted, #475569)',
+const fieldLabel: CSSProperties = {
+  display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--na-text-2)', marginBottom: '6px',
 };
 
-const pickerErrorStyle = {
-  padding: '12px',
-  borderRadius: '12px',
-  backgroundColor: 'rgba(127, 29, 29, 0.24)',
-  color: '#fca5a5',
-  border: '1px solid rgba(252, 165, 165, 0.24)',
+const inputBase: CSSProperties = {
+  width: '100%', padding: '11px 14px', borderRadius: '12px',
+  border: '1px solid var(--na-border-strong)', background: 'var(--na-field-bg)',
+  color: 'var(--na-field-text)', fontSize: '14px', outline: 'none',
+  boxSizing: 'border-box',
 };
 
-const pickerOptionStyle = {
-  padding: '12px 14px',
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border)',
-  backgroundColor: 'var(--screen-soft-fill)',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  color: 'var(--screen-text)',
-  fontWeight: 600,
+const selectField: CSSProperties = {
+  ...inputBase,
+  appearance: 'none', WebkitAppearance: 'none', MozAppearance: 'none',
+  backgroundImage: 'linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%)',
+  backgroundPosition: 'calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px)',
+  backgroundSize: '5px 5px, 5px 5px', backgroundRepeat: 'no-repeat',
+  colorScheme: 'normal',
 };
 
-const pickerOptionActiveStyle = {
-  border: '1px solid rgba(96, 165, 250, 0.36)',
-  backgroundColor: 'rgba(30, 64, 175, 0.32)',
+const teamBtn: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: '8px',
+  padding: '10px 18px', borderRadius: '12px',
+  border: '1px solid var(--na-border-strong)', background: 'var(--na-surface-2)',
+  color: 'var(--na-text)', cursor: 'pointer', fontWeight: 700, fontSize: '14px',
+  transition: 'all 0.2s ease',
 };
 
-const infoCardStyle = {
-  gridColumn: '1 / -1',
-  borderRadius: '18px',
-  padding: '18px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
+const infoChip: CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: '3px',
+  padding: '12px 14px', borderRadius: '12px',
+  background: 'var(--na-surface-2)', border: '1px solid var(--na-border)',
 };
 
-const infoLineStyle = {
-  margin: '0 0 8px 0',
-  color: 'var(--screen-text)',
+const infoChipLabel: CSSProperties = {
+  fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em',
+  textTransform: 'uppercase', color: 'var(--na-text-3)',
 };
 
-const glassFieldCardStyle = {
-  borderRadius: '18px',
-  padding: '16px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
+const infoChipValue: CSSProperties = {
+  fontSize: '13px', fontWeight: 600, color: 'var(--na-text)',
 };
 
-const helpTextStyle = {
-  marginTop: '8px',
-  fontSize: '12px',
-  color: 'var(--screen-muted, #475569)',
+const lastAuditCard: CSSProperties = {
+  padding: '16px 18px', borderRadius: '14px',
+  background: 'var(--na-accent-dim)', border: '1px solid var(--na-accent-glow)',
 };
 
-const metricCommentWrapStyle = {
-  marginTop: '12px',
-  display: 'grid',
-  gap: '8px',
+const lastAuditMeta: CSSProperties = {
+  display: 'flex', flexDirection: 'column', gap: '2px',
+  padding: '8px 12px', borderRadius: '10px',
+  background: 'var(--na-surface)', border: '1px solid var(--na-border)',
 };
 
-const metricCommentLabelStyle = {
-  fontSize: '12px',
-  color: '#93c5fd',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.1em',
+const pickerDropdown: CSSProperties = {
+  position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
+  background: 'var(--na-surface)', border: '1px solid var(--na-border-strong)',
+  borderRadius: '16px', boxShadow: 'var(--na-shadow-lg)', zIndex: 30, overflow: 'hidden',
 };
 
-const metricCommentFieldStyle = {
-  width: '100%',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-text)',
-  resize: 'vertical' as const,
+const pickerEmpty: CSSProperties = {
+  padding: '16px 12px', fontSize: '13px', color: 'var(--na-text-3)', textAlign: 'center',
 };
 
-const warningBannerStyle = {
-  marginTop: '18px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'rgba(127, 29, 29, 0.22)',
-  border: '1px solid rgba(252, 165, 165, 0.24)',
-  color: '#fecaca',
-  fontWeight: 700,
+const pickerOption: CSSProperties = {
+  width: '100%', textAlign: 'left', padding: '10px 12px',
+  borderRadius: '10px', border: '1px solid transparent',
+  background: 'transparent', color: 'var(--na-text)', cursor: 'pointer',
+  marginBottom: '2px', transition: 'background 0.15s',
 };
 
-const scoreCardStyle = {
-  marginTop: '20px',
-  borderRadius: '18px',
-  padding: '18px',
-  border: '1px solid rgba(96, 165, 250, 0.2)',
-  background: 'var(--screen-highlight-bg)',
+const pickerOptionActive: CSSProperties = {
+  background: 'var(--na-accent-dim)', border: '1px solid var(--na-accent-glow)',
 };
 
-const scoreLabelStyle = {
-  color: '#93c5fd',
-  fontSize: '13px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-  marginBottom: '10px',
+const metricCard: CSSProperties = {
+  padding: '14px 16px', borderRadius: '14px',
+  border: '1px solid var(--na-border)', background: 'var(--na-surface)',
+  borderLeft: '3px solid transparent', transition: 'border-color 0.2s',
 };
 
-const scoreValueStyle = {
-  fontSize: '36px',
-  fontWeight: 800,
-  color: 'var(--screen-heading)',
+const metricName: CSSProperties = {
+  fontSize: '14px', fontWeight: 600, color: 'var(--na-text)',
+  display: 'flex', alignItems: 'center', gap: '8px',
 };
 
-
-const actionRowStyle = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-  marginTop: '24px',
+const metricPts: CSSProperties = {
+  fontSize: '11px', fontWeight: 700, color: 'var(--na-text-3)',
+  background: 'var(--na-surface-2)', padding: '2px 8px', borderRadius: '999px',
 };
 
-const errorBannerStyle = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'rgba(127, 29, 29, 0.24)',
-  border: '1px solid rgba(252, 165, 165, 0.24)',
-  color: '#fecaca',
-  fontWeight: 700,
+const lockedBadge: CSSProperties = {
+  marginTop: '3px', fontSize: '11px', color: 'var(--na-text-3)',
 };
 
-const successBannerStyle = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'rgba(22, 101, 52, 0.24)',
-  border: '1px solid rgba(134, 239, 172, 0.22)',
-  color: '#bbf7d0',
-  fontWeight: 700,
+const qaNoteLabelStyle: CSSProperties = {
+  fontSize: '10px', fontWeight: 700, letterSpacing: '0.12em',
+  textTransform: 'uppercase', color: '#60a5fa', marginBottom: '6px',
 };
 
-const lastAuditCardStyle = {
-  gridColumn: '1 / -1',
-  borderRadius: '18px',
-  padding: '18px',
-  border: '1px solid rgba(96, 165, 250, 0.20)',
-  background: 'var(--screen-highlight-bg)',
-  boxShadow: '0 12px 28px rgba(37, 99, 235, 0.08)',
+const qaTextarea: CSSProperties = {
+  ...inputBase, resize: 'vertical' as const, fontSize: '13px',
 };
 
-const lastAuditHeaderRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'center',
-  flexWrap: 'wrap' as const,
-  marginBottom: '14px',
+const autoFailBanner: CSSProperties = {
+  marginTop: '16px', padding: '14px 18px', borderRadius: '14px',
+  background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.24)',
+  color: '#fca5a5', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '10px',
 };
 
-const lastAuditEyebrowStyle = {
-  color: 'var(--screen-accent)',
-  fontSize: '11px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.16em',
-  marginBottom: '6px',
+const scoreSummaryCard: CSSProperties = {
+  marginTop: '18px', padding: '20px 24px', borderRadius: '18px',
+  background: 'var(--na-surface-2)', border: '1px solid var(--na-border-strong)',
 };
 
-const lastAuditTitleStyle = {
-  color: 'var(--screen-heading)',
-  fontSize: '22px',
-  fontWeight: 800,
-  lineHeight: 1.1,
+const btnPrimary: CSSProperties = {
+  padding: '13px 22px', borderRadius: '13px',
+  background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
+  color: '#fff', border: '1px solid rgba(96,165,250,0.3)',
+  fontWeight: 700, fontSize: '14px', cursor: 'pointer',
+  boxShadow: '0 6px 20px rgba(37,99,235,0.35)', letterSpacing: '0.01em',
 };
 
-const lastAuditBadgeStyle = {
-  padding: '10px 14px',
-  borderRadius: '999px',
-  border: '1px solid var(--screen-score-pill-border)',
-  background: 'var(--screen-score-pill-bg)',
-  color: 'var(--screen-score-pill-text)',
-  fontSize: '14px',
-  fontWeight: 800,
+const btnSecondary: CSSProperties = {
+  padding: '13px 18px', borderRadius: '13px',
+  background: 'var(--na-surface)', color: 'var(--na-text)',
+  border: '1px solid var(--na-border-strong)',
+  fontWeight: 600, fontSize: '14px', cursor: 'pointer',
 };
 
-const lastAuditGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '12px',
+const errorBanner: CSSProperties = {
+  marginBottom: '16px', padding: '13px 16px', borderRadius: '13px',
+  background: 'rgba(239,68,68,0.10)', border: '1px solid rgba(239,68,68,0.24)',
+  color: '#fca5a5', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px',
 };
 
-const lastAuditInfoItemStyle = {
-  borderRadius: '14px',
-  padding: '12px 14px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-note-bg)',
-  display: 'grid',
-  gap: '6px',
+const successBanner: CSSProperties = {
+  marginBottom: '16px', padding: '13px 16px', borderRadius: '13px',
+  background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.24)',
+  color: '#6ee7b7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px',
 };
-
-const lastAuditInfoLabelStyle = {
-  color: 'var(--screen-muted)',
-  fontSize: '11px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-
-const lastAuditInfoValueStyle = {
-  color: 'var(--screen-heading)',
-  fontSize: '14px',
-  fontWeight: 700,
-  lineHeight: 1.4,
-};
-
 
 export default NewAuditSupabase;
