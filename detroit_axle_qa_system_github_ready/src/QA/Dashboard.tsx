@@ -197,7 +197,7 @@ function useDashboardStyles() {
     const el = document.createElement('style');
     el.id = id;
     el.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+      @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,400;10..48,500;10..48,600;10..48,700;10..48,800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
       .dash-root { font-family: 'Outfit', sans-serif; }
 
@@ -266,8 +266,18 @@ function useDashboardStyles() {
       .dash-tag-info.light { background: rgba(99,102,241,.1); color: #3730a3; border-color: rgba(99,102,241,.25); }
       .dash-tag-success.light { background: rgba(16,185,129,.1); color: #065f46; border-color: rgba(16,185,129,.25); }
 
-      .dash-mono { font-family: 'JetBrains Mono', monospace; }
-      .dash-display { font-family: 'Syne', sans-serif; }
+      .dash-mono {
+        font-family: 'Outfit', sans-serif;
+        font-variant-numeric: tabular-nums lining-nums;
+        font-feature-settings: 'tnum' 1, 'lnum' 1;
+        letter-spacing: -0.01em;
+      }
+      .dash-display {
+        font-family: 'Bricolage Grotesque', 'Outfit', sans-serif;
+        font-variant-numeric: tabular-nums lining-nums;
+        font-feature-settings: 'tnum' 1, 'lnum' 1;
+        letter-spacing: -0.02em;
+      }
 
       /* Sparkline pseudo bars */
       .dash-sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; }
