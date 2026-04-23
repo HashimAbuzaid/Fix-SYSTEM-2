@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 
 type MonitoringStatus = 'active' | 'resolved';
@@ -366,11 +366,21 @@ function MonitoringSupabase() {
   }, [items, statusFilter, teamFilter, searchText]);
 
   if (loading) {
-    return <div style={{ color: 'var(--screen-muted)' }}>Loading monitoring...</div>;
+    return (
+      <div
+        data-no-theme-invert="true"
+        style={{ color: 'var(--screen-muted)', ...(themeVars as CSSProperties) }}
+      >
+        Loading monitoring...
+      </div>
+    );
   }
 
   return (
-    <div style={{ color: 'var(--screen-field-text)' }}>
+    <div
+      data-no-theme-invert="true"
+      style={{ color: 'var(--screen-field-text)', ...(themeVars as CSSProperties) }}
+    >
       <div style={pageHeaderStyle}>
         <div>
           <div style={sectionEyebrow}>Operational Alerts</div>
