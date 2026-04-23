@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -59,10 +59,131 @@ type NavItem = { path: RoutePath; label: string; group: string };
 const LOGO_MARK_SRC = '/detroit-axle-mark.png';
 const LOGO_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
 const SIDEBAR_COLLAPSED_WIDTH = 72;
-const SIDEBAR_EXPANDED_WIDTH = 264;
-const SIDEBAR_ITEM_HEIGHT = 48;
-const SIDEBAR_ITEM_GAP = 4;
-const EXPAND_EASE = '220ms cubic-bezier(0.22, 1, 0.36, 1)';
+const SIDEBAR_EXPANDED_WIDTH = 272;
+const SIDEBAR_ITEM_HEIGHT = 46;
+const SIDEBAR_ITEM_GAP = 3;
+const EXPAND_EASE = '240ms cubic-bezier(0.22, 1, 0.36, 1)';
+
+// ─────────────────────────────────────────────────────────────
+// Global style injection
+// ─────────────────────────────────────────────────────────────
+function useGlobalStyles() {
+  useEffect(() => {
+    const id = 'da-global-v3';
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id;
+    el.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,400;10..48,600;10..48,700;10..48,800;10..48,900&family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      ::-webkit-scrollbar { width: 4px; height: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.25); border-radius: 999px; }
+      ::-webkit-scrollbar-thumb:hover { background: rgba(148,163,184,0.45); }
+
+      @keyframes da-spin-ring {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes da-spin-ring-reverse {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(-360deg); }
+      }
+      @keyframes da-fade-up {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes da-fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes da-pulse-dot {
+        0%, 100% { opacity: 0.25; transform: scale(0.75); }
+        50% { opacity: 1; transform: scale(1); }
+      }
+      @keyframes da-clock-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+      }
+      @keyframes da-status-ring {
+        0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); }
+        70% { box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+        100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+      }
+      @keyframes da-indicator-slide {
+        from { height: 0; opacity: 0; }
+        to { height: 24px; opacity: 1; }
+      }
+      @keyframes da-nav-item-in {
+        from { opacity: 0; transform: translateX(-6px); }
+        to { opacity: 1; transform: translateX(0); }
+      }
+      @keyframes da-shimmer-load {
+        0% { background-position: -300% 0; }
+        100% { background-position: 300% 0; }
+      }
+      @keyframes da-top-bar-glow {
+        0%, 100% { opacity: 0.8; }
+        50% { opacity: 1; }
+      }
+
+      /* Date input picker icon theming */
+      input[type="date"]::-webkit-calendar-picker-indicator {
+        filter: invert(0.65) brightness(1.3) hue-rotate(200deg);
+        cursor: pointer;
+        opacity: 0.75;
+        transition: opacity 150ms;
+      }
+      input[type="date"]::-webkit-calendar-picker-indicator:hover {
+        opacity: 1;
+      }
+
+      /* Prevent blue highlight on nav buttons */
+      button { -webkit-tap-highlight-color: transparent; }
+      button:focus-visible { outline: 2px solid rgba(59,130,246,0.7); outline-offset: 2px; border-radius: 10px; }
+    `;
+    document.head.appendChild(el);
+    return () => { document.getElementById(id)?.remove(); };
+  }, []);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Live Clock
+// ─────────────────────────────────────────────────────────────
+function LiveClock({ isDark }: { isDark: boolean }) {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hh = now.getHours().toString().padStart(2, '0');
+  const mm = now.getMinutes().toString().padStart(2, '0');
+  const ss = now.getSeconds().toString().padStart(2, '0');
+  const textColor = isDark ? 'rgba(148,163,184,0.9)' : 'rgba(100,116,139,0.9)';
+
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: '1px',
+      fontFamily: "'DM Mono', monospace",
+      fontSize: '12px',
+      fontWeight: 500,
+      color: textColor,
+      letterSpacing: '0.04em',
+      userSelect: 'none',
+    }}>
+      <span>{hh}</span>
+      <span style={{ animation: 'da-clock-blink 1s step-end infinite', opacity: 1 }}>:</span>
+      <span>{mm}</span>
+      <span style={{ animation: 'da-clock-blink 1s step-end infinite 0.5s', opacity: 1 }}>:</span>
+      <span style={{ opacity: 0.6 }}>{ss}</span>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────
 // Nav group definitions
@@ -74,6 +195,16 @@ const NAV_GROUPS: Record<string, string[]> = {
   Analytics:  ['Agent Feedback', 'Monitoring', 'Team Heatmap'],
   Management: ['Accounts', 'Supervisor Requests', 'Reports'],
   Account:    ['My Admin Profile', 'My QA Profile', 'My Supervisor Profile', 'Supervisor Requests'],
+};
+
+const GROUP_COLORS: Record<string, string> = {
+  Core:       '#3b82f6',
+  Audits:     '#8b5cf6',
+  Data:       '#06b6d4',
+  Analytics:  '#f59e0b',
+  Management: '#ef4444',
+  Account:    '#10b981',
+  Other:      '#6b7280',
 };
 
 function getNavGroup(label: string): string {
@@ -169,7 +300,7 @@ function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
 // ─────────────────────────────────────────────────────────────
 function SunIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="5"/>
       <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
       <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
@@ -181,7 +312,7 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
     </svg>
   );
@@ -288,27 +419,42 @@ function ProfilePanel({
   const initials = getUserInitials(profile);
   return (
     <div style={styles.profilePanel}>
-      {/* Avatar row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
         <div style={{
-          width: '56px',
-          height: '56px',
-          borderRadius: '50%',
-          background: theme.headerUserAvatarBg,
-          color: theme.headerUserAvatarText,
+          width: '60px',
+          height: '60px',
+          borderRadius: '18px',
+          background: `linear-gradient(135deg, ${theme.headerUserAvatarBg} 0%, rgba(37,99,235,0.6) 100%)`,
+          color: '#fff',
           display: 'grid',
           placeItems: 'center',
-          fontSize: '18px',
+          fontSize: '20px',
           fontWeight: 800,
-          fontFamily: "'Syne', sans-serif",
-          boxShadow: `0 0 0 3px ${theme.avatarRingColor}`,
+          fontFamily: "'Bricolage Grotesque', sans-serif",
+          boxShadow: `0 0 0 2px rgba(59,130,246,0.3), 0 8px 24px rgba(37,99,235,0.25)`,
           flexShrink: 0,
+          letterSpacing: '-0.02em',
         }}>
           {initials}
         </div>
         <div>
-          <div style={styles.sectionEyebrow}>Profile</div>
-          <h2 style={{ marginTop: 0, marginBottom: 0, color: theme.brandTitle, fontFamily: "'Syne', sans-serif", fontSize: '22px' }}>
+          <div style={{
+            fontSize: '11px',
+            fontWeight: 800,
+            letterSpacing: '0.12em',
+            textTransform: 'uppercase',
+            color: theme.brandAccent,
+            marginBottom: '4px',
+            fontFamily: "'DM Sans', sans-serif",
+          }}>Profile</div>
+          <h2 style={{
+            margin: 0,
+            color: theme.brandTitle,
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+            fontSize: '24px',
+            fontWeight: 800,
+            letterSpacing: '-0.02em',
+          }}>
             {title}
           </h2>
         </div>
@@ -403,7 +549,7 @@ function SupervisorRoutes({
 }
 
 // ─────────────────────────────────────────────────────────────
-// LoadingScreen
+// LoadingScreen — orbital ring design
 // ─────────────────────────────────────────────────────────────
 function LoadingScreen({
   styles,
@@ -414,33 +560,263 @@ function LoadingScreen({
   theme: ReturnType<typeof getThemePalette>;
   message?: string;
 }) {
+  const isDark = theme.bodyBackground.includes('5,9') || theme.bodyBackground.includes('10,12');
+  const bg = isDark ? '#060c1a' : '#f1f5f9';
+  const cardBg = isDark ? 'rgba(10,18,40,0.95)' : 'rgba(255,255,255,0.97)';
+  const textColor = isDark ? '#f1f5f9' : '#0f172a';
+  const subtextColor = isDark ? '#64748b' : '#94a3b8';
+  const ringOuter = isDark ? 'rgba(37,99,235,0.3)' : 'rgba(37,99,235,0.15)';
+  const ringInner = 'rgba(37,99,235,0.7)';
+
   return (
-    <div style={styles.loadingShell}>
-      <div style={styles.loadingCard}>
-        <img src={LOGO_MARK_SRC} alt="Detroit Axle" style={styles.loadingBrandMark} />
-        <h2 style={{
-          margin: '0 0 6px 0',
-          fontSize: '22px',
-          fontWeight: 800,
-          color: theme.loadingText,
-          fontFamily: "'Syne', sans-serif",
-          letterSpacing: '-0.02em',
-        }}>
-          Detroit Axle QA
-        </h2>
-        <p style={styles.loadingSubtext}>{message}</p>
-        {/* Three-dot pulse */}
-        <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '4px' }}>
-          {[0, 1, 2].map((i) => (
-            <span
-              key={i}
-              style={{
-                ...styles.loadingDot,
-                animation: `da-pulse-dot 1.2s ease-in-out ${i * 160}ms infinite`,
-              }}
-            />
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      background: bg,
+      display: 'grid',
+      placeItems: 'center',
+      zIndex: 9999,
+    }}>
+      {/* Ambient glow */}
+      <div style={{
+        position: 'absolute',
+        top: '20%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '600px',
+        height: '300px',
+        background: 'radial-gradient(ellipse, rgba(37,99,235,0.12) 0%, transparent 70%)',
+        pointerEvents: 'none',
+      }} />
+
+      <div style={{
+        position: 'relative',
+        background: cardBg,
+        border: isDark ? '1px solid rgba(148,163,184,0.1)' : '1px solid rgba(203,213,225,0.8)',
+        borderRadius: '32px',
+        padding: '48px 56px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '24px',
+        backdropFilter: 'blur(24px)',
+        boxShadow: isDark
+          ? '0 40px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05)'
+          : '0 40px 80px rgba(15,23,42,0.1)',
+        animation: 'da-fade-up 0.4s ease both',
+      }}>
+        {/* Orbital ring animation */}
+        <div style={{ position: 'relative', width: '72px', height: '72px' }}>
+          {/* Outer ring */}
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: '50%',
+            border: `2px solid ${ringOuter}`,
+            borderTopColor: ringInner,
+            animation: 'da-spin-ring 1s linear infinite',
+          }} />
+          {/* Inner ring */}
+          <div style={{
+            position: 'absolute',
+            inset: '12px',
+            borderRadius: '50%',
+            border: `2px solid ${ringOuter}`,
+            borderBottomColor: 'rgba(139,92,246,0.8)',
+            animation: 'da-spin-ring-reverse 0.7s linear infinite',
+          }} />
+          {/* Logo mark center */}
+          <div style={{
+            position: 'absolute',
+            inset: '22px',
+            borderRadius: '50%',
+            background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
+            display: 'grid',
+            placeItems: 'center',
+          }}>
+            <img src={LOGO_MARK_SRC} alt="" style={{ width: '20px', height: '20px', objectFit: 'contain', opacity: 0.8 }} />
+          </div>
+        </div>
+
+        {/* Brand */}
+        <div style={{ textAlign: 'center' }}>
+          <div style={{
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+            fontSize: '22px',
+            fontWeight: 800,
+            color: textColor,
+            letterSpacing: '-0.03em',
+            marginBottom: '6px',
+          }}>
+            Detroit Axle <span style={{ color: '#3b82f6' }}>QA</span>
+          </div>
+          <div style={{
+            fontFamily: "'DM Sans', sans-serif",
+            fontSize: '13px',
+            color: subtextColor,
+            fontWeight: 500,
+          }}>
+            {message}
+          </div>
+        </div>
+
+        {/* Progress dots */}
+        <div style={{ display: 'flex', gap: '6px' }}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: '#3b82f6',
+              animation: `da-pulse-dot 1.4s ease-in-out ${i * 200}ms infinite`,
+            }} />
           ))}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// SidebarUserCard — shown at bottom of sidebar
+// ─────────────────────────────────────────────────────────────
+function SidebarUserCard({
+  profile,
+  initials,
+  expanded,
+  isDark,
+  onLogout,
+}: {
+  profile: UserProfile;
+  initials: string;
+  expanded: boolean;
+  isDark: boolean;
+  onLogout: () => void;
+}) {
+  const name = profile.display_name || profile.agent_name || profile.email || '';
+  const roleColors: Record<string, string> = {
+    admin: '#ef4444',
+    qa: '#3b82f6',
+    supervisor: '#8b5cf6',
+    agent: '#10b981',
+  };
+  const roleColor = roleColors[profile.role || 'qa'] || '#6b7280';
+
+  return (
+    <div style={{
+      marginTop: 'auto',
+      padding: '8px',
+      borderTop: isDark ? '1px solid rgba(148,163,184,0.08)' : '1px solid rgba(203,213,225,0.25)',
+    }}>
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: expanded ? '10px' : '0',
+        padding: expanded ? '10px' : '6px',
+        borderRadius: '14px',
+        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+        justifyContent: expanded ? 'flex-start' : 'center',
+        transition: `all ${EXPAND_EASE}`,
+        overflow: 'hidden',
+      }}>
+        {/* Avatar */}
+        <div style={{
+          width: '32px',
+          height: '32px',
+          borderRadius: '10px',
+          background: `linear-gradient(135deg, ${roleColor}33 0%, ${roleColor}55 100%)`,
+          border: `1.5px solid ${roleColor}55`,
+          display: 'grid',
+          placeItems: 'center',
+          fontSize: '11px',
+          fontWeight: 800,
+          color: roleColor,
+          fontFamily: "'Bricolage Grotesque', sans-serif",
+          flexShrink: 0,
+          position: 'relative',
+        }}>
+          {initials}
+          {/* Online dot */}
+          <div style={{
+            position: 'absolute',
+            bottom: '-2px',
+            right: '-2px',
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: '#10b981',
+            border: isDark ? '1.5px solid #0a1628' : '1.5px solid #f8fafc',
+            animation: 'da-status-ring 2s ease-in-out infinite',
+          }} />
+        </div>
+
+        {/* Name + role */}
+        <div style={{
+          flex: 1,
+          minWidth: 0,
+          opacity: expanded ? 1 : 0,
+          transform: expanded ? 'translateX(0)' : 'translateX(-8px)',
+          transition: 'opacity 160ms ease, transform 200ms ease',
+          pointerEvents: expanded ? 'auto' : 'none',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            fontSize: '12px',
+            fontWeight: 700,
+            color: isDark ? '#e2e8f0' : '#1e293b',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontFamily: "'DM Sans', sans-serif",
+          }}>{name}</div>
+          <div style={{
+            fontSize: '10px',
+            fontWeight: 600,
+            color: roleColor,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            marginTop: '1px',
+            fontFamily: "'DM Sans', sans-serif",
+          }}>{profile.role}</div>
+        </div>
+
+        {/* Logout mini button */}
+        {expanded && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign out"
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              border: isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.6)',
+              background: 'transparent',
+              color: isDark ? '#64748b' : '#94a3b8',
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              transition: 'all 140ms ease',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.color = '#ef4444';
+              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(239,68,68,0.4)';
+              (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.color = isDark ? '#64748b' : '#94a3b8';
+              (e.currentTarget as HTMLElement).style.borderColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(203,213,225,0.6)';
+              (e.currentTarget as HTMLElement).style.background = 'transparent';
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -454,6 +830,8 @@ function AppShell() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  useGlobalStyles();
+
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth
@@ -464,6 +842,7 @@ function AppShell() {
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
   const isCompactLayout = viewportWidth < 1100;
+  const isDark = themeMode === 'dark';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -480,6 +859,7 @@ function AppShell() {
     document.documentElement.style.colorScheme = themeMode === 'light' ? 'light' : 'dark';
     document.body.style.background = theme.bodyBackground;
     document.body.style.color = theme.bodyColor;
+    document.body.style.fontFamily = "'DM Sans', sans-serif";
     applyThemeCssVariables(themeMode);
   }, [themeMode, theme.bodyBackground, theme.bodyColor]);
 
@@ -511,15 +891,8 @@ function AppShell() {
     return Object.entries(groups) as [string, NavItem[]][];
   }, [profile]);
 
-  // ── Loading ──
-  if (loading) {
-    return <LoadingScreen styles={styles} theme={theme} />;
-  }
-
-  if (recoveryMode) {
-    return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
-  }
-
+  if (loading) return <LoadingScreen styles={styles} theme={theme} />;
+  if (recoveryMode) return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
   if (!auth.session) return <Login />;
 
   if (!profile) {
@@ -527,16 +900,13 @@ function AppShell() {
       <div style={styles.loadingShell}>
         <div style={styles.errorCard}>
           <div style={styles.sectionEyebrow}>Profile Error</div>
-          <h1 style={{ marginTop: 0, color: theme.errorText, fontFamily: "'Syne', sans-serif" }}>
+          <h1 style={{ marginTop: 0, color: theme.errorText, fontFamily: "'Bricolage Grotesque', sans-serif" }}>
             Profile not found
           </h1>
           <p style={{ color: theme.loadingSubtext, marginBottom: '20px' }}>
-            {auth.profileError ||
-              'This user exists in Supabase Auth but does not have a profile row yet.'}
+            {auth.profileError || 'This user exists in Supabase Auth but does not have a profile row yet.'}
           </p>
-          <button onClick={logout} style={styles.logoutButton}>
-            Logout
-          </button>
+          <button onClick={logout} style={styles.logoutButton}>Logout</button>
         </div>
       </div>
     );
@@ -552,7 +922,44 @@ function AppShell() {
   const expandedSidebar = !isCompactLayout && isSidebarExpanded;
   const userInitials = getUserInitials(profile);
 
-  // ── Desktop sidebar layout ──
+  // Active group color
+  const activeItem = navItems.find(item => item.path === location.pathname);
+  const activeGroupColor = activeItem ? (GROUP_COLORS[activeItem.group] || '#3b82f6') : '#3b82f6';
+
+  // ─── Styles ───────────────────────────────────────────────
+  const headerShellStyle: CSSProperties = {
+    position: 'sticky',
+    top: 0,
+    zIndex: 100,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '0 20px',
+    height: '64px',
+    background: isDark
+      ? 'rgba(5,9,26,0.88)'
+      : 'rgba(248,250,255,0.92)',
+    backdropFilter: 'blur(20px)',
+    WebkitBackdropFilter: 'blur(20px)',
+    borderBottom: isDark
+      ? '1px solid rgba(148,163,184,0.08)'
+      : '1px solid rgba(203,213,225,0.7)',
+    boxShadow: isDark
+      ? '0 1px 0 rgba(255,255,255,0.03), 0 4px 16px rgba(0,0,0,0.3)'
+      : '0 1px 0 rgba(0,0,0,0.04), 0 4px 16px rgba(15,23,42,0.06)',
+  };
+
+  const topAccentBarStyle: CSSProperties = {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '3px',
+    background: `linear-gradient(90deg, #1d4ed8 0%, #3b82f6 35%, #8b5cf6 65%, #06b6d4 100%)`,
+    zIndex: 101,
+    animation: 'da-top-bar-glow 3s ease-in-out infinite',
+  };
+
   const desktopShellStyle: CSSProperties = {
     display: 'grid',
     gridTemplateColumns: hasSidebarRail
@@ -564,12 +971,12 @@ function AppShell() {
 
   const sidebarDockStyle: CSSProperties = {
     position: 'sticky',
-    top: '76px',
+    top: '80px',
     alignSelf: 'start',
     width: `${SIDEBAR_COLLAPSED_WIDTH}px`,
-    height: 'calc(100vh - 92px)',
-    maxHeight: 'calc(100vh - 92px)',
-    minHeight: '420px',
+    height: 'calc(100vh - 96px)',
+    maxHeight: 'calc(100vh - 96px)',
+    minHeight: '380px',
     zIndex: 10,
   };
 
@@ -578,86 +985,82 @@ function AppShell() {
     width: expandedSidebar ? `${SIDEBAR_EXPANDED_WIDTH}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
     minHeight: '100%',
     height: '100%',
-    padding: '8px',
-    borderRadius: '20px',
-    border: theme.panelBorder,
-    background: themeMode === 'light'
-      ? 'rgba(255,255,255,0.90)'
-      : 'rgba(6,12,26,0.92)',
+    padding: '8px 8px 0 8px',
+    borderRadius: '22px',
+    border: isDark
+      ? '1px solid rgba(148,163,184,0.1)'
+      : '1px solid rgba(203,213,225,0.7)',
+    background: isDark
+      ? 'rgba(8,14,32,0.92)'
+      : 'rgba(255,255,255,0.93)',
     boxShadow: expandedSidebar
-      ? '0 24px 56px rgba(0,0,0,0.36)'
-      : '0 12px 32px rgba(0,0,0,0.24)',
+      ? (isDark ? '0 32px 64px rgba(0,0,0,0.5)' : '0 32px 64px rgba(15,23,42,0.12)')
+      : (isDark ? '0 8px 24px rgba(0,0,0,0.3)' : '0 8px 24px rgba(15,23,42,0.06)'),
     display: 'flex',
     flexDirection: 'column',
-    gap: '0',
     overflow: 'hidden',
-    willChange: 'width, box-shadow',
+    backdropFilter: 'blur(24px)',
+    WebkitBackdropFilter: 'blur(24px)',
+    transition: `width ${EXPAND_EASE}, box-shadow 200ms ease`,
+    willChange: 'width',
     transform: 'translateZ(0)',
     backfaceVisibility: 'hidden',
-    backdropFilter: 'blur(20px)',
-    WebkitBackdropFilter: 'blur(20px)',
-    transition: `width ${EXPAND_EASE}, box-shadow 200ms ease`,
   };
 
-  // Sidebar header (logo area)
   const railHeaderStyle: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: expandedSidebar ? '10px' : '0',
-    padding: expandedSidebar ? '8px 10px 12px 10px' : '8px 4px 12px 4px',
-    borderBottom: themeMode === 'light'
-      ? '1px solid rgba(148,163,184,0.14)'
-      : '1px solid rgba(148,163,184,0.08)',
+    padding: expandedSidebar ? '10px 8px 14px 8px' : '10px 4px 14px 4px',
+    justifyContent: expandedSidebar ? 'flex-start' : 'center',
+    borderBottom: isDark
+      ? '1px solid rgba(148,163,184,0.07)'
+      : '1px solid rgba(203,213,225,0.3)',
     overflow: 'hidden',
     transition: `gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
   };
 
   const railLogoWrapStyle: CSSProperties = {
-    width: '40px',
-    height: '40px',
+    width: '38px',
+    height: '38px',
     borderRadius: '12px',
     padding: '5px',
-    background: themeMode === 'light'
-      ? 'rgba(239,246,255,0.96)'
-      : 'rgba(255,255,255,0.08)',
-    border: theme.metaBorder,
+    background: isDark
+      ? 'rgba(37,99,235,0.15)'
+      : 'rgba(37,99,235,0.08)',
+    border: isDark
+      ? '1px solid rgba(59,130,246,0.2)'
+      : '1px solid rgba(59,130,246,0.15)',
     display: 'grid',
     placeItems: 'center',
     overflow: 'hidden',
     flexShrink: 0,
-    justifySelf: 'center',
   };
 
   const railBrandTextStyle: CSSProperties = {
     display: 'grid',
-    gap: '2px',
+    gap: '1px',
     minWidth: 0,
     opacity: expandedSidebar ? 1 : 0,
-    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-8px)',
+    transform: expandedSidebar ? 'translateX(0)' : 'translateX(-10px)',
     transition: 'opacity 140ms ease, transform 180ms ease',
     pointerEvents: expandedSidebar ? 'auto' : 'none',
     overflow: 'hidden',
   };
 
-  // Nav rail
   const navRailStyle: CSSProperties = {
-    position: 'relative',
     flex: 1,
     minHeight: 0,
-    height: '100%',
     overflowY: 'auto',
     overflowX: 'hidden',
-    padding: '4px 4px 24px 0',
+    padding: '8px 0 8px 0',
     scrollbarWidth: 'thin',
-    scrollbarGutter: 'stable',
     scrollBehavior: 'smooth',
     WebkitOverflowScrolling: 'touch',
   };
 
   const navButtonDesktopStyle = (active: boolean, hovered: boolean): CSSProperties => ({
-    ...styles.navButton,
     position: 'relative',
-    zIndex: 1,
     display: 'flex',
     alignItems: 'center',
     gap: expandedSidebar ? '10px' : '0',
@@ -668,83 +1071,182 @@ function AppShell() {
     borderRadius: '14px',
     padding: expandedSidebar ? '0 12px' : '0',
     justifyContent: expandedSidebar ? 'flex-start' : 'center',
-    border: active ? theme.navButtonActiveBorder : '1px solid transparent',
+    border: active
+      ? `1px solid ${activeGroupColor}33`
+      : '1px solid transparent',
     background: active
-      ? theme.navButtonActiveBackground
-      : !active && hovered
-      ? themeMode === 'light' ? 'rgba(37,99,235,0.06)' : 'rgba(255,255,255,0.06)'
+      ? `linear-gradient(135deg, ${activeGroupColor}22 0%, ${activeGroupColor}15 100%)`
+      : hovered
+      ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(37,99,235,0.05)')
       : 'transparent',
     color: active
-      ? theme.navButtonActiveText
+      ? activeGroupColor
       : hovered
-      ? themeMode === 'light' ? '#2563eb' : '#93c5fd'
-      : theme.navButtonText,
-    boxShadow: active ? theme.navButtonActiveShadow : 'none',
+      ? (isDark ? '#93c5fd' : '#2563eb')
+      : (isDark ? '#94a3b8' : '#64748b'),
     overflow: 'hidden',
     whiteSpace: 'nowrap',
-    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, box-shadow 160ms ease, border-color 160ms ease`,
+    cursor: 'pointer',
+    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, border-color 160ms ease`,
     width: '100%',
+    fontFamily: "'DM Sans', sans-serif",
   });
 
   const navIconBubbleStyle = (active: boolean, hovered: boolean): CSSProperties => ({
-    width: '32px',
-    height: '32px',
-    borderRadius: '10px',
+    width: '30px',
+    height: '30px',
+    borderRadius: '9px',
     display: 'grid',
     placeItems: 'center',
     flexShrink: 0,
     color: active
-      ? '#ffffff'
+      ? activeGroupColor
       : hovered
-      ? themeMode === 'light' ? '#2563eb' : '#93c5fd'
-      : theme.navButtonText,
+      ? (isDark ? '#93c5fd' : '#2563eb')
+      : (isDark ? '#64748b' : '#94a3b8'),
     background: active
-      ? 'rgba(255,255,255,0.18)'
+      ? `${activeGroupColor}18`
       : hovered
-      ? themeMode === 'light' ? 'rgba(37,99,235,0.10)' : 'rgba(255,255,255,0.10)'
+      ? (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(37,99,235,0.08)')
       : 'transparent',
     transition: 'background 140ms ease, color 140ms ease',
   });
 
+  const activeIndicatorStyle = (active: boolean): CSSProperties => ({
+    position: 'absolute',
+    left: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    width: '3px',
+    height: active ? '22px' : '0',
+    borderRadius: '0 2px 2px 0',
+    background: activeGroupColor,
+    transition: 'height 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+    boxShadow: active ? `0 0 8px ${activeGroupColor}80` : 'none',
+  });
+
   const navLabelStyle = (active: boolean): CSSProperties => ({
     fontSize: '13px',
-    fontWeight: 600,
+    fontWeight: active ? 700 : 600,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     opacity: expandedSidebar ? 1 : 0,
     maxWidth: expandedSidebar ? '160px' : '0',
     transition: `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
-    color: active ? '#ffffff' : 'currentColor',
+    color: 'currentColor',
+    fontFamily: "'DM Sans', sans-serif",
   });
+
+  const navGroupLabelStyle: CSSProperties = {
+    padding: expandedSidebar ? '8px 12px 4px 12px' : '8px 0 4px 0',
+    fontSize: '10px',
+    fontWeight: 800,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    color: isDark ? 'rgba(100,116,139,0.7)' : 'rgba(148,163,184,0.8)',
+    overflow: 'hidden',
+    maxWidth: expandedSidebar ? '200px' : '0',
+    opacity: expandedSidebar ? 1 : 0,
+    transition: `max-width ${EXPAND_EASE}, opacity 120ms ease`,
+    whiteSpace: 'nowrap',
+    fontFamily: "'DM Sans', sans-serif",
+  };
+
+  const navDividerStyle: CSSProperties = {
+    height: '1px',
+    margin: expandedSidebar ? '6px 12px' : '6px 8px',
+    background: isDark ? 'rgba(148,163,184,0.06)' : 'rgba(203,213,225,0.4)',
+    transition: `margin ${EXPAND_EASE}`,
+  };
+
+  // Header right controls
+  const headerUserBadge: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    padding: '6px 12px 6px 8px',
+    borderRadius: '14px',
+    border: isDark ? '1px solid rgba(148,163,184,0.1)' : '1px solid rgba(203,213,225,0.7)',
+    background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)',
+  };
+
+  const headerAvatarStyle: CSSProperties = {
+    width: '32px',
+    height: '32px',
+    borderRadius: '10px',
+    background: `linear-gradient(135deg, rgba(37,99,235,0.6) 0%, rgba(139,92,246,0.6) 100%)`,
+    color: '#fff',
+    display: 'grid',
+    placeItems: 'center',
+    fontSize: '12px',
+    fontWeight: 800,
+    fontFamily: "'Bricolage Grotesque', sans-serif",
+    letterSpacing: '-0.01em',
+    flexShrink: 0,
+  };
+
+  const headerThemeBtnStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    borderRadius: '12px',
+    border: isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.8)',
+    background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)',
+    color: isDark ? '#94a3b8' : '#64748b',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif",
+    transition: 'all 140ms ease',
+  };
+
+  const headerLogoutBtnStyle: CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 14px',
+    borderRadius: '12px',
+    border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.2)',
+    background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(254,242,242,0.8)',
+    color: isDark ? '#fca5a5' : '#dc2626',
+    cursor: 'pointer',
+    fontSize: '12px',
+    fontWeight: 600,
+    fontFamily: "'DM Sans', sans-serif",
+    transition: 'all 140ms ease',
+  };
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
-      <div style={styles.appShell}>
+      {/* Top accent bar */}
+      <div style={topAccentBarStyle} />
+
+      <div style={{ ...styles.appShell, fontFamily: "'DM Sans', sans-serif", paddingTop: '3px' }}>
         {/* Ambient glows */}
         <div style={styles.backgroundGlowTop} />
         <div style={styles.backgroundGlowBottom} />
 
-        {/* ── Compact sticky header ── */}
-        <header style={styles.headerShell}>
-          {/* Left: brand */}
-          <div style={{ ...styles.headerLeft, gap: '10px' }}>
-            <div
-              style={{
-                width: '8px',
-                height: '52px',
-                borderRadius: '999px',
-                background: theme.brandAccent,
-                boxShadow: theme.brandAccentShadow,
-                flexShrink: 0,
-              }}
-            />
+        {/* ── Header ── */}
+        <header style={headerShellStyle}>
+          {/* Left: Brand */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '5px',
+              height: '40px',
+              borderRadius: '999px',
+              background: `linear-gradient(180deg, ${activeGroupColor} 0%, rgba(139,92,246,0.6) 100%)`,
+              boxShadow: `0 0 12px ${activeGroupColor}80`,
+              flexShrink: 0,
+              transition: 'background 400ms ease, box-shadow 400ms ease',
+            }} />
             <img
               src={LOGO_WORDMARK_SRC}
               alt="Detroit Axle"
               style={{
-                width: isCompactLayout ? '128px' : '220px',
-                height: isCompactLayout ? '28px' : '42px',
+                width: isCompactLayout ? '120px' : '180px',
+                height: isCompactLayout ? '26px' : '36px',
                 objectFit: 'contain',
                 objectPosition: 'left center',
                 display: 'block',
@@ -752,50 +1254,88 @@ function AppShell() {
             />
           </div>
 
-          {/* Center: breadcrumb */}
+          {/* Center: breadcrumb + clock */}
           {!isCompactLayout && (
-            <div style={styles.headerCenter}>
-              <span style={styles.headerCrumb}>Workspace</span>
-              <span style={styles.headerCrumbSep}>›</span>
-              <span style={styles.headerPageTitle}>{activeRouteLabel}</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                fontFamily: "'DM Sans', sans-serif",
+              }}>
+                <span style={{
+                  fontSize: '13px',
+                  color: isDark ? '#475569' : '#94a3b8',
+                  fontWeight: 500,
+                }}>Workspace</span>
+                <span style={{ color: isDark ? '#334155' : '#cbd5e1', fontSize: '14px' }}>›</span>
+                <span style={{
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  color: isDark ? '#e2e8f0' : '#1e293b',
+                  animation: 'da-fade-in 200ms ease',
+                  key: activeRouteLabel,
+                }}>{activeRouteLabel}</span>
+              </div>
+              <div style={{
+                width: '1px',
+                height: '16px',
+                background: isDark ? 'rgba(148,163,184,0.15)' : 'rgba(203,213,225,0.6)',
+              }} />
+              <LiveClock isDark={isDark} />
             </div>
           )}
 
           {/* Right: user + actions */}
-          <div style={styles.headerActions}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {!isCompactLayout && (
-              <div style={styles.headerUserBadge}>
-                <div style={styles.headerUserAvatar}>{userInitials}</div>
+              <div style={headerUserBadge}>
+                <div style={headerAvatarStyle}>{userInitials}</div>
                 <div>
-                  <div style={styles.headerUserName}>{profileLabel || profile.email}</div>
-                  <div style={styles.headerUserRole}>{profile.role}</div>
+                  <div style={{
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: isDark ? '#e2e8f0' : '#1e293b',
+                    fontFamily: "'DM Sans', sans-serif",
+                    lineHeight: 1.2,
+                  }}>{profileLabel || profile.email}</div>
+                  <div style={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color: activeGroupColor,
+                    fontFamily: "'DM Sans', sans-serif",
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                  }}>{profile.role}</div>
                 </div>
               </div>
             )}
 
             <button
               type="button"
-              onClick={() => setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light'))}
-              style={styles.headerThemeBtn}
-              title={themeMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              onClick={() => setThemeMode(prev => prev === 'light' ? 'dark' : 'light')}
+              style={headerThemeBtnStyle}
+              title={themeMode === 'light' ? 'Dark mode' : 'Light mode'}
             >
-              <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-                {themeMode === 'light' ? <MoonIcon /> : <SunIcon />}
-                {!isCompactLayout && (themeMode === 'light' ? 'Dark' : 'Light')}
-              </span>
+              {themeMode === 'light' ? <MoonIcon /> : <SunIcon />}
+              {!isCompactLayout && (themeMode === 'light' ? 'Dark' : 'Light')}
             </button>
 
-            <button type="button" onClick={logout} style={styles.headerLogoutBtn}>
-              Sign Out
+            <button type="button" onClick={logout} style={headerLogoutBtnStyle}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+              {!isCompactLayout && 'Sign Out'}
             </button>
           </div>
         </header>
 
-        {/* ── Main content area ── */}
+        {/* ── Main content ── */}
         {hasSidebarRail ? (
           <main style={styles.contentShell}>
             {isCompactLayout ? (
-              /* ── Mobile: horizontal scrolling nav ── */
               <>
                 <nav style={styles.navShell}>
                   <div style={styles.navScroller}>
@@ -809,10 +1349,12 @@ function AppShell() {
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
+                          fontFamily: "'DM Sans', sans-serif",
+                          fontWeight: 600,
                           ...(location.pathname === item.path ? styles.activeNavButton : {}),
                         }}
                       >
-                        <NavIconSvg label={item.label} size={15} />
+                        <NavIconSvg label={item.label} size={14} />
                         {item.label}
                       </button>
                     ))}
@@ -827,7 +1369,6 @@ function AppShell() {
                 </div>
               </>
             ) : (
-              /* ── Desktop: collapsible sidebar rail ── */
               <div style={desktopShellStyle}>
                 <aside
                   style={sidebarDockStyle}
@@ -845,26 +1386,25 @@ function AppShell() {
                     {/* Sidebar header */}
                     <div style={railHeaderStyle}>
                       <div style={railLogoWrapStyle}>
-                        <img
-                          src={LOGO_MARK_SRC}
-                          alt="Detroit Axle"
-                          style={{ width: '28px', height: '28px', objectFit: 'contain' }}
-                        />
+                        <img src={LOGO_MARK_SRC} alt="Detroit Axle" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
                       </div>
                       <div style={railBrandTextStyle}>
-                        <img
-                          src={LOGO_WORDMARK_SRC}
-                          alt="Detroit Axle"
-                          style={{ width: '110px', height: '18px', objectFit: 'contain', objectPosition: 'left center' }}
-                        />
-                        <span style={{
+                        <div style={{
+                          fontFamily: "'Bricolage Grotesque', sans-serif",
+                          fontSize: '14px',
+                          fontWeight: 800,
+                          letterSpacing: '-0.02em',
+                          color: isDark ? '#f1f5f9' : '#0f172a',
+                          whiteSpace: 'nowrap',
+                        }}>Detroit Axle</div>
+                        <div style={{
                           fontSize: '10px',
-                          color: themeMode === 'light' ? '#64748b' : '#475569',
-                          fontWeight: 500,
-                          letterSpacing: '0.04em',
-                        }}>
-                          QA System
-                        </span>
+                          fontWeight: 600,
+                          letterSpacing: '0.1em',
+                          textTransform: 'uppercase',
+                          color: isDark ? '#475569' : '#94a3b8',
+                          fontFamily: "'DM Sans', sans-serif",
+                        }}>QA System</div>
                       </div>
                     </div>
 
@@ -873,8 +1413,11 @@ function AppShell() {
                       {expandedSidebar
                         ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
                           <div key={groupName}>
-                            {gi > 0 && <div style={styles.navDivider} />}
-                            <div style={styles.navGroupLabel}>{groupName}</div>
+                            {gi > 0 && <div style={navDividerStyle} />}
+                            <div style={{
+                              ...navGroupLabelStyle,
+                              color: GROUP_COLORS[groupName] || '#6b7280',
+                            }}>{groupName}</div>
                             {groupItems.map((item) => {
                               const active = location.pathname === item.path;
                               const hovered = hoveredPath === item.path;
@@ -886,10 +1429,10 @@ function AppShell() {
                                   onMouseEnter={() => setHoveredPath(item.path)}
                                   onMouseLeave={() => setHoveredPath(null)}
                                   style={navButtonDesktopStyle(active, hovered)}
-                                  title={undefined}
                                 >
+                                  <div style={activeIndicatorStyle(active)} />
                                   <span style={navIconBubbleStyle(active, hovered)}>
-                                    <NavIconSvg label={item.label} size={16} />
+                                    <NavIconSvg label={item.label} size={15} />
                                   </span>
                                   <span style={navLabelStyle(active)}>{item.label}</span>
                                 </button>
@@ -910,8 +1453,9 @@ function AppShell() {
                               style={navButtonDesktopStyle(active, hovered)}
                               title={item.label}
                             >
+                              <div style={activeIndicatorStyle(active)} />
                               <span style={navIconBubbleStyle(active, hovered)}>
-                                <NavIconSvg label={item.label} size={16} />
+                                <NavIconSvg label={item.label} size={15} />
                               </span>
                               <span style={navLabelStyle(active)}>{item.label}</span>
                             </button>
@@ -919,10 +1463,18 @@ function AppShell() {
                         })
                       }
                     </div>
+
+                    {/* User card at bottom */}
+                    <SidebarUserCard
+                      profile={profile}
+                      initials={userInitials}
+                      expanded={expandedSidebar}
+                      isDark={isDark}
+                      onLogout={logout}
+                    />
                   </div>
                 </aside>
 
-                {/* Content panel */}
                 <div style={styles.contentInner}>
                   {isStaff ? (
                     <StaffRoutes profile={profile} styles={styles} theme={theme} />
@@ -934,7 +1486,6 @@ function AppShell() {
             )}
           </main>
         ) : (
-          /* ── Agent portal (no sidebar) ── */
           <main style={styles.contentShell}>
             <div style={styles.contentInner}>
               <AgentPortal currentUser={profile} />
