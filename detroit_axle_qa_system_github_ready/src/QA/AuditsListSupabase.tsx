@@ -104,12 +104,6 @@ const PROGRESS_GROUPS = [
 ] as const;
 
 type ProgressGroupKey = (typeof PROGRESS_GROUPS)[number]['key'];
-type ProgressColumn = {
-  index: number;
-  label: string;
-  groupKey: ProgressGroupKey;
-  groupLabel: string;
-};
 
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
@@ -232,6 +226,12 @@ function getScoreBand(score: number | null): 'strong' | 'medium' | 'weak' | 'emp
   if (score >= 90) return 'strong';
   if (score >= 75) return 'medium';
   return 'weak';
+}
+
+function getEvalBandStyle(
+  band: ReturnType<typeof getScoreBand>
+): CSSProperties {
+  return (s.evalBand as Record<ReturnType<typeof getScoreBand>, CSSProperties>)[band];
 }
 
 // ─── Main Component ────────────────────────────────────────────────────────────
@@ -920,13 +920,13 @@ function AuditsListSupabase() {
                         const isSel = selectedOffEvalIndexes.includes(col.index);
                         if (isOff) return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...s.evalOff, ...(isSel ? s.evalSelected : {}) }} title={`OFF – ${col.label}`}>OFF</div>;
                         const band = getScoreBand(ev.score);
-                        return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...s.evalBand[band], ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${ev.score}%` : 'No eval'}>{has ? `${Number(ev.score).toFixed(0)}%` : '—'}</div>;
+                        return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...getEvalBandStyle(band), ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${ev.score}%` : 'No eval'}>{has ? `${Number(ev.score).toFixed(0)}%` : '—'}</div>;
                       })}
                       <div style={s.metaCell}>
                         {row.latestAuditDate ? <div style={s.agentName}>{formatDateOnly(row.latestAuditDate)}</div> : hasOff ? <span style={s.offPill}>{offIdx.length === 1 ? `Eval ${offIdx[0] + 1}` : `${offIdx.length} OFF`}</span> : <span style={s.agentSub}>—</span>}
                       </div>
                       <div style={s.metaCell}>
-                        <span style={{ ...s.avgPill, ...s.evalBand[getScoreBand(row.averageScore)] }}>{row.averageScore === null ? '—' : `${row.averageScore.toFixed(1)}%`}</span>
+                        <span style={{ ...s.avgPill, ...getEvalBandStyle(getScoreBand(row.averageScore)) }}>{row.averageScore === null ? '—' : `${row.averageScore.toFixed(1)}%`}</span>
                       </div>
                     </div>
                   );
@@ -967,7 +967,7 @@ function AuditsListSupabase() {
                     <div style={s.agentName}>{audit.case_type}</div>
                     <div style={{ ...s.agentName, fontSize: '12px' }}>{getAuditReference(audit)}</div>
                     <div>
-                      <span style={{ ...s.scoreBadge, ...s.evalBand[band] }}>{score.toFixed(2)}%</span>
+                      <span style={{ ...s.scoreBadge, ...getEvalBandStyle(band) }}>{score.toFixed(2)}%</span>
                     </div>
                     <div>
                       <span style={{ ...s.statusPill, background: audit.shared_with_agent ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)', color: audit.shared_with_agent ? '#34d399' : '#94a3b8', borderColor: audit.shared_with_agent ? 'rgba(52,211,153,0.3)' : 'rgba(148,163,184,0.2)' }}>
