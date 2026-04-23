@@ -148,9 +148,6 @@ function getMetricsForTeam(teamValue: TeamType): Metric[] {
   return [];
 }
 
-function isLockedToNA(metricName: string) {
-  return LOCKED_NA_METRICS.has(metricName);
-}
 
 function canAutoFail(metricName: string) {
   return AUTO_FAIL_METRICS.has(metricName);
