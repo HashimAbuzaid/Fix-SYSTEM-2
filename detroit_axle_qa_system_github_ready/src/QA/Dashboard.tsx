@@ -1016,10 +1016,10 @@ function TeamPerfCard({ C, light, title, color, volume, prevVolume, isRevenue, a
         <div style={{ marginBottom: '16px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
             <span style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Quality Score</span>
-            <span style={{ fontSize: '10px', fontWeight: 700, color }}>Target: 85%</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, color }}>Target: 90%</span>
           </div>
           <div style={{ height: '6px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
-            <div className="dash-score-bar-fill" style={{ height: '100%', borderRadius: '999px', background: avgQual >= 85 ? `linear-gradient(90deg, ${color}, ${color}cc)` : `linear-gradient(90deg, ${C.criticalColor}, ${C.warningColor})`, '--score-w': `${Math.min(avgQual, 100)}%` } as any} />
+            <div className="dash-score-bar-fill" style={{ height: '100%', borderRadius: '999px', background: avgQual >= 90 ? `linear-gradient(90deg, ${color}, ${color}cc)` : `linear-gradient(90deg, ${C.criticalColor}, ${C.warningColor})`, '--score-w': `${Math.min(avgQual, 100)}%` } as any} />
           </div>
         </div>
 
