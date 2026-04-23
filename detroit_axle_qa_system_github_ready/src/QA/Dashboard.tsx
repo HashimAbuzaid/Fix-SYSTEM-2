@@ -683,14 +683,14 @@ function Dashboard({
       )}
 
       {/* ── Section Nav ── */}
-      <SectionNav active={activeSection} onChange={setActiveSection} C={C} />
+      <SectionNav active={activeSection} onChange={setActiveSection} C={C} light={light} />
 
       {/* ── Overview Section ── */}
       {activeSection === 'overview' && (
         <div className="dash-grid-in">
           {/* KPI Strip */}
           <KPIStrip
-            C={C} light={light}
+            C={C}
             totalAudits={totalAudits} prevAudits={prevAudits.length}
             avgQuality={avgQuality} prevAvgQuality={prevAvgQuality}
             releasedAudits={releasedAudits} releasedRate={releasedRate}
@@ -802,7 +802,7 @@ function TickerBanner({ ticker, C }: { ticker: string; C: any }) {
 }
 
 // ─── HeroHeader ──────────────────────────────────────────────────────────────
-function HeroHeader({ C, light, dateFrom, dateTo, setDateFrom, setDateTo, dateFromRef, dateToRef, refreshing, lastLoadedAt, onRefresh, onThisMonth, onAllTime, currentUser }: any) {
+function HeroHeader({ C, dateFrom, dateTo, setDateFrom, setDateTo, dateFromRef, dateToRef, refreshing, lastLoadedAt, onRefresh, onThisMonth, onAllTime, currentUser }: any) {
   const role = currentUser?.role || 'qa';
   const roleLabel = role === 'admin' ? 'Administrator' : role === 'qa' ? 'QA Analyst' : 'Supervisor';
 
@@ -883,7 +883,7 @@ function HeroHeader({ C, light, dateFrom, dateTo, setDateFrom, setDateTo, dateFr
 }
 
 // ─── SectionNav ──────────────────────────────────────────────────────────────
-function SectionNav({ active, onChange, C }: { active: string; onChange: (s: any) => void; C: any }) {
+function SectionNav({ active, onChange, C, light }: { active: string; onChange: (s: any) => void; C: any; light: boolean }) {
   const tabs = [
     { id: 'overview', label: 'Overview', icon: '◈' },
     { id: 'action', label: 'Action Center', icon: '⚡' },
@@ -916,7 +916,7 @@ function SectionNav({ active, onChange, C }: { active: string; onChange: (s: any
 }
 
 // ─── KPIStrip ────────────────────────────────────────────────────────────────
-function KPIStrip({ C, light, totalAudits, prevAudits, avgQuality, prevAvgQuality, releasedAudits, releasedRate, totalCalls, prevCallsTotal, totalTickets, prevTicketsTotal, totalSales, prevSalesTotal }: any) {
+function KPIStrip({ C, totalAudits, prevAudits, avgQuality, prevAvgQuality, releasedAudits, releasedRate, totalCalls, prevCallsTotal, totalTickets, prevTicketsTotal, totalSales, prevSalesTotal }: any) {
   const kpis = [
     { label: 'Total Audits', value: totalAudits, format: 'int', prev: prevAudits, color: C.accent, icon: '◎' },
     { label: 'Avg Quality', value: avgQuality, format: 'pct', prev: prevAvgQuality, color: C.callsColor, icon: '◈' },
@@ -1135,28 +1135,28 @@ function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, calls
 
       {boardType === 'combined' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} type="hybrid" />
-          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} type="hybrid" />
+          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} light={light} type="hybrid" />
+          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} light={light} type="hybrid" />
         </div>
       )}
       {boardType === 'quantity' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} type="quantity" unit="calls" />
-          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} type="quantity" unit="tickets" />
-          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} type="quantity" unit="usd" />
+          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} light={light} type="quantity" unit="calls" />
+          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} light={light} type="quantity" unit="tickets" />
+          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} light={light} type="quantity" unit="usd" />
         </div>
       )}
       {boardType === 'quality' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} type="quality" />
-          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} type="quality" />
+          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} light={light} type="quality" />
+          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} light={light} type="quality" />
         </div>
       )}
     </div>
   );
 }
 
-function LeaderboardPanel({ title, color, items, C, type, unit }: { title: string; color: string; items: any[]; C: any; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
+function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title: string; color: string; items: any[]; C: any; light: boolean; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
   const maxVal = items.length ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity)) : 1;
 
   return (
