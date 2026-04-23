@@ -1,5 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 type ScoreDetail = {
   metric: string;
   result: string;
@@ -10,6 +12,7 @@ type ScoreDetail = {
   counts_toward_score?: boolean;
   metric_comment?: string | null;
 };
+
 type AuditItem = {
   id: string;
   agent_id: string;
@@ -30,6 +33,7 @@ type AuditItem = {
   created_by_email?: string | null;
   created_by_role?: string | null;
 };
+
 type AgentProfile = {
   id: string;
   role: 'admin' | 'qa' | 'agent';
@@ -38,6 +42,7 @@ type AgentProfile = {
   display_name: string | null;
   team: 'Calls' | 'Tickets' | 'Sales' | null;
 };
+
 type CurrentProfile = {
   id: string;
   role: 'admin' | 'qa' | 'agent' | null;
@@ -54,6 +59,7 @@ type AgentDailyStatus = {
   created_by_name?: string | null;
   created_at?: string | null;
 };
+
 type Metric = {
   name: string;
   pass: number;
@@ -62,6 +68,7 @@ type Metric = {
   options?: string[];
   defaultValue?: string;
 };
+
 type EditFormState = {
   team: 'Calls' | 'Tickets' | 'Sales' | '';
   caseType: string;
@@ -88,167 +95,28 @@ type ImportedProgressRow = {
   averageScore?: number | null;
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
 const MAX_PROGRESS_EVALS = 24;
 const PROGRESS_GROUPS = [
-  { key: 'g1', label: 'Eval 1-8', start: 0, end: 8 },
-  { key: 'g2', label: 'Eval 9-16', start: 8, end: 16 },
-  { key: 'g3', label: 'Eval 17-24', start: 16, end: 24 },
+  { key: 'g1', label: 'Eval 1–8',  start: 0,  end: 8  },
+  { key: 'g2', label: 'Eval 9–16', start: 8,  end: 16 },
+  { key: 'g3', label: 'Eval 17–24',start: 16, end: 24 },
 ] as const;
 
 type ProgressGroupKey = (typeof PROGRESS_GROUPS)[number]['key'];
-
 type ProgressColumn = {
   index: number;
   label: string;
   groupKey: ProgressGroupKey;
   groupLabel: string;
 };
-function normalizeOffEvalIndexes(indexes: number[]) {
-  return Array.from(
-    new Set(
-      indexes.filter(
-        (value) =>
-          Number.isInteger(value) && value >= 0 && value < MAX_PROGRESS_EVALS
-      )
-    )
-  ).sort((a, b) => a - b);
-}
 
-function buildShiftedEvaluations(
-  evaluations: ImportedEvaluation[],
-  offIndexes: number[]
-) {
-  const normalizedOffIndexes = normalizeOffEvalIndexes(offIndexes);
-
-  if (normalizedOffIndexes.length === 0) {
-    return evaluations.slice(0, MAX_PROGRESS_EVALS);
-  }
-
-  const offIndexSet = new Set(normalizedOffIndexes);
-  const shifted: ImportedEvaluation[] = Array.from(
-    { length: MAX_PROGRESS_EVALS },
-    (): ImportedEvaluation => ({
-      score: null,
-      label: '',
-    })
-  );
-
-  let sourceIndex = 0;
-
-  for (let displayIndex = 0; displayIndex < MAX_PROGRESS_EVALS; displayIndex += 1) {
-    if (offIndexSet.has(displayIndex)) {
-      continue;
-    }
-
-    if (sourceIndex >= evaluations.length) {
-      break;
-    }
-
-    shifted[displayIndex] = evaluations[sourceIndex] || {
-      score: null,
-      label: '',
-    };
-    sourceIndex += 1;
-  }
-
-  return shifted;
-}
 const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
-
-function countsTowardScore(metric: Metric) {
-  return metric.countsTowardScore !== false;
-}
-
-function shouldShowMetricComment(result: string) {
-  return (
-    result === 'Borderline' || result === 'Fail' || result === 'Auto-Fail'
-  );
-}
-
-function openNativeDatePicker(target: HTMLInputElement) {
-  const input = target as HTMLInputElement & { showPicker?: () => void };
-  input.showPicker?.();
-}
-
-function getTodayDateValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function normalizeText(value?: string | null) {
-  return String(value || '').replace(/\u00a0/g, ' ').trim();
-}
-
-function normalizeHeader(value?: string | null) {
-  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function normalizeAgentId(value?: string | null) {
-  return normalizeText(value).replace(/\.0+$/, '');
-}
-
-function parsePercentLike(value?: string | null) {
-  const raw = normalizeText(value).replace('%', '').replace(/,/g, '');
-  if (!raw || raw === '-' || raw.toLowerCase() === '#div/0!' || raw.toLowerCase() === 'off') {
-    return null;
-  }
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function parseCsv(textValue: string) {
-  const rows: string[][] = [];
-  let current = '';
-  let row: string[] = [];
-  let inQuotes = false;
-  const input = textValue.replace(/^\ufeff/, '');
-
-  for (let i = 0; i < input.length; i += 1) {
-    const char = input[i];
-    const next = input[i + 1];
-
-    if (char === '"') {
-      if (inQuotes && next === '"') {
-        current += '"';
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      row.push(current);
-      current = '';
-      continue;
-    }
-
-    if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (char === '\r' && next === '\n') i += 1;
-      row.push(current);
-      if (row.some((cell) => normalizeText(cell) !== '')) rows.push(row);
-      row = [];
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.length > 0 || row.length > 0) {
-    row.push(current);
-    if (row.some((cell) => normalizeText(cell) !== '')) rows.push(row);
-  }
-
-  return rows;
-}
-
 const ISSUE_WAS_RESOLVED_METRIC = 'Issue was resolved';
-
 const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
   name: ISSUE_WAS_RESOLVED_METRIC,
-  pass: 0,
-  borderline: 0,
+  pass: 0, borderline: 0,
   countsTowardScore: false,
   options: ['', 'Yes', 'No'],
   defaultValue: '',
@@ -270,6 +138,7 @@ const callsMetrics: Metric[] = [
   { name: 'Ending', pass: 2, borderline: 1 },
   ISSUE_WAS_RESOLVED_QUESTION,
 ];
+
 const ticketsMetrics: Metric[] = [
   { name: 'Greeting', pass: 5, borderline: 3 },
   { name: 'Friendliness', pass: 5, borderline: 3 },
@@ -285,6 +154,7 @@ const ticketsMetrics: Metric[] = [
   { name: 'Ending', pass: 5, borderline: 3 },
   ISSUE_WAS_RESOLVED_QUESTION,
 ];
+
 const salesMetrics: Metric[] = [
   { name: 'Greeting', pass: 2, borderline: 1 },
   { name: 'Friendliness', pass: 5, borderline: 3 },
@@ -301,87 +171,74 @@ const salesMetrics: Metric[] = [
   ISSUE_WAS_RESOLVED_QUESTION,
 ];
 
-
-function getThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
-          window.localStorage.getItem('detroit-axle-theme') ||
-          window.sessionStorage.getItem('detroit-axle-theme') ||
-          ''
-        ).toLowerCase()
-      : '';
-
-  const isLight = themeMode === 'light' || themeMode === 'white';
-
-  return {
-    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
-    '--screen-heading': isLight ? '#081225' : '#f8fafc',
-    '--screen-muted': isLight ? '#475569' : '#94a3b8',
-    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
-    '--screen-accent': isLight ? '#2563eb' : '#60a5fa',
-    '--screen-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
-    '--screen-card-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
-    '--screen-card-soft-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)'
-      : 'rgba(15,23,42,0.58)',
-    '--screen-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)'
-      : 'rgba(15,23,42,0.78)',
-    '--screen-field-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
-    '--screen-border-strong': isLight ? 'rgba(203,213,225,1)' : 'rgba(148,163,184,0.22)',
-    '--screen-table-head-bg': isLight
-      ? 'linear-gradient(180deg, rgba(241,245,255,1) 0%, rgba(235,241,252,0.98) 100%)'
-      : 'rgba(2,6,23,0.92)',
-    '--screen-pill-bg': isLight ? 'rgba(239,246,255,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-secondary-btn-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
-    '--screen-secondary-btn-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-select-option-bg': isLight ? '#ffffff' : '#0f172a',
-    '--screen-select-option-text': isLight ? '#0f172a' : '#e5eefb',
-    '--screen-menu-bg': isLight ? 'rgba(255,255,255,0.995)' : 'rgba(15,23,42,0.97)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-score-pill-bg': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(37,99,235,0.18)',
-    '--screen-score-pill-border': isLight ? 'rgba(59,130,246,0.30)' : 'rgba(96,165,250,0.26)',
-    '--screen-score-pill-text': isLight ? '#1d4ed8' : '#dbeafe',
-    '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
-    '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-highlight-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(244,247,255,0.98) 100%)'
-      : 'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.52) 100%)',
-    '--progress-strong-bg': isLight ? 'rgba(34,197,94,0.12)' : 'rgba(34,197,94,0.16)',
-    '--progress-strong-border': isLight ? 'rgba(34,197,94,0.24)' : 'rgba(134,239,172,0.20)',
-    '--progress-strong-text': isLight ? '#166534' : '#bbf7d0',
-    '--progress-medium-bg': isLight ? 'rgba(245,158,11,0.14)' : 'rgba(245,158,11,0.16)',
-    '--progress-medium-border': isLight ? 'rgba(245,158,11,0.24)' : 'rgba(252,211,77,0.20)',
-    '--progress-medium-text': isLight ? '#92400e' : '#fde68a',
-    '--progress-weak-bg': isLight ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.16)',
-    '--progress-weak-border': isLight ? 'rgba(239,68,68,0.24)' : 'rgba(252,165,165,0.20)',
-    '--progress-weak-text': isLight ? '#991b1b' : '#fecaca',
-    '--progress-empty-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.42)',
-    '--progress-empty-text': isLight ? '#64748b' : '#94a3b8',
-    '--progress-off-bg': isLight ? 'rgba(124,58,237,0.12)' : 'rgba(124,58,237,0.18)',
-    '--progress-off-border': isLight ? 'rgba(124,58,237,0.24)' : 'rgba(196,181,253,0.22)',
-    '--progress-off-text': isLight ? '#6d28d9' : '#ddd6fe',
-  };
+// ─── Utility Functions ────────────────────────────────────────────────────────
+function normalizeOffEvalIndexes(indexes: number[]) {
+  return Array.from(new Set(indexes.filter(v => Number.isInteger(v) && v >= 0 && v < MAX_PROGRESS_EVALS))).sort((a, b) => a - b);
 }
 
+function buildShiftedEvaluations(evaluations: ImportedEvaluation[], offIndexes: number[]) {
+  const normalized = normalizeOffEvalIndexes(offIndexes);
+  if (normalized.length === 0) return evaluations.slice(0, MAX_PROGRESS_EVALS);
+  const offSet = new Set(normalized);
+  const shifted: ImportedEvaluation[] = Array.from({ length: MAX_PROGRESS_EVALS }, (): ImportedEvaluation => ({ score: null, label: '' }));
+  let si = 0;
+  for (let di = 0; di < MAX_PROGRESS_EVALS; di++) {
+    if (offSet.has(di)) continue;
+    if (si >= evaluations.length) break;
+    shifted[di] = evaluations[si] || { score: null, label: '' };
+    si++;
+  }
+  return shifted;
+}
 
+function countsTowardScore(m: Metric) { return m.countsTowardScore !== false; }
+function shouldShowMetricComment(r: string) { return r === 'Borderline' || r === 'Fail' || r === 'Auto-Fail'; }
+function openNativeDatePicker(t: HTMLInputElement) { (t as any).showPicker?.(); }
+function getTodayDateValue() { return new Date().toISOString().slice(0, 10); }
+function normalizeText(v?: string | null) { return String(v || '').replace(/\u00a0/g, ' ').trim(); }
+function normalizeHeader(v?: string | null) { return normalizeText(v).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
+function normalizeAgentId(v?: string | null) { return normalizeText(v).replace(/\.0+$/, ''); }
+
+function parsePercentLike(v?: string | null) {
+  const raw = normalizeText(v).replace('%', '').replace(/,/g, '');
+  if (!raw || raw === '-' || raw.toLowerCase() === '#div/0!' || raw.toLowerCase() === 'off') return null;
+  const p = Number(raw);
+  return Number.isFinite(p) ? p : null;
+}
+
+function parseCsv(text: string) {
+  const rows: string[][] = [];
+  let cur = '', row: string[] = [], inQ = false;
+  const input = text.replace(/^\ufeff/, '');
+  for (let i = 0; i < input.length; i++) {
+    const c = input[i], n = input[i + 1];
+    if (c === '"') { if (inQ && n === '"') { cur += '"'; i++; } else inQ = !inQ; continue; }
+    if (c === ',' && !inQ) { row.push(cur); cur = ''; continue; }
+    if ((c === '\n' || c === '\r') && !inQ) {
+      if (c === '\r' && n === '\n') i++;
+      row.push(cur);
+      if (row.some(cell => normalizeText(cell) !== '')) rows.push(row);
+      row = []; cur = ''; continue;
+    }
+    cur += c;
+  }
+  if (cur.length > 0 || row.length > 0) { row.push(cur); if (row.some(c => normalizeText(c) !== '')) rows.push(row); }
+  return rows;
+}
+
+// ─── Score Band ────────────────────────────────────────────────────────────────
+function getScoreBand(score: number | null): 'strong' | 'medium' | 'weak' | 'empty' {
+  if (score === null || isNaN(score)) return 'empty';
+  if (score >= 90) return 'strong';
+  if (score >= 75) return 'medium';
+  return 'weak';
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
 function AuditsListSupabase() {
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
-  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(
-    null
-  );
+  const [currentProfile, setCurrentProfile] = useState<CurrentProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
@@ -398,3229 +255,1027 @@ function AuditsListSupabase() {
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [editForm, setEditForm] = useState<EditFormState>({
-    team: '',
-    caseType: '',
-    auditDate: '',
-    orderNumber: '',
-    phoneNumber: '',
-    ticketId: '',
-    comments: '',
-  });
+  const [editForm, setEditForm] = useState<EditFormState>({ team: '', caseType: '', auditDate: '', orderNumber: '', phoneNumber: '', ticketId: '', comments: '' });
   const [editScores, setEditScores] = useState<Record<string, string>>({});
-  const [editMetricComments, setEditMetricComments] = useState<
-    Record<string, string>
-  >({});
+  const [editMetricComments, setEditMetricComments] = useState<Record<string, string>>({});
   const [showEvaluationProgress, setShowEvaluationProgress] = useState(false);
   const [offTodayByAgent, setOffTodayByAgent] = useState<Record<string, boolean>>({});
   const [importedProgressByAgent, setImportedProgressByAgent] = useState<Record<string, ImportedProgressRow>>({});
   const [importedFileName, setImportedFileName] = useState('');
   const [importingBoard, setImportingBoard] = useState(false);
   const [focusedEvalGroup, setFocusedEvalGroup] = useState<'all' | ProgressGroupKey>('all');
-  const [collapsedEvalGroups, setCollapsedEvalGroups] = useState<Record<ProgressGroupKey, boolean>>({
-    g1: false,
-    g2: false,
-    g3: false,
-  });
+  const [collapsedEvalGroups, setCollapsedEvalGroups] = useState<Record<ProgressGroupKey, boolean>>({ g1: false, g2: false, g3: false });
   const [selectedOffEvalIndexes, setSelectedOffEvalIndexes] = useState<number[]>([0]);
   const [manualOffEvalIndexesByAgent, setManualOffEvalIndexesByAgent] = useState<Record<string, number[]>>({});
-  const themeVars = getThemeVars();
+
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
   const importInputRef = useRef<HTMLInputElement | null>(null);
-  const deferredSearchText = useDeferredValue(searchText);
+  const deferredSearch = useDeferredValue(searchText);
   const deferredAgentSearch = useDeferredValue(agentSearch);
+
   const isAdmin = currentProfile?.role === 'admin';
   const canManageOffToday = currentProfile?.role === 'admin' || currentProfile?.role === 'qa';
   const todayStatusDate = getTodayDateValue();
-  useEffect(() => {
-    void loadAuditsAndProfiles();
-  }, []);
 
+  useEffect(() => { void loadData(); }, []);
   useEffect(() => {
-    const channel = supabase
-      .channel('agent-daily-status-sync')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'agent_daily_status',
-        },
-        () => {
-          void loadAuditsAndProfiles();
-        }
-      )
+    const ch = supabase.channel('agent-daily-status-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'agent_daily_status' }, () => void loadData())
       .subscribe();
-
-    return () => {
-      void supabase.removeChannel(channel);
-    };
+    return () => { void supabase.removeChannel(ch); };
   }, [todayStatusDate]);
   useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (
-        agentPickerRef.current &&
-        !agentPickerRef.current.contains(event.target as Node)
-      ) {
-        setIsAgentPickerOpen(false);
-      }
+    function onOutside(e: MouseEvent) {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) setIsAgentPickerOpen(false);
     }
-    document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
   }, []);
-  async function loadAuditsAndProfiles() {
-    setLoading(true);
-    setErrorMessage('');
-    setSuccessMessage('');
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    if (authError) {
-      setLoading(false);
-      setErrorMessage(authError.message);
-      return;
-    }
-    const userId = authData.user?.id;
-    const [auditsResult, profilesResult, currentProfileResult, offTodayResult] =
-      await Promise.all([
-        supabase
-          .from('audits')
-          .select('*')
-          .order('audit_date', { ascending: false }),
-        supabase
-          .from('profiles')
-          .select('id, role, agent_id, agent_name, display_name, team')
-          .eq('role', 'agent')
-          .order('agent_name', { ascending: true }),
-        userId
-          ? supabase
-              .from('profiles')
-              .select('id, role, agent_name')
-              .eq('id', userId)
-              .maybeSingle()
-          : Promise.resolve({ data: null, error: null }),
-        supabase
-          .from('agent_daily_status')
-          .select('agent_id, team, status_date, status')
-          .eq('status_date', todayStatusDate),
-      ]);
+
+  async function loadData() {
+    setLoading(true); setErrorMessage(''); setSuccessMessage('');
+    const { data: authData, error: authErr } = await supabase.auth.getUser();
+    if (authErr) { setLoading(false); setErrorMessage(authErr.message); return; }
+    const uid = authData.user?.id;
+    const [auditsRes, profilesRes, currentRes, offRes] = await Promise.all([
+      supabase.from('audits').select('*').order('audit_date', { ascending: false }),
+      supabase.from('profiles').select('id, role, agent_id, agent_name, display_name, team').eq('role', 'agent').order('agent_name', { ascending: true }),
+      uid ? supabase.from('profiles').select('id, role, agent_name').eq('id', uid).maybeSingle() : Promise.resolve({ data: null, error: null }),
+      supabase.from('agent_daily_status').select('agent_id, team, status_date, status').eq('status_date', todayStatusDate),
+    ]);
     setLoading(false);
-    if (auditsResult.error) {
-      setErrorMessage(auditsResult.error.message);
-      return;
-    }
-    if (profilesResult.error) {
-      setErrorMessage(profilesResult.error.message);
-      return;
-    }
-    if (currentProfileResult.error) {
-      setErrorMessage(currentProfileResult.error.message);
-      return;
-    }
-    if (offTodayResult.error) {
-      setErrorMessage(offTodayResult.error.message);
-      return;
-    }
-    setAudits((auditsResult.data as AuditItem[]) || []);
-    setProfiles((profilesResult.data as AgentProfile[]) || []);
-    setCurrentProfile((currentProfileResult.data as CurrentProfile) || null);
-
-    const nextOffTodayMap: Record<string, boolean> = {};
-    const nextManualOffMap: Record<string, number[]> = {};
-
-    ((offTodayResult.data as AgentDailyStatus[]) || []).forEach((item) => {
-      const key = getAgentProgressKey(item.agent_id, item.team);
-
-      if (item.status === 'OFF') {
-        nextOffTodayMap[key] = true;
-        return;
-      }
-
-      const parsedIndex = parseOffEvalStatusIndex(item.status);
-      if (parsedIndex === null) return;
-
-      const currentIndexes = nextManualOffMap[key] || [];
-      nextManualOffMap[key] = normalizeOffEvalIndexes([
-        ...currentIndexes,
-        parsedIndex,
-      ]);
+    if (auditsRes.error) { setErrorMessage(auditsRes.error.message); return; }
+    if (profilesRes.error) { setErrorMessage(profilesRes.error.message); return; }
+    if (currentRes.error) { setErrorMessage(currentRes.error.message); return; }
+    if (offRes.error) { setErrorMessage(offRes.error.message); return; }
+    setAudits((auditsRes.data as AuditItem[]) || []);
+    setProfiles((profilesRes.data as AgentProfile[]) || []);
+    setCurrentProfile((currentRes.data as CurrentProfile) || null);
+    const offMap: Record<string, boolean> = {};
+    const manualMap: Record<string, number[]> = {};
+    ((offRes.data as AgentDailyStatus[]) || []).forEach(item => {
+      const key = agentKey(item.agent_id, item.team);
+      if (item.status === 'OFF') { offMap[key] = true; return; }
+      const idx = parseOffEvalIdx(item.status);
+      if (idx === null) return;
+      manualMap[key] = normalizeOffEvalIndexes([...(manualMap[key] || []), idx]);
     });
-
-    setOffTodayByAgent(nextOffTodayMap);
-    setManualOffEvalIndexesByAgent(nextManualOffMap);
+    setOffTodayByAgent(offMap);
+    setManualOffEvalIndexesByAgent(manualMap);
   }
-  const profileDisplayNameByKey = useMemo(() => {
-    const map = new Map<string, string | null>();
-    profiles.forEach((profile) => {
-      if (!profile.agent_id || !profile.team) return;
-      map.set(
-        getAgentProgressKey(profile.agent_id, profile.team),
-        profile.display_name || null
-      );
-    });
-    return map;
+
+  const displayNameByKey = useMemo(() => {
+    const m = new Map<string, string | null>();
+    profiles.forEach(p => { if (!p.agent_id || !p.team) return; m.set(agentKey(p.agent_id, p.team), p.display_name || null); });
+    return m;
   }, [profiles]);
 
   const profileByAuditKey = useMemo(() => {
-    const map = new Map<string, AgentProfile>();
-    profiles.forEach((profile) => {
-      if (!profile.agent_id || !profile.team) return;
-      map.set(
-        `${profile.agent_id}||${profile.agent_name}||${profile.team}`,
-        profile
-      );
-    });
-    return map;
+    const m = new Map<string, AgentProfile>();
+    profiles.forEach(p => { if (!p.agent_id || !p.team) return; m.set(`${p.agent_id}||${p.agent_name}||${p.team}`, p); });
+    return m;
   }, [profiles]);
 
-  function getMetricsForTeam(team: EditFormState['team']) {
-    if (team === 'Calls') return callsMetrics;
-    if (team === 'Tickets') return ticketsMetrics;
-    if (team === 'Sales') return salesMetrics;
+  function agentKey(id?: string | null, team?: string | null) { return `${id || ''}||${team || ''}`; }
+  function getOffEvalStatusValue(i: number) { return `OFF_EVAL_${i + 1}`; }
+  function parseOffEvalIdx(s?: string | null) {
+    const m = String(s || '').match(/^OFF_EVAL_(\d+)$/);
+    if (!m) return null;
+    const p = Number(m[1]) - 1;
+    return Number.isInteger(p) && p >= 0 && p < MAX_PROGRESS_EVALS ? p : null;
+  }
+  function getMetricsForTeam(t: EditFormState['team']) {
+    if (t === 'Calls') return callsMetrics;
+    if (t === 'Tickets') return ticketsMetrics;
+    if (t === 'Sales') return salesMetrics;
     return [];
   }
-  function getMetricOptions(metric: Metric) {
-    if (metric.options?.length) return metric.options;
-    if (LOCKED_NA_METRICS.has(metric.name)) return ['N/A'];
-    const options = ['N/A', 'Pass', 'Borderline', 'Fail'];
-    if (AUTO_FAIL_METRICS.has(metric.name)) options.push('Auto-Fail');
-    return options;
+  function getMetricOptions(m: Metric) {
+    if (m.options?.length) return m.options;
+    if (LOCKED_NA_METRICS.has(m.name)) return ['N/A'];
+    const opts = ['N/A', 'Pass', 'Borderline', 'Fail'];
+    if (AUTO_FAIL_METRICS.has(m.name)) opts.push('Auto-Fail');
+    return opts;
   }
-  function getMetricStoredValue(
-    metric: Metric,
-    scores: Record<string, string>
-  ) {
-    if (LOCKED_NA_METRICS.has(metric.name)) return 'N/A';
-    return scores[metric.name] ?? metric.defaultValue ?? 'N/A';
+  function getMetricStoredValue(m: Metric, scores: Record<string, string>) {
+    if (LOCKED_NA_METRICS.has(m.name)) return 'N/A';
+    return scores[m.name] ?? m.defaultValue ?? 'N/A';
   }
-  function createDefaultScores(team: EditFormState['team']) {
-    const defaults: Record<string, string> = {};
-    getMetricsForTeam(team).forEach((metric) => {
-      defaults[metric.name] = metric.defaultValue ?? 'N/A';
-    });
-    return defaults;
+  function createDefaultScores(t: EditFormState['team']) {
+    const d: Record<string, string> = {};
+    getMetricsForTeam(t).forEach(m => { d[m.name] = m.defaultValue ?? 'N/A'; });
+    return d;
   }
-  function getMissingRequiredMetricLabels(
-    team: EditFormState['team'],
-    scores: Record<string, string>
-  ) {
-    return getMetricsForTeam(team)
-      .filter((metric) => Array.isArray(metric.options) && metric.defaultValue === '')
-      .filter((metric) => !getMetricStoredValue(metric, scores))
-      .map((metric) => metric.name);
+  function getMissingRequired(t: EditFormState['team'], scores: Record<string, string>) {
+    return getMetricsForTeam(t).filter(m => Array.isArray(m.options) && m.defaultValue === '').filter(m => !getMetricStoredValue(m, scores)).map(m => m.name);
   }
-  function buildScoreMapFromAudit(audit: AuditItem) {
-    const defaults = createDefaultScores(audit.team);
-    (audit.score_details || []).forEach((item) => {
-      defaults[item.metric] = item.result || 'N/A';
-    });
-    getMetricsForTeam(audit.team).forEach((metric) => {
-      if (LOCKED_NA_METRICS.has(metric.name)) {
-        defaults[metric.name] = 'N/A';
-      }
-    });
-    return defaults;
+  function buildScoreMap(audit: AuditItem) {
+    const d = createDefaultScores(audit.team);
+    (audit.score_details || []).forEach(s => { d[s.metric] = s.result || 'N/A'; });
+    getMetricsForTeam(audit.team).forEach(m => { if (LOCKED_NA_METRICS.has(m.name)) d[m.name] = 'N/A'; });
+    return d;
   }
-
-  function buildMetricCommentsFromAudit(audit: AuditItem) {
-    const defaults: Record<string, string> = {};
-    (audit.score_details || []).forEach((item) => {
-      defaults[item.metric] = item.metric_comment || '';
-    });
-    return defaults;
+  function buildMetricComments(audit: AuditItem) {
+    const d: Record<string, string> = {};
+    (audit.score_details || []).forEach(s => { d[s.metric] = s.metric_comment || ''; });
+    return d;
   }
-
-  function getAdjustedScoreData(
-    team: EditFormState['team'],
-    scores: Record<string, string>,
-    metricComments: Record<string, string>
-  ) {
-    const metrics = getMetricsForTeam(team);
-    const scoredMetrics = metrics.filter((item) => countsTowardScore(item));
-    const activeMetrics = scoredMetrics.filter((item) => {
-      const itemResult = getMetricStoredValue(item, scores);
-      return itemResult !== 'N/A' && itemResult !== '';
-    });
-    const activeTotalWeight = activeMetrics.reduce(
-      (sum, item) => sum + item.pass,
-      0
-    );
-    const fullTotalWeight = scoredMetrics.reduce((sum, item) => sum + item.pass, 0);
-    const scoreDetails = metrics.map((metric) => {
-      const result = getMetricStoredValue(metric, scores);
-      const scored = countsTowardScore(metric);
-      const adjustedWeight =
-        !scored || result === 'N/A' || result === '' || activeTotalWeight === 0
-          ? 0
-          : (metric.pass / activeTotalWeight) * fullTotalWeight;
+  function getAdjustedScoreData(t: EditFormState['team'], scores: Record<string, string>, comments: Record<string, string>) {
+    const metrics = getMetricsForTeam(t);
+    const scored = metrics.filter(countsTowardScore);
+    const active = scored.filter(m => { const r = getMetricStoredValue(m, scores); return r !== 'N/A' && r !== ''; });
+    const activeW = active.reduce((s, m) => s + m.pass, 0);
+    const fullW = scored.reduce((s, m) => s + m.pass, 0);
+    const details = metrics.map(m => {
+      const result = getMetricStoredValue(m, scores);
+      const sc = countsTowardScore(m);
+      const aw = !sc || result === 'N/A' || result === '' || activeW === 0 ? 0 : (m.pass / activeW) * fullW;
       let earned = 0;
-      if (scored && result === 'Pass') {
-        earned = adjustedWeight;
-      } else if (scored && result === 'Borderline') {
-        earned =
-          metric.pass > 0
-            ? adjustedWeight * (metric.borderline / metric.pass)
-            : 0;
-      }
+      if (sc && result === 'Pass') earned = aw;
+      else if (sc && result === 'Borderline') earned = m.pass > 0 ? aw * (m.borderline / m.pass) : 0;
       return {
-        metric: metric.name,
-        result,
-        pass: metric.pass,
-        borderline: metric.borderline,
-        adjustedWeight,
-        earned,
-        counts_toward_score: scored,
-        metric_comment:
-          scored && shouldShowMetricComment(result)
-            ? (metricComments[metric.name] || '').trim() || null
-            : null,
+        metric: m.name, result, pass: m.pass, borderline: m.borderline, adjustedWeight: aw, earned,
+        counts_toward_score: sc,
+        metric_comment: sc && shouldShowMetricComment(result) ? (comments[m.name] || '').trim() || null : null,
       };
     });
-    const hasAutoFail = scoreDetails.some(
-      (item) =>
-        item.counts_toward_score !== false &&
-        AUTO_FAIL_METRICS.has(item.metric) && item.result === 'Auto-Fail'
-    );
-    const qualityScore = hasAutoFail
-      ? '0.00'
-      : scoreDetails
-          .filter((item) => item.counts_toward_score !== false)
-          .reduce((sum, item) => sum + item.earned, 0)
-          .toFixed(2);
-    return { scoreDetails, qualityScore, hasAutoFail };
+    const hasAutoFail = details.some(d => d.counts_toward_score !== false && AUTO_FAIL_METRICS.has(d.metric) && d.result === 'Auto-Fail');
+    const qualityScore = hasAutoFail ? '0.00' : details.filter(d => d.counts_toward_score !== false).reduce((s, d) => s + d.earned, 0).toFixed(2);
+    return { scoreDetails: details, qualityScore, hasAutoFail };
   }
-  function getAgentLabel(profile: AgentProfile) {
-    return profile.display_name
-      ? `${profile.agent_name} - ${profile.display_name}`
-      : `${profile.agent_name} - ${profile.agent_id}`;
+  function getAgentLabel(p: AgentProfile) {
+    return p.display_name ? `${p.agent_name} — ${p.display_name}` : `${p.agent_name} · ${p.agent_id}`;
   }
   function getDisplayName(audit: AuditItem) {
-    return (
-      profileDisplayNameByKey.get(getAgentProgressKey(audit.agent_id, audit.team)) ||
-      null
-    );
+    return displayNameByKey.get(agentKey(audit.agent_id, audit.team)) || null;
   }
-  function getCreatedByLabel(audit: AuditItem) {
-    return audit.created_by_name || audit.created_by_email || '-';
+  function getCreatedByLabel(audit: AuditItem) { return audit.created_by_name || audit.created_by_email || '—'; }
+  function formatDate(v?: string | null) {
+    if (!v) return '—';
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString();
   }
-  function getAgentProgressKey(agentId?: string | null, team?: string | null) {
-    return `${agentId || ''}||${team || ''}`;
+  function formatDateOnly(v?: string | null) {
+    if (!v) return '—';
+    const d = new Date(`${v}T00:00:00`);
+    return isNaN(d.getTime()) ? v : d.toLocaleDateString();
   }
-  function getOffEvalStatusValue(index: number) {
-    return `OFF_EVAL_${index + 1}`;
+  function getAuditReference(audit: AuditItem) {
+    if (audit.team === 'Tickets') return `Ticket: ${audit.ticket_id || '—'}`;
+    return `Order #${audit.order_number || '—'} · ${audit.phone_number || '—'}`;
   }
-
-  function parseOffEvalStatusIndex(statusValue?: string | null) {
-    const match = String(statusValue || '').match(/^OFF_EVAL_(\d+)$/);
-    if (!match) return null;
-    const parsed = Number(match[1]) - 1;
-    return Number.isInteger(parsed) && parsed >= 0 && parsed < MAX_PROGRESS_EVALS
-      ? parsed
-      : null;
-  }
-
-  function matchesProfileSearch(profile: AgentProfile, search: string) {
-    if (!search) return true;
-    const label = getAgentLabel(profile).toLowerCase();
-    return (
-      profile.agent_name.toLowerCase().includes(search) ||
-      (profile.agent_id || '').toLowerCase().includes(search) ||
-      (profile.display_name || '').toLowerCase().includes(search) ||
-      label.includes(search)
-    );
-  }
-  function getSelectedOffTargetIndexes() {
-    return normalizeOffEvalIndexes(selectedOffEvalIndexes);
+  function getCommentsPreview(v?: string | null) {
+    const t = (v || '').trim();
+    if (!t) return '—';
+    return t.length <= 120 ? t : `${t.slice(0, 117)}…`;
   }
 
-  function getManualOffIndexes(agentId?: string | null, team?: string | null) {
-    const key = getAgentProgressKey(agentId, team);
-    return normalizeOffEvalIndexes(manualOffEvalIndexesByAgent[key] || []);
+  const editTeamAgents = useMemo(() => profiles.filter(p => p.role === 'agent' && p.team === editForm.team && p.agent_id && p.agent_name), [profiles, editForm.team]);
+  const visibleAgents = useMemo(() => {
+    const s = deferredAgentSearch.trim().toLowerCase();
+    if (!s) return editTeamAgents;
+    return editTeamAgents.filter(p => p.agent_name.toLowerCase().includes(s) || (p.agent_id || '').toLowerCase().includes(s) || (p.display_name || '').toLowerCase().includes(s));
+  }, [editTeamAgents, deferredAgentSearch]);
+  const selectedAgent = editTeamAgents.find(p => p.id === selectedAgentProfileId) || null;
+
+  const filteredAudits = useMemo(() => {
+    const s = deferredSearch.trim().toLowerCase();
+    return audits.filter(a => {
+      const dn = (getDisplayName(a) || '').toLowerCase();
+      const ms = !s || a.agent_name.toLowerCase().includes(s) || a.agent_id.toLowerCase().includes(s) || dn.includes(s);
+      const mt = teamFilter ? a.team === teamFilter : true;
+      const mc = caseTypeFilter ? a.case_type === caseTypeFilter : true;
+      const mdf = dateFrom ? a.audit_date >= dateFrom : true;
+      const mdt = dateTo ? a.audit_date <= dateTo : true;
+      return ms && mt && mc && mdf && mdt;
+    });
+  }, [audits, deferredSearch, teamFilter, caseTypeFilter, dateFrom, dateTo, profiles]);
+
+  const uniqueCaseTypes = Array.from(new Set(audits.map(a => a.case_type)));
+  const sharedFiltered = filteredAudits.filter(a => a.shared_with_agent).length;
+  const hiddenFiltered = filteredAudits.length - sharedFiltered;
+  const sharedAll = audits.filter(a => a.shared_with_agent).length;
+  const hiddenAll = audits.length - sharedAll;
+
+  function getEffectiveOffIndexes(aid?: string | null, team?: string | null) {
+    const key = agentKey(aid, team);
+    const mi = normalizeOffEvalIndexes(manualOffEvalIndexesByAgent[key] || []);
+    return mi.length > 0 ? mi : [];
   }
 
-  function getEffectiveOffIndexesForAgent(
-    agentId?: string | null,
-    team?: string | null,
-    _hasLegacyOffToday?: boolean
-  ) {
-    const manualIndexes = getManualOffIndexes(agentId, team);
-    if (manualIndexes.length > 0) return manualIndexes;
-    return [];
+  const progressData = useMemo(() => {
+    const ns = deferredSearch.trim().toLowerCase();
+    const scopedProfiles = profiles.filter(p => (teamFilter ? p.team === teamFilter : true) && (!ns || p.agent_name.toLowerCase().includes(ns) || (p.agent_id || '').toLowerCase().includes(ns) || (p.display_name || '').toLowerCase().includes(ns)));
+    const grouped = new Map<string, { agent_id: string; agent_name: string; display_name: string | null; team: 'Calls' | 'Tickets' | 'Sales'; evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }> }>();
+    filteredAudits.forEach(a => {
+      const k = agentKey(a.agent_id, a.team);
+      const ex = grouped.get(k) || { agent_id: a.agent_id, agent_name: a.agent_name, display_name: getDisplayName(a), team: a.team, evaluations: [] };
+      ex.evaluations.push({ id: a.id, audit_date: a.audit_date, quality_score: Number(a.quality_score), case_type: a.case_type });
+      if (!ex.display_name) ex.display_name = getDisplayName(a);
+      grouped.set(k, ex);
+    });
+    scopedProfiles.forEach(p => {
+      if (!p.agent_id || !p.team) return;
+      const k = agentKey(p.agent_id, p.team);
+      if (!grouped.has(k)) grouped.set(k, { agent_id: p.agent_id, agent_name: p.agent_name, display_name: p.display_name, team: p.team, evaluations: [] });
+    });
+    Object.entries(importedProgressByAgent).forEach(([k, ir]) => {
+      if (teamFilter && ir.team !== teamFilter) return;
+      if (ns) {
+        const hay = [ir.agent_name, ir.display_name || '', ir.agent_id].join(' ').toLowerCase();
+        if (!hay.includes(ns)) return;
+      }
+      const ex = grouped.get(k) || { agent_id: ir.agent_id, agent_name: ir.agent_name, display_name: ir.display_name, team: ir.team, evaluations: [] };
+      grouped.set(k, ex);
+    });
+    const rows = Array.from(grouped.values()).map(row => {
+      const k = agentKey(row.agent_id, row.team);
+      const imp = importedProgressByAgent[k] || null;
+      const dbEvals = [...row.evaluations].sort((a, b) => a.audit_date.localeCompare(b.audit_date)).slice(-MAX_PROGRESS_EVALS).map(e => ({ score: Number.isFinite(e.quality_score) ? e.quality_score : null, label: e.audit_date ? `${formatDateOnly(e.audit_date)} · ${e.case_type}` : '' }));
+      const evals = imp?.evaluations?.length ? imp.evaluations.slice(0, MAX_PROGRESS_EVALS) : dbEvals;
+      const offToday = imp?.offToday === true || !!offTodayByAgent[k];
+      const offIdx = getEffectiveOffIndexes(row.agent_id, row.team);
+      const shifted = buildShiftedEvaluations(evals, offIdx);
+      const scored = evals.filter(e => e.score !== null);
+      const avg = imp?.averageScore ?? (scored.length > 0 ? scored.reduce((s, e) => s + (e.score ?? 0), 0) / scored.length : null);
+      const latest = imp?.latestScore ?? (scored.length > 0 ? scored[scored.length - 1]?.score ?? null : null);
+      const latestDate = row.evaluations.length > 0 ? [...row.evaluations].sort((a, b) => a.audit_date.localeCompare(b.audit_date)).slice(-1)[0]?.audit_date ?? null : null;
+      return { agent_id: row.agent_id, agent_name: imp?.agent_name || row.agent_name, display_name: imp?.display_name ?? row.display_name, team: row.team, evaluations: evals, shiftedEvaluations: shifted, offIndexes: offIdx, averageScore: avg !== null && Number.isFinite(avg) ? avg : null, latestScore: latest !== null && Number.isFinite(latest) ? latest : null, latestAuditDate: latestDate, offToday };
+    }).sort((a, b) => a.agent_name.localeCompare(b.agent_name));
+    const cols = Array.from({ length: MAX_PROGRESS_EVALS }, (_, i) => {
+      const g = PROGRESS_GROUPS.find(g => i >= g.start && i < g.end) || PROGRESS_GROUPS[0];
+      return { index: i, label: `Eval ${i + 1}`, groupKey: g.key, groupLabel: g.label };
+    });
+    return { rows, evaluationColumns: cols };
+  }, [filteredAudits, profiles, deferredSearch, teamFilter, offTodayByAgent, manualOffEvalIndexesByAgent, importedProgressByAgent]);
+
+  const visibleCols = useMemo(() => progressData.evaluationColumns.filter(c => (focusedEvalGroup === 'all' || c.groupKey === focusedEvalGroup) && !collapsedEvalGroups[c.groupKey]), [progressData.evaluationColumns, focusedEvalGroup, collapsedEvalGroups]);
+
+  useEffect(() => {
+    if (visibleCols.length === 0) return;
+    const vs = new Set(visibleCols.map(c => c.index));
+    setSelectedOffEvalIndexes(prev => { const f = normalizeOffEvalIndexes(prev.filter(i => vs.has(i))); return f.length > 0 ? f : [visibleCols[0].index]; });
+  }, [visibleCols]);
+
+  const visibleGroupSpans = useMemo(() => PROGRESS_GROUPS.map(g => ({ ...g, count: visibleCols.filter(c => c.groupKey === g.key).length })).filter(g => g.count > 0), [visibleCols]);
+  const gridTemplate = useMemo(() => `280px 120px 130px repeat(${visibleCols.length}, 88px) 150px 130px`, [visibleCols.length]);
+
+  function toggleGroupCollapse(k: ProgressGroupKey) {
+    setCollapsedEvalGroups(prev => ({ ...prev, [k]: !prev[k] }));
+    setFocusedEvalGroup(prev => prev !== k ? prev : 'all');
+  }
+  function formatOffSummary(idxs: number[]) {
+    const n = normalizeOffEvalIndexes(idxs);
+    if (n.length === 0) return 'None';
+    if (n.length <= 3) return n.map(i => `Eval ${i + 1}`).join(', ');
+    return `${n.length} evals selected`;
   }
 
-  function formatEvalIndexLabel(index: number) {
-    return `Eval ${index + 1}`;
-  }
-
-  function formatOffTargetSummary(indexes: number[]) {
-    const normalized = normalizeOffEvalIndexes(indexes);
-    if (normalized.length === 0) return 'None';
-    if (normalized.length <= 3) {
-      return normalized.map((index) => formatEvalIndexLabel(index)).join(', ');
-    }
-    return `${normalized.length} evals selected`;
-  }
-
-  async function syncAgentOffState(
-    agentId: string,
-    team: 'Calls' | 'Tickets' | 'Sales',
-    nextIndexes: number[]
-  ) {
-    const existingStatuses = [
-      'OFF',
-      ...Array.from({ length: MAX_PROGRESS_EVALS }, (_, index) =>
-        getOffEvalStatusValue(index)
-      ),
-    ];
-
-    const { error: deleteError } = await supabase
-      .from('agent_daily_status')
-      .delete()
-      .eq('agent_id', agentId)
-      .eq('team', team)
-      .eq('status_date', todayStatusDate)
-      .in('status', existingStatuses);
-
-    if (deleteError) throw deleteError;
-
-    if (nextIndexes.length === 0) {
-      return;
-    }
-
+  async function syncOffState(agentId: string, team: 'Calls' | 'Tickets' | 'Sales', nextIdx: number[]) {
+    const existing = ['OFF', ...Array.from({ length: MAX_PROGRESS_EVALS }, (_, i) => getOffEvalStatusValue(i))];
+    const { error: de } = await supabase.from('agent_daily_status').delete().eq('agent_id', agentId).eq('team', team).eq('status_date', todayStatusDate).in('status', existing);
+    if (de) throw de;
+    if (nextIdx.length === 0) return;
     const rows: AgentDailyStatus[] = [
-      {
-        agent_id: agentId,
-        team,
-        status_date: todayStatusDate,
-        status: 'OFF',
-        created_by_user_id: currentProfile?.id || null,
-        created_by_name: currentProfile?.agent_name || null,
-      },
-      ...normalizeOffEvalIndexes(nextIndexes).map((index) => ({
-        agent_id: agentId,
-        team,
-        status_date: todayStatusDate,
-        status: getOffEvalStatusValue(index),
-        created_by_user_id: currentProfile?.id || null,
-        created_by_name: currentProfile?.agent_name || null,
-      })),
+      { agent_id: agentId, team, status_date: todayStatusDate, status: 'OFF', created_by_user_id: currentProfile?.id || null, created_by_name: currentProfile?.agent_name || null },
+      ...normalizeOffEvalIndexes(nextIdx).map(i => ({ agent_id: agentId, team, status_date: todayStatusDate, status: getOffEvalStatusValue(i), created_by_user_id: currentProfile?.id || null, created_by_name: currentProfile?.agent_name || null })),
     ];
-
-    const { error: insertError } = await supabase
-      .from('agent_daily_status')
-      .insert(rows);
-
-    if (insertError) throw insertError;
+    const { error: ie } = await supabase.from('agent_daily_status').insert(rows);
+    if (ie) throw ie;
   }
 
-  async function toggleAgentOffToday(
-    agentId?: string | null,
-    team?: AuditItem['team'] | null
-  ) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (!canManageOffToday) {
-      setErrorMessage('Only admin or QA can update OFF day markers.');
-      return;
-    }
-
-    if (!agentId || !team) {
-      setErrorMessage('Agent ID or team is missing for OFF control.');
-      return;
-    }
-
-    const targetIndexes = getSelectedOffTargetIndexes();
-    if (targetIndexes.length === 0) {
-      setErrorMessage('Choose at least one Eval header before applying OFF.');
-      return;
-    }
-
-    const key = getAgentProgressKey(agentId, team);
-    const hasLegacyOffToday = !!offTodayByAgent[key];
-    const currentIndexes = getEffectiveOffIndexesForAgent(
-      agentId,
-      team,
-      hasLegacyOffToday
-    );
-    const currentSet = new Set(currentIndexes);
-    const allTargetsAlreadyOff = targetIndexes.every((index) =>
-      currentSet.has(index)
-    );
-
-    const nextIndexes = allTargetsAlreadyOff
-      ? currentIndexes.filter((index) => !targetIndexes.includes(index))
-      : normalizeOffEvalIndexes([...currentIndexes, ...targetIndexes]);
-
+  async function toggleAgentOff(aid?: string | null, team?: AuditItem['team'] | null) {
+    setErrorMessage(''); setSuccessMessage('');
+    if (!canManageOffToday) { setErrorMessage('Only admin or QA can update OFF day markers.'); return; }
+    if (!aid || !team) { setErrorMessage('Agent ID or team is missing.'); return; }
+    const targets = normalizeOffEvalIndexes(selectedOffEvalIndexes);
+    if (targets.length === 0) { setErrorMessage('Choose at least one Eval header before applying OFF.'); return; }
+    const k = agentKey(aid, team);
+    const cur = getEffectiveOffIndexes(aid, team);
+    const curSet = new Set(cur);
+    const allOff = targets.every(i => curSet.has(i));
+    const next = allOff ? cur.filter(i => !targets.includes(i)) : normalizeOffEvalIndexes([...cur, ...targets]);
     try {
-      await syncAgentOffState(agentId, team, nextIndexes);
-
-      setManualOffEvalIndexesByAgent((prev) => {
-        const next = { ...prev };
-        if (nextIndexes.length > 0) {
-          next[key] = nextIndexes;
-        } else {
-          delete next[key];
-        }
-        return next;
-      });
-
-      setOffTodayByAgent((prev) => {
-        const next = { ...prev };
-        if (nextIndexes.length > 0) {
-          next[key] = true;
-        } else {
-          delete next[key];
-        }
-        return next;
-      });
-
-      setSuccessMessage(
-        nextIndexes.length > 0
-          ? `OFF set for ${formatOffTargetSummary(nextIndexes)}.`
-          : 'All OFF markers cleared for this agent.'
-      );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Could not update OFF markers.'
-      );
-    }
+      await syncOffState(aid, team, next);
+      setManualOffEvalIndexesByAgent(prev => { const n = { ...prev }; if (next.length > 0) n[k] = next; else delete n[k]; return n; });
+      setOffTodayByAgent(prev => { const n = { ...prev }; if (next.length > 0) n[k] = true; else delete n[k]; return n; });
+      setSuccessMessage(next.length > 0 ? `OFF set for ${formatOffSummary(next)}.` : 'All OFF markers cleared.');
+    } catch (e) { setErrorMessage(e instanceof Error ? e.message : 'Could not update OFF markers.'); }
   }
 
   async function handleProgressImport(file?: File | null) {
     if (!file) return;
-
-    setImportingBoard(true);
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setImportingBoard(true); setErrorMessage(''); setSuccessMessage('');
     try {
-      if (!file.name.toLowerCase().endsWith('.csv')) {
-        setErrorMessage('Please upload a CSV file for the progress board import.');
-        setImportingBoard(false);
-        return;
-      }
-
-      const csvText = await file.text();
-      const rows = parseCsv(csvText);
-
-      if (rows.length === 0) {
-        setErrorMessage('The uploaded CSV is empty.');
-        setImportingBoard(false);
-        return;
-      }
-
-      const headers = rows[0].map((item) => normalizeHeader(item));
-      const findIndex = (...names: string[]) => headers.findIndex((header) => names.includes(header));
-
-      const agentNameIndex = findIndex('agentname', 'agent');
-      const displayNameIndex = findIndex('displayname', 'display');
-      const agentIdIndex = findIndex('agentid', 'agent');
-      const teamIndex = findIndex('team');
-      const todayIndex = findIndex('today', 'offtoday', 'status');
-
-      const evalIndices = headers
-        .map((header, index) => ({ header, index }))
-        .filter((item) => /^eval\d+$/.test(item.header) || /^evaluation\d+$/.test(item.header) || /^qc\d+$/.test(item.header))
-        .sort((a, b) => a.index - b.index)
-        .slice(0, MAX_PROGRESS_EVALS);
-
-      const latestIndex = findIndex('latest', 'latestscore');
-      const averageIndex = findIndex('average', 'avg', 'averagescore');
-
-      if (agentNameIndex === -1 && agentIdIndex === -1) {
-        setErrorMessage('The CSV must include at least Agent Name or Agent ID columns.');
-        setImportingBoard(false);
-        return;
-      }
-
-      const nextImported: Record<string, ImportedProgressRow> = {};
-
-      rows.slice(1).forEach((cells) => {
-        const agentName = normalizeText(cells[agentNameIndex] || '');
-        const displayName = displayNameIndex >= 0 ? normalizeText(cells[displayNameIndex] || '') : '';
-        const agentId = normalizeAgentId(cells[agentIdIndex] || '');
-        const rawTeam = normalizeText(cells[teamIndex] || '');
-        const team = (rawTeam === 'Calls' || rawTeam === 'Tickets' || rawTeam === 'Sales'
-          ? rawTeam
-          : teamFilter === 'Calls' || teamFilter === 'Tickets' || teamFilter === 'Sales'
-          ? teamFilter
-          : '') as '' | 'Calls' | 'Tickets' | 'Sales';
-
-        if (!team) return;
-        if (!agentName && !agentId) return;
-
-        const key = getAgentProgressKey(agentId || agentName, team);
-        const evaluations: ImportedEvaluation[] = evalIndices.map(({ index }) => {
-          const raw = cells[index] || '';
-          return {
-            score: parsePercentLike(raw),
-            label: normalizeText(raw),
-          };
-        });
-
-        const todayValue = todayIndex >= 0 ? normalizeText(cells[todayIndex] || '').toLowerCase() : '';
-        const latestScore = latestIndex >= 0 ? parsePercentLike(cells[latestIndex] || '') : null;
-        const averageScore = averageIndex >= 0 ? parsePercentLike(cells[averageIndex] || '') : null;
-
-        nextImported[key] = {
-          agent_id: agentId,
-          agent_name: agentName || agentId,
-          display_name: displayName || null,
-          team,
-          evaluations,
-          offToday: todayValue === 'off',
-          latestScore,
-          averageScore,
-        };
+      if (!file.name.toLowerCase().endsWith('.csv')) { setErrorMessage('Please upload a CSV file.'); return; }
+      const text = await file.text();
+      const rows = parseCsv(text);
+      if (rows.length === 0) { setErrorMessage('CSV is empty.'); return; }
+      const headers = rows[0].map(h => normalizeHeader(h));
+      const fi = (...n: string[]) => headers.findIndex(h => n.includes(h));
+      const ani = fi('agentname', 'agent'); const dni = fi('displayname', 'display'); const aii = fi('agentid', 'agent'); const ti = fi('team'); const tdi = fi('today', 'offtoday', 'status');
+      const eis = headers.map((h, i) => ({ h, i })).filter(({ h }) => /^eval\d+$/.test(h) || /^evaluation\d+$/.test(h) || /^qc\d+$/.test(h)).sort((a, b) => a.i - b.i).slice(0, MAX_PROGRESS_EVALS);
+      const li = fi('latest', 'latestscore'); const avgi = fi('average', 'avg', 'averagescore');
+      if (ani === -1 && aii === -1) { setErrorMessage('CSV must have Agent Name or Agent ID.'); return; }
+      const next: Record<string, ImportedProgressRow> = {};
+      rows.slice(1).forEach(cells => {
+        const an = normalizeText(cells[ani] || ''); const dn = dni >= 0 ? normalizeText(cells[dni] || '') : ''; const aid = normalizeAgentId(cells[aii] || ''); const rt = normalizeText(cells[ti] || '');
+        const team = (rt === 'Calls' || rt === 'Tickets' || rt === 'Sales' ? rt : teamFilter === 'Calls' || teamFilter === 'Tickets' || teamFilter === 'Sales' ? teamFilter : '') as '' | 'Calls' | 'Tickets' | 'Sales';
+        if (!team || (!an && !aid)) return;
+        const k = agentKey(aid || an, team);
+        const evals: ImportedEvaluation[] = eis.map(({ i }) => ({ score: parsePercentLike(cells[i] || ''), label: normalizeText(cells[i] || '') }));
+        const tv = tdi >= 0 ? normalizeText(cells[tdi] || '').toLowerCase() : '';
+        next[k] = { agent_id: aid, agent_name: an || aid, display_name: dn || null, team, evaluations: evals, offToday: tv === 'off', latestScore: li >= 0 ? parsePercentLike(cells[li] || '') : null, averageScore: avgi >= 0 ? parsePercentLike(cells[avgi] || '') : null };
       });
-
-      setImportedProgressByAgent(nextImported);
-      setImportedFileName(file.name);
-      setSuccessMessage(`Imported ${Object.keys(nextImported).length} progress row(s) from ${file.name}.`);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Could not import evaluation table.');
-    } finally {
-      setImportingBoard(false);
-      if (importInputRef.current) {
-        importInputRef.current.value = '';
-      }
-    }
+      setImportedProgressByAgent(next); setImportedFileName(file.name); setSuccessMessage(`Imported ${Object.keys(next).length} rows from ${file.name}.`);
+    } catch (e) { setErrorMessage(e instanceof Error ? e.message : 'Could not import CSV.'); }
+    finally { setImportingBoard(false); if (importInputRef.current) importInputRef.current.value = ''; }
   }
 
-  function clearImportedProgress() {
-    setImportedProgressByAgent({});
-    setImportedFileName('');
-    setSuccessMessage('Imported progress table cleared.');
-  }
-
-  function formatDate(dateValue?: string | null) {
-    if (!dateValue) return '-';
-    const date = new Date(dateValue);
-    if (Number.isNaN(date.getTime())) return '-';
-    return date.toLocaleString();
-  }
-  function formatDateOnly(dateValue?: string | null) {
-    if (!dateValue) return '-';
-    const date = new Date(`${dateValue}T00:00:00`);
-    if (Number.isNaN(date.getTime())) return dateValue;
-    return date.toLocaleDateString();
-  }
-  function getAuditReference(audit: AuditItem) {
-    if (audit.team === 'Tickets') {
-      return `Ticket ID: ${audit.ticket_id || '-'}`;
-    }
-    return `Order #: ${audit.order_number || '-'} | Phone: ${
-      audit.phone_number || '-'
-    }`;
-  }
-  function getCommentsPreview(value?: string | null) {
-    const text = (value || '').trim();
-    if (!text) return '-';
-    if (text.length <= 120) return text;
-    return `${text.slice(0, 117)}...`;
-  }
-  function isNoScoreDetail(detail: ScoreDetail) {
-    return detail.counts_toward_score === false;
-  }
-  const editTeamAgents = useMemo(() => {
-    return profiles.filter(
-      (profile) =>
-        profile.role === 'agent' &&
-        profile.team === editForm.team &&
-        profile.agent_id &&
-        profile.agent_name
-    );
-  }, [profiles, editForm.team]);
-  const visibleAgents = useMemo(() => {
-    const search = deferredAgentSearch.trim().toLowerCase();
-    if (!search) return editTeamAgents;
-    return editTeamAgents.filter((profile) => {
-      const label = getAgentLabel(profile);
-      return (
-        profile.agent_name.toLowerCase().includes(search) ||
-        (profile.agent_id || '').toLowerCase().includes(search) ||
-        (profile.display_name || '').toLowerCase().includes(search) ||
-        label.toLowerCase().includes(search)
-      );
-    });
-  }, [editTeamAgents, deferredAgentSearch]);
-  const selectedAgent =
-    editTeamAgents.find((profile) => profile.id === selectedAgentProfileId) ||
-    null;
-  const filteredAudits = useMemo(() => {
-    const search = deferredSearchText.trim().toLowerCase();
-    return audits.filter((audit) => {
-      const displayName = (getDisplayName(audit) || '').toLowerCase();
-      const matchesSearch =
-        !search ||
-        audit.agent_name.toLowerCase().includes(search) ||
-        audit.agent_id.toLowerCase().includes(search) ||
-        displayName.includes(search);
-      const matchesTeam = teamFilter ? audit.team === teamFilter : true;
-      const matchesCaseType = caseTypeFilter
-        ? audit.case_type === caseTypeFilter
-        : true;
-      const matchesDateFrom = dateFrom ? audit.audit_date >= dateFrom : true;
-      const matchesDateTo = dateTo ? audit.audit_date <= dateTo : true;
-      return (
-        matchesSearch &&
-        matchesTeam &&
-        matchesCaseType &&
-        matchesDateFrom &&
-        matchesDateTo
-      );
-    });
-  }, [
-    audits,
-    searchText,
-    teamFilter,
-    caseTypeFilter,
-    dateFrom,
-    dateTo,
-    profiles,
-  ]);
-  const uniqueCaseTypes = Array.from(
-    new Set(audits.map((audit) => audit.case_type))
-  );
-  const sharedFilteredCount = filteredAudits.filter(
-    (item) => item.shared_with_agent
-  ).length;
-  const hiddenFilteredCount = filteredAudits.length - sharedFilteredCount;
-  const sharedAllCount = audits.filter((item) => item.shared_with_agent).length;
-  const hiddenAllCount = audits.length - sharedAllCount;
-  
-const evaluationProgressData = useMemo(() => {
-  const normalizedSearch = deferredSearchText.trim().toLowerCase();
-  const scopedProfiles = profiles.filter((profile) => {
-    const matchesTeam = teamFilter ? profile.team === teamFilter : true;
-    return matchesTeam && matchesProfileSearch(profile, normalizedSearch);
-  });
-
-  const groupedRows = new Map<
-    string,
-    {
-      agent_id: string;
-      agent_name: string;
-      display_name: string | null;
-      team: 'Calls' | 'Tickets' | 'Sales';
-      evaluations: Array<{ id: string; audit_date: string; quality_score: number; case_type: string }>;
-      shiftedEvaluations?: ImportedEvaluation[];
-      offIndexes?: number[];
-    }
-  >();
-
-  filteredAudits.forEach((audit) => {
-    const key = getAgentProgressKey(audit.agent_id, audit.team);
-    const existing = groupedRows.get(key) || {
-      agent_id: audit.agent_id,
-      agent_name: audit.agent_name,
-      display_name: getDisplayName(audit),
-      team: audit.team,
-      evaluations: [],
-    };
-
-    existing.evaluations.push({
-      id: audit.id,
-      audit_date: audit.audit_date,
-      quality_score: Number(audit.quality_score),
-      case_type: audit.case_type,
-    });
-
-    if (!existing.display_name) {
-      existing.display_name = getDisplayName(audit);
-    }
-
-    groupedRows.set(key, existing);
-  });
-
-  scopedProfiles.forEach((profile) => {
-    if (!profile.agent_id || !profile.team) return;
-    const key = getAgentProgressKey(profile.agent_id, profile.team);
-    if (!groupedRows.has(key)) {
-      groupedRows.set(key, {
-        agent_id: profile.agent_id,
-        agent_name: profile.agent_name,
-        display_name: profile.display_name,
-        team: profile.team,
-        evaluations: [],
-      });
-    }
-  });
-
-  Object.entries(importedProgressByAgent).forEach(([key, importedRow]) => {
-    if (teamFilter && importedRow.team !== teamFilter) return;
-    if (normalizedSearch) {
-      const haystack = [
-        importedRow.agent_name,
-        importedRow.display_name || '',
-        importedRow.agent_id,
-      ]
-        .join(' ')
-        .toLowerCase();
-      if (!haystack.includes(normalizedSearch)) return;
-    }
-
-    const existing = groupedRows.get(key) || {
-      agent_id: importedRow.agent_id,
-      agent_name: importedRow.agent_name,
-      display_name: importedRow.display_name,
-      team: importedRow.team,
-      evaluations: [],
-    };
-
-    groupedRows.set(key, existing);
-  });
-
-  const rows = Array.from(groupedRows.values())
-    .map((row) => {
-      const key = getAgentProgressKey(row.agent_id, row.team);
-      const imported = importedProgressByAgent[key] || null;
-
-      const dbEvaluations = [...row.evaluations]
-        .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-        .slice(-MAX_PROGRESS_EVALS)
-        .map((item) => ({
-          score: Number.isFinite(item.quality_score) ? item.quality_score : null,
-          label: item.audit_date ? `${formatDateOnly(item.audit_date)} • ${item.case_type}` : '',
-        }));
-
-      const evaluations = imported?.evaluations?.length
-        ? imported.evaluations.slice(0, MAX_PROGRESS_EVALS)
-        : dbEvaluations;
-
-      const offToday =
-        imported?.offToday === true ||
-        !!offTodayByAgent[getAgentProgressKey(row.agent_id, row.team)];
-      const offIndexes = getEffectiveOffIndexesForAgent(
-        row.agent_id,
-        row.team,
-        offToday
-      );
-      const shiftedEvaluations = buildShiftedEvaluations(evaluations, offIndexes);
-
-      const scoredItems = evaluations.filter((item) => item.score !== null);
-      const averageScore =
-        imported?.averageScore ??
-        (scoredItems.length > 0
-          ? scoredItems.reduce((sum, item) => sum + (item.score ?? 0), 0) / scoredItems.length
-          : null);
-
-      const latestScore =
-        imported?.latestScore ??
-        (scoredItems.length > 0 ? scoredItems.slice(-1)[0]?.score ?? null : null);
-
-      const latestAuditDate =
-        row.evaluations.length > 0
-          ? [...row.evaluations]
-              .sort((a, b) => a.audit_date.localeCompare(b.audit_date))
-              .slice(-1)[0]?.audit_date ?? null
-          : null;
-
-      return {
-        agent_id: row.agent_id,
-        agent_name: imported?.agent_name || row.agent_name,
-        display_name: imported?.display_name ?? row.display_name,
-        team: row.team,
-        evaluations,
-        shiftedEvaluations,
-        offIndexes,
-        averageScore:
-          averageScore !== null && Number.isFinite(averageScore) ? averageScore : null,
-        latestScore: latestScore !== null && Number.isFinite(latestScore) ? latestScore : null,
-        latestAuditDate,
-        offToday,
-      };
-    })
-    .sort((a, b) => a.agent_name.localeCompare(b.agent_name));
-
-  const evaluationColumns = Array.from(
-    { length: MAX_PROGRESS_EVALS },
-    (_, index) => {
-      const group = PROGRESS_GROUPS.find(
-        (item) => index >= item.start && index < item.end
-      ) || PROGRESS_GROUPS[0];
-
-      return {
-        index,
-        label: `Eval ${index + 1}`,
-        groupKey: group.key,
-        groupLabel: group.label,
-      };
-    }
-  );
-
-  return { rows, evaluationColumns };
-}, [
-  filteredAudits,
-  profiles,
-  deferredSearchText,
-  teamFilter,
-  offTodayByAgent,
-  manualOffEvalIndexesByAgent,
-  importedProgressByAgent,
-]);
-
-const visibleProgressColumns = useMemo(() => {
-  return evaluationProgressData.evaluationColumns.filter((column) => {
-    const matchesFocus =
-      focusedEvalGroup === 'all' || column.groupKey === focusedEvalGroup;
-    return matchesFocus && !collapsedEvalGroups[column.groupKey];
-  });
-}, [evaluationProgressData.evaluationColumns, focusedEvalGroup, collapsedEvalGroups]);
-
-useEffect(() => {
-  if (visibleProgressColumns.length === 0) return;
-  const visibleIndexSet = new Set(visibleProgressColumns.map((column) => column.index));
-  setSelectedOffEvalIndexes((prev) => {
-    const filtered = normalizeOffEvalIndexes(
-      prev.filter((index) => visibleIndexSet.has(index))
-    );
-    return filtered.length > 0 ? filtered : [visibleProgressColumns[0].index];
-  });
-}, [visibleProgressColumns]);
-
-const visibleProgressGroupSpans = useMemo(() => {
-  return PROGRESS_GROUPS.map((group) => {
-    const count = visibleProgressColumns.filter(
-      (column) => column.groupKey === group.key
-    ).length;
-    return {
-      ...group,
-      count,
-    };
-  }).filter((group) => group.count > 0);
-}, [visibleProgressColumns]);
-
-const progressGridTemplate = useMemo(() => {
-  return `260px 110px 116px repeat(${visibleProgressColumns.length}, 82px) 140px 120px`;
-}, [visibleProgressColumns.length]);
-
-function toggleProgressGroupCollapse(groupKey: ProgressGroupKey) {
-  setCollapsedEvalGroups((prev) => {
-    const next = {
-      ...prev,
-      [groupKey]: !prev[groupKey],
-    };
-
-    return next;
-  });
-
-  setFocusedEvalGroup((prev) => {
-    if (prev !== groupKey) return prev;
-    return 'all';
-  });
-}
-
-function focusProgressGroup(groupKey: 'all' | ProgressGroupKey) {
-  setFocusedEvalGroup(groupKey);
-}
-
-function toggleOffTargetEval(index: number) {
-  setSelectedOffEvalIndexes((prev) => {
-    if (prev.includes(index)) {
-      return normalizeOffEvalIndexes(prev.filter((value) => value !== index));
-    }
-    return normalizeOffEvalIndexes([...prev, index]);
-  });
-}
-
-function selectAllVisibleOffTargets() {
-  setSelectedOffEvalIndexes(
-    normalizeOffEvalIndexes(visibleProgressColumns.map((column) => column.index))
-  );
-}
-
-function clearSelectedOffTargets() {
-  setSelectedOffEvalIndexes([]);
-}
-
-function getRowEffectiveOffIndexes(row: (typeof evaluationProgressData.rows)[number]) {
-  return getEffectiveOffIndexesForAgent(row.agent_id, row.team, row.offToday);
-}
-
-
-  function getOffEvalCellStyle(isSelectedTarget: boolean) {
-    return {
-      ...progressOffEvalCellStyle,
-      ...(isSelectedTarget ? progressOffEvalCellSelectedStyle : {}),
-    };
-  }
-
-  function renderEvaluationCell(
-    row: (typeof evaluationProgressData.rows)[number],
-    column: ProgressColumn
-  ) {
-    const evaluation =
-      row.shiftedEvaluations?.[column.index] ||
-      row.evaluations[column.index] || {
-        score: null,
-        label: '',
-      };
-    const hasValue =
-      evaluation.score !== null && Number.isFinite(evaluation.score);
-    const rowOffIndexes = row.offIndexes || getRowEffectiveOffIndexes(row);
-    const isOffCell = rowOffIndexes.includes(column.index);
-    const isSelectedTarget = selectedOffEvalIndexes.includes(column.index);
-
-    if (isOffCell) {
-      return (
-        <div
-          key={`${row.agent_id}-${row.team}-${column.index}`}
-          style={getOffEvalCellStyle(isSelectedTarget)}
-          title={`OFF placed in ${column.label}`}
-        >
-          OFF
-        </div>
-      );
-    }
-
-    const cellTone = hasValue
-      ? getProgressCellTone(evaluation.score)
-      : progressEmptyCellStyle;
-
-    return (
-      <div
-        key={`${row.agent_id}-${row.team}-${column.index}`}
-        style={{
-          ...progressEvalCellStyle,
-          ...cellTone,
-          ...(isSelectedTarget ? progressEvalCellSelectedStyle : {}),
-        }}
-        title={
-          isSelectedTarget
-            ? `${column.label} is selected for OFF control${hasValue ? ` • ${evaluation.label || `${evaluation.score}%`}` : ''}`
-            : hasValue
-            ? evaluation.label || `${evaluation.score}%`
-            : 'No evaluation'
-        }
-      >
-        {hasValue ? `${Number(evaluation.score).toFixed(0)}%` : '-'}
-      </div>
-    );
-  }
-
-  function getProgressCellTone(score: number | null) {
-    if (score === null || Number.isNaN(score)) return progressEmptyCellStyle;
-    if (score >= 90) return progressStrongCellStyle;
-    if (score >= 75) return progressMediumCellStyle;
-    return progressWeakCellStyle;
-  }
   function startEditAudit(audit: AuditItem) {
-    if (!isAdmin) {
-      setErrorMessage('Only admin can edit audits.');
-      return;
-    }
-    const matchedProfile =
-      profileByAuditKey.get(
-        `${audit.agent_id}||${audit.agent_name}||${audit.team}`
-      ) || null;
-    setErrorMessage('');
-    setSuccessMessage('');
-    setEditingAuditId(audit.id);
-    setExpandedId(audit.id);
-    setSelectedAgentProfileId(matchedProfile?.id || '');
-    setAgentSearch(matchedProfile ? getAgentLabel(matchedProfile) : '');
-    setIsAgentPickerOpen(false);
-    setEditForm({
-      team: audit.team,
-      caseType: audit.case_type,
-      auditDate: audit.audit_date,
-      orderNumber: audit.order_number || '',
-      phoneNumber: audit.phone_number || '',
-      ticketId: audit.ticket_id || '',
-      comments: audit.comments || '',
-    });
-    setEditScores(buildScoreMapFromAudit(audit));
-    setEditMetricComments(buildMetricCommentsFromAudit(audit));
+    if (!isAdmin) { setErrorMessage('Only admin can edit audits.'); return; }
+    const mp = profileByAuditKey.get(`${audit.agent_id}||${audit.agent_name}||${audit.team}`) || null;
+    setErrorMessage(''); setSuccessMessage('');
+    setEditingAuditId(audit.id); setExpandedId(audit.id);
+    setSelectedAgentProfileId(mp?.id || ''); setAgentSearch(mp ? getAgentLabel(mp) : ''); setIsAgentPickerOpen(false);
+    setEditForm({ team: audit.team, caseType: audit.case_type, auditDate: audit.audit_date, orderNumber: audit.order_number || '', phoneNumber: audit.phone_number || '', ticketId: audit.ticket_id || '', comments: audit.comments || '' });
+    setEditScores(buildScoreMap(audit)); setEditMetricComments(buildMetricComments(audit));
   }
   function cancelEdit() {
-    setEditingAuditId(null);
-    setSelectedAgentProfileId('');
-    setAgentSearch('');
-    setIsAgentPickerOpen(false);
-    setEditForm({
-      team: '',
-      caseType: '',
-      auditDate: '',
-      orderNumber: '',
-      phoneNumber: '',
-      ticketId: '',
-      comments: '',
-    });
-    setEditScores({});
-    setEditMetricComments({});
+    setEditingAuditId(null); setSelectedAgentProfileId(''); setAgentSearch(''); setIsAgentPickerOpen(false);
+    setEditForm({ team: '', caseType: '', auditDate: '', orderNumber: '', phoneNumber: '', ticketId: '', comments: '' });
+    setEditScores({}); setEditMetricComments({});
   }
-  function handleTeamChange(nextTeam: EditFormState['team']) {
-    setEditForm((prev) => ({
-      ...prev,
-      team: nextTeam,
-      orderNumber: '',
-      phoneNumber: '',
-      ticketId: '',
-    }));
-    setSelectedAgentProfileId('');
-    setAgentSearch('');
-    setIsAgentPickerOpen(false);
-    setEditScores(createDefaultScores(nextTeam));
-    setEditMetricComments({});
+  function handleTeamChange(t: EditFormState['team']) {
+    setEditForm(prev => ({ ...prev, team: t, orderNumber: '', phoneNumber: '', ticketId: '' }));
+    setSelectedAgentProfileId(''); setAgentSearch(''); setIsAgentPickerOpen(false);
+    setEditScores(createDefaultScores(t)); setEditMetricComments({});
   }
-  function handleSelectAgent(profile: AgentProfile) {
-    setSelectedAgentProfileId(profile.id);
-    setAgentSearch(getAgentLabel(profile));
-    setIsAgentPickerOpen(false);
-  }
-  function handleScoreChange(metricName: string, value: string) {
-    if (LOCKED_NA_METRICS.has(metricName)) {
-      setEditScores((prev) => ({ ...prev, [metricName]: 'N/A' }));
-      setEditMetricComments((prev) => ({ ...prev, [metricName]: '' }));
-      return;
-    }
-
-    setEditScores((prev) => ({ ...prev, [metricName]: value }));
-
-    if (!shouldShowMetricComment(value)) {
-      setEditMetricComments((prev) => {
-        const next = { ...prev };
-        delete next[metricName];
-        return next;
-      });
-    }
+  function handleScoreChange(name: string, val: string) {
+    if (LOCKED_NA_METRICS.has(name)) { setEditScores(prev => ({ ...prev, [name]: 'N/A' })); setEditMetricComments(prev => ({ ...prev, [name]: '' })); return; }
+    setEditScores(prev => ({ ...prev, [name]: val }));
+    if (!shouldShowMetricComment(val)) setEditMetricComments(prev => { const n = { ...prev }; delete n[name]; return n; });
   }
 
-  function handleMetricCommentChange(metricName: string, value: string) {
-    setEditMetricComments((prev) => ({ ...prev, [metricName]: value }));
-  }
   async function handleUpdate(auditId: string) {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!isAdmin) {
-      setErrorMessage('Only admin can save audit changes.');
-      return;
-    }
-    if (!editForm.team) {
-      setErrorMessage('Please choose a team.');
-      return;
-    }
-    if (!selectedAgent) {
-      setErrorMessage('Please choose an agent.');
-      return;
-    }
-    if (!editForm.caseType || !editForm.auditDate) {
-      setErrorMessage('Please fill Case Type and Audit Date.');
-      return;
-    }
-    if (
-      (editForm.team === 'Calls' || editForm.team === 'Sales') &&
-      !editForm.orderNumber
-    ) {
-      setErrorMessage('Please fill Order Number for Calls and Sales.');
-      return;
-    }
-    if (editForm.team === 'Tickets' && !editForm.ticketId) {
-      setErrorMessage('Please fill Ticket ID for Tickets.');
-      return;
-    }
-    const missingRequiredMetricLabels = getMissingRequiredMetricLabels(
-      editForm.team,
-      editScores
-    );
-    if (missingRequiredMetricLabels.length > 0) {
-      setErrorMessage(
-        `Please answer: ${missingRequiredMetricLabels.join(', ')}.`
-      );
-      return;
-    }
-    if (!selectedAgent.agent_id) {
-      setErrorMessage('Selected agent does not have an Agent ID.');
-      return;
-    }
-    const missingMetricCommentLabels = getMetricsForTeam(editForm.team)
-      .filter((metric) => countsTowardScore(metric))
-      .filter((metric) =>
-        shouldShowMetricComment(getMetricStoredValue(metric, editScores))
-      )
-      .filter((metric) => !(editMetricComments[metric.name] || '').trim())
-      .map((metric) => metric.name);
-    if (missingMetricCommentLabels.length > 0) {
-      setErrorMessage(
-        `Please add a short QA note for: ${missingMetricCommentLabels.join(', ')}.`
-      );
-      return;
-    }
-    const adjustedData = getAdjustedScoreData(
-      editForm.team,
-      editScores,
-      editMetricComments
-    );
+    setErrorMessage(''); setSuccessMessage('');
+    if (!isAdmin) { setErrorMessage('Only admin can save changes.'); return; }
+    if (!editForm.team) { setErrorMessage('Please choose a team.'); return; }
+    if (!selectedAgent) { setErrorMessage('Please choose an agent.'); return; }
+    if (!editForm.caseType || !editForm.auditDate) { setErrorMessage('Please fill Case Type and Audit Date.'); return; }
+    if ((editForm.team === 'Calls' || editForm.team === 'Sales') && !editForm.orderNumber) { setErrorMessage('Please fill Order Number.'); return; }
+    if (editForm.team === 'Tickets' && !editForm.ticketId) { setErrorMessage('Please fill Ticket ID.'); return; }
+    const missing = getMissingRequired(editForm.team, editScores);
+    if (missing.length > 0) { setErrorMessage(`Please answer: ${missing.join(', ')}.`); return; }
+    if (!selectedAgent.agent_id) { setErrorMessage('Selected agent has no Agent ID.'); return; }
+    const missingComments = getMetricsForTeam(editForm.team).filter(countsTowardScore).filter(m => shouldShowMetricComment(getMetricStoredValue(m, editScores))).filter(m => !(editMetricComments[m.name] || '').trim()).map(m => m.name);
+    if (missingComments.length > 0) { setErrorMessage(`Please add QA note for: ${missingComments.join(', ')}.`); return; }
+    const adj = getAdjustedScoreData(editForm.team, editScores, editMetricComments);
     setSaving(true);
-    const updatePayload = {
-      agent_id: selectedAgent.agent_id,
-      agent_name: selectedAgent.agent_name,
-      team: editForm.team,
-      case_type: editForm.caseType,
-      audit_date: editForm.auditDate,
-      order_number:
-        editForm.team === 'Calls' || editForm.team === 'Sales'
-          ? editForm.orderNumber
-          : null,
-      phone_number:
-        editForm.team === 'Calls' || editForm.team === 'Sales'
-          ? editForm.phoneNumber || null
-          : null,
-      ticket_id: editForm.team === 'Tickets' ? editForm.ticketId : null,
-      quality_score: Number(adjustedData.qualityScore),
-      comments: editForm.comments,
-      score_details: adjustedData.scoreDetails,
-    };
-    const { error } = await supabase
-      .from('audits')
-      .update(updatePayload)
-      .eq('id', auditId);
+    const payload = { agent_id: selectedAgent.agent_id, agent_name: selectedAgent.agent_name, team: editForm.team, case_type: editForm.caseType, audit_date: editForm.auditDate, order_number: (editForm.team === 'Calls' || editForm.team === 'Sales') ? editForm.orderNumber : null, phone_number: (editForm.team === 'Calls' || editForm.team === 'Sales') ? editForm.phoneNumber || null : null, ticket_id: editForm.team === 'Tickets' ? editForm.ticketId : null, quality_score: Number(adj.qualityScore), comments: editForm.comments, score_details: adj.scoreDetails };
+    const { error } = await supabase.from('audits').update(payload).eq('id', auditId);
     setSaving(false);
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-    setAudits((prev) =>
-      prev.map((item) =>
-        item.id === auditId ? { ...item, ...updatePayload } : item
-      )
-    );
+    if (error) { setErrorMessage(error.message); return; }
+    setAudits(prev => prev.map(a => a.id === auditId ? { ...a, ...payload } : a));
     setSuccessMessage('Audit updated successfully.');
     cancelEdit();
   }
+
   async function handleToggleShare(audit: AuditItem) {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!isAdmin) {
-      setErrorMessage('Only admin can share or hide audits.');
-      return;
-    }
-    const nextSharedValue = !audit.shared_with_agent;
-    const confirmed = window.confirm(
-      nextSharedValue
-        ? 'Share this audit with the agent?'
-        : 'Hide this audit from the agent?'
-    );
-    if (!confirmed) return;
+    setErrorMessage(''); setSuccessMessage('');
+    if (!isAdmin) { setErrorMessage('Only admin can share or hide audits.'); return; }
+    const next = !audit.shared_with_agent;
+    if (!window.confirm(next ? 'Share this audit with the agent?' : 'Hide this audit from the agent?')) return;
     setReleaseLoadingId(audit.id);
-    const nextSharedAt = nextSharedValue ? new Date().toISOString() : null;
-    const { data, error } = await supabase
-      .from('audits')
-      .update({ shared_with_agent: nextSharedValue, shared_at: nextSharedAt })
-      .eq('id', audit.id)
-      .select('id, shared_with_agent, shared_at')
-      .maybeSingle();
+    const { data, error } = await supabase.from('audits').update({ shared_with_agent: next, shared_at: next ? new Date().toISOString() : null }).eq('id', audit.id).select('id, shared_with_agent, shared_at').maybeSingle();
     setReleaseLoadingId(null);
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-    if (!data) {
-      setErrorMessage('Share update did not persist in Supabase.');
-      return;
-    }
-    setAudits((prev) =>
-      prev.map((item) =>
-        item.id === audit.id
-          ? {
-              ...item,
-              shared_with_agent: data.shared_with_agent,
-              shared_at: data.shared_at,
-            }
-          : item
-      )
-    );
-    setSuccessMessage(
-      data.shared_with_agent
-        ? 'Audit shared with agent successfully.'
-        : 'Audit hidden from agent successfully.'
-    );
+    if (error) { setErrorMessage(error.message); return; }
+    if (!data) { setErrorMessage('Share update did not persist.'); return; }
+    setAudits(prev => prev.map(a => a.id === audit.id ? { ...a, shared_with_agent: data.shared_with_agent, shared_at: data.shared_at } : a));
+    setSuccessMessage(data.shared_with_agent ? 'Audit shared successfully.' : 'Audit hidden successfully.');
   }
-  async function handleBulkShare(shareValue: boolean) {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!isAdmin) {
-      setErrorMessage('Only admin can perform bulk release actions.');
-      return;
-    }
-    if (filteredAudits.length === 0) {
-      setErrorMessage('No audits match the current filters.');
-      return;
-    }
-    const confirmed = window.confirm(
-      shareValue
-        ? `Share ${filteredAudits.length} filtered audits with agents?`
-        : `Hide ${filteredAudits.length} filtered audits from agents?`
-    );
-    if (!confirmed) return;
+
+  async function handleBulkShare(share: boolean) {
+    setErrorMessage(''); setSuccessMessage('');
+    if (!isAdmin) { setErrorMessage('Only admin can bulk release.'); return; }
+    if (filteredAudits.length === 0) { setErrorMessage('No audits match filters.'); return; }
+    if (!window.confirm(share ? `Share ${filteredAudits.length} filtered audits?` : `Hide ${filteredAudits.length} filtered audits?`)) return;
     setBulkSaving(true);
-    const ids = filteredAudits.map((item) => item.id);
-    const nextSharedAt = shareValue ? new Date().toISOString() : null;
-    const { data, error } = await supabase
-      .from('audits')
-      .update({ shared_with_agent: shareValue, shared_at: nextSharedAt })
-      .in('id', ids)
-      .select('id, shared_with_agent, shared_at');
+    const ids = filteredAudits.map(a => a.id);
+    const { data, error } = await supabase.from('audits').update({ shared_with_agent: share, shared_at: share ? new Date().toISOString() : null }).in('id', ids).select('id, shared_with_agent, shared_at');
     setBulkSaving(false);
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-    if (!data || data.length === 0) {
-      setErrorMessage('Bulk share or hide did not persist in Supabase.');
-      return;
-    }
-    const updatedMap = new Map(
-      data.map((row) => [
-        row.id,
-        { shared_with_agent: row.shared_with_agent, shared_at: row.shared_at },
-      ])
-    );
-    setAudits((prev) =>
-      prev.map((item) => {
-        const updated = updatedMap.get(item.id);
-        return updated ? { ...item, ...updated } : item;
-      })
-    );
-    setSuccessMessage(
-      shareValue
-        ? `${data.length} filtered audit(s) shared successfully.`
-        : `${data.length} filtered audit(s) hidden successfully.`
-    );
+    if (error) { setErrorMessage(error.message); return; }
+    if (!data?.length) { setErrorMessage('Bulk share did not persist.'); return; }
+    const um = new Map(data.map(r => [r.id, { shared_with_agent: r.shared_with_agent, shared_at: r.shared_at }]));
+    setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
+    setSuccessMessage(share ? `${data.length} audits shared.` : `${data.length} audits hidden.`);
   }
-  async function handleHideAllAudits() {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!isAdmin) {
-      setErrorMessage('Only admin can hide all audits.');
-      return;
-    }
-    if (audits.length === 0) {
-      setErrorMessage('There are no audits to hide.');
-      return;
-    }
-    const confirmed = window.confirm(
-      `Hide all ${audits.length} audits from agents? This ignores the current filters.`
-    );
-    if (!confirmed) return;
+
+  async function handleHideAll() {
+    setErrorMessage(''); setSuccessMessage('');
+    if (!isAdmin) { setErrorMessage('Only admin can hide all.'); return; }
+    if (audits.length === 0) { setErrorMessage('No audits to hide.'); return; }
+    if (!window.confirm(`Hide all ${audits.length} audits?`)) return;
     setBulkSaving(true);
-    const ids = audits.map((item) => item.id);
-    const { data, error } = await supabase
-      .from('audits')
-      .update({ shared_with_agent: false, shared_at: null })
-      .in('id', ids)
-      .select('id, shared_with_agent, shared_at');
+    const { data, error } = await supabase.from('audits').update({ shared_with_agent: false, shared_at: null }).in('id', audits.map(a => a.id)).select('id, shared_with_agent, shared_at');
     setBulkSaving(false);
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-    if (!data || data.length === 0) {
-      setErrorMessage('Hide all did not persist in Supabase.');
-      return;
-    }
-    const updatedMap = new Map(
-      data.map((row) => [
-        row.id,
-        { shared_with_agent: row.shared_with_agent, shared_at: row.shared_at },
-      ])
-    );
-    setAudits((prev) =>
-      prev.map((item) => {
-        const updated = updatedMap.get(item.id);
-        return updated ? { ...item, ...updated } : item;
-      })
-    );
-    setSuccessMessage(`${data.length} audit(s) hidden successfully.`);
+    if (error) { setErrorMessage(error.message); return; }
+    if (!data?.length) { setErrorMessage('Hide all did not persist.'); return; }
+    const um = new Map(data.map(r => [r.id, { shared_with_agent: r.shared_with_agent, shared_at: r.shared_at }]));
+    setAudits(prev => prev.map(a => { const u = um.get(a.id); return u ? { ...a, ...u } : a; }));
+    setSuccessMessage(`${data.length} audits hidden.`);
   }
-  async function handleDelete(auditId: string) {
-    setErrorMessage('');
-    setSuccessMessage('');
-    if (!isAdmin) {
-      setErrorMessage('Only admin can delete audits.');
-      return;
-    }
-    const confirmed = window.confirm('Delete this audit?');
-    if (!confirmed) return;
-    const { error } = await supabase.from('audits').delete().eq('id', auditId);
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-    setAudits((prev) => prev.filter((item) => item.id !== auditId));
-    if (expandedId === auditId) setExpandedId(null);
-    if (editingAuditId === auditId) cancelEdit();
-    setSuccessMessage('Audit deleted successfully.');
+
+  async function handleDelete(id: string) {
+    setErrorMessage(''); setSuccessMessage('');
+    if (!isAdmin) { setErrorMessage('Only admin can delete.'); return; }
+    if (!window.confirm('Delete this audit?')) return;
+    const { error } = await supabase.from('audits').delete().eq('id', id);
+    if (error) { setErrorMessage(error.message); return; }
+    setAudits(prev => prev.filter(a => a.id !== id));
+    if (expandedId === id) setExpandedId(null);
+    if (editingAuditId === id) cancelEdit();
+    setSuccessMessage('Audit deleted.');
   }
-  function getResultBadgeColor(result: string) {
-    if (result === 'Pass') return '#166534';
-    if (result === 'Borderline') return '#92400e';
-    if (result === 'Fail' || result === 'Auto-Fail') return '#991b1b';
-    if (result === 'N/A') return '#374151';
-    return '#1f2937';
+
+  function getResultColor(r: string): string {
+    if (r === 'Pass') return '#10b981';
+    if (r === 'Borderline') return '#f59e0b';
+    if (r === 'Fail' || r === 'Auto-Fail') return '#ef4444';
+    return '#64748b';
   }
-  if (loading) {
-    return <div style={{ color: 'var(--screen-text)' }}>Loading audits...</div>;
+
+  function getTeamAccent(team: string): string {
+    if (team === 'Calls') return '#3b82f6';
+    if (team === 'Tickets') return '#8b5cf6';
+    if (team === 'Sales') return '#10b981';
+    return '#64748b';
   }
+
+  // ─── RENDER ────────────────────────────────────────────────────────────────
+  if (loading) return (
+    <div style={s.loadingWrap}>
+      <div style={s.loadingSpinner} />
+      <span style={s.loadingText}>Loading audits…</span>
+    </div>
+  );
+
   return (
-    <div
-      data-no-theme-invert="true"
-      style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
-    >
-      {' '}
-      <div style={pageHeaderStyle}>
-        {' '}
+    <div style={s.root}>
+      {/* ── Page Header ── */}
+      <div style={s.pageHeader}>
         <div>
-          {' '}
-          <div style={sectionEyebrow}>Audit Management</div>{' '}
-          <h2 style={{ marginBottom: '8px', color: 'var(--screen-heading)' }}>Audits List</h2>{' '}
-          <p style={{ margin: 0, color: 'var(--screen-muted, #475569)' }}>
-            {' '}
-            QA can view audits and score details. Only admin can edit, delete,
-            or release audits.{' '}
-          </p>{' '}
-        </div>{' '}
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={() => setShowEvaluationProgress((prev) => !prev)}
-            style={secondaryButton}
-          >
-            {showEvaluationProgress ? 'Hide Evaluation Progress' : 'Show Evaluation Progress'}
-          </button>
-          <button
-            type="button"
-            onClick={() => importInputRef.current?.click()}
-            disabled={importingBoard}
-            style={secondaryButton}
-          >
-            {importingBoard ? 'Importing...' : 'Import Progress CSV'}
-          </button>
-          {importedFileName ? (
-            <button type="button" onClick={clearImportedProgress} style={secondaryButton}>
-              Clear Imported Board
-            </button>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void loadAuditsAndProfiles()}
-            style={secondaryButton}
-          >
-            Refresh
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept=".csv"
-            onChange={(e) => void handleProgressImport(e.target.files?.[0] || null)}
-            style={{ display: 'none' }}
-          />
+          <div style={s.eyebrow}>Audit Management</div>
+          <h2 style={s.pageTitle}>Audits List</h2>
+          <p style={s.pageSubtitle}>QA can view audits and score details. Only admin can edit, delete, or release audits.</p>
         </div>
-      </div>{' '}
-      {errorMessage ? <div style={errorBanner}>{errorMessage}</div> : null}{' '}
-      {successMessage ? (
-        <div style={successBanner}>{successMessage}</div>
-      ) : null}{' '}
-      <div style={panelStyle}>
-        {' '}
-        <div style={filterGridStyle}>
-          {' '}
-          <div style={searchFilterFieldStyle}>
-            {' '}
-            <label style={labelStyle}>
-              {' '}
-              Search by Agent Name, Display Name, or Agent ID{' '}
-            </label>{' '}
-            <input
-              type="text"
-              value={searchText}
-              onChange={(e) => setSearchText(e.target.value)}
-              style={fieldStyle}
-            />{' '}
-          </div>{' '}
-          <div style={standardFilterFieldStyle}>
-            {' '}
-            <label style={labelStyle}>Filter by Team</label>{' '}
-            <select
-              value={teamFilter}
-              onChange={(e) => setTeamFilter(e.target.value)}
-              style={selectFieldStyle}
-            >
-              {' '}
-              <option value="">All Teams</option>{' '}
-              <option value="Calls">Calls</option>{' '}
-              <option value="Tickets">Tickets</option>{' '}
-              <option value="Sales">Sales</option>{' '}
-            </select>{' '}
-          </div>{' '}
-          <div style={standardFilterFieldStyle}>
-            {' '}
-            <label style={labelStyle}>Filter by Case Type</label>{' '}
-            <select
-              value={caseTypeFilter}
-              onChange={(e) => setCaseTypeFilter(e.target.value)}
-              style={selectFieldStyle}
-            >
-              {' '}
-              <option value="">All Case Types</option>{' '}
-              {uniqueCaseTypes.map((caseType) => (
-                <option key={caseType} value={caseType}>
-                  {' '}
-                  {caseType}{' '}
-                </option>
-              ))}{' '}
-            </select>{' '}
-          </div>{' '}
-          <div style={dateFilterFieldStyle}>
-            {' '}
-            <label style={labelStyle}>Date From</label>{' '}
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              onClick={(e) => openNativeDatePicker(e.currentTarget)}
-              onFocus={(e) => openNativeDatePicker(e.currentTarget)}
-              style={fieldStyle}
-            />{' '}
-          </div>{' '}
-          <div style={dateFilterFieldStyle}>
-            {' '}
-            <label style={labelStyle}>Date To</label>{' '}
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              onClick={(e) => openNativeDatePicker(e.currentTarget)}
-              onFocus={(e) => openNativeDatePicker(e.currentTarget)}
-              style={fieldStyle}
-            />{' '}
-          </div>{' '}
-        </div>{' '}
-      </div>{' '}
+        <div style={s.headerActions}>
+          <button onClick={() => setShowEvaluationProgress(p => !p)} style={showEvaluationProgress ? s.btnAccent : s.btnSecondary}>
+            {showEvaluationProgress ? '↑ Hide Progress' : '↓ Show Progress'}
+          </button>
+          <button onClick={() => importInputRef.current?.click()} disabled={importingBoard} style={s.btnSecondary}>
+            {importingBoard ? 'Importing…' : '⬆ Import CSV'}
+          </button>
+          {importedFileName && <button onClick={() => { setImportedProgressByAgent({}); setImportedFileName(''); setSuccessMessage('Board cleared.'); }} style={s.btnSecondary}>✕ Clear Board</button>}
+          <button onClick={() => void loadData()} style={s.btnSecondary}>↻ Refresh</button>
+          <input ref={importInputRef} type="file" accept=".csv" onChange={e => void handleProgressImport(e.target.files?.[0])} style={{ display: 'none' }} />
+        </div>
+      </div>
+
+      {/* ── Banners ── */}
+      {errorMessage && <div style={s.bannerError}><span style={s.bannerIcon}>⚠</span>{errorMessage}</div>}
+      {successMessage && <div style={s.bannerSuccess}><span style={s.bannerIcon}>✓</span>{successMessage}</div>}
+
+      {/* ── Filters ── */}
+      <div style={s.panel}>
+        <div style={s.filterRow}>
+          <div style={s.filterFieldWide}>
+            <label style={s.label}>Search Agent</label>
+            <div style={s.searchWrap}>
+              <span style={s.searchIcon}>⌕</span>
+              <input type="text" value={searchText} onChange={e => setSearchText(e.target.value)} placeholder="Name, Display Name or ID…" style={s.searchInput} />
+            </div>
+          </div>
+          <div style={s.filterField}>
+            <label style={s.label}>Team</label>
+            <select value={teamFilter} onChange={e => setTeamFilter(e.target.value)} style={s.select}>
+              <option value="">All Teams</option>
+              <option value="Calls">Calls</option>
+              <option value="Tickets">Tickets</option>
+              <option value="Sales">Sales</option>
+            </select>
+          </div>
+          <div style={s.filterField}>
+            <label style={s.label}>Case Type</label>
+            <select value={caseTypeFilter} onChange={e => setCaseTypeFilter(e.target.value)} style={s.select}>
+              <option value="">All Types</option>
+              {uniqueCaseTypes.map(ct => <option key={ct} value={ct}>{ct}</option>)}
+            </select>
+          </div>
+          <div style={s.filterFieldNarrow}>
+            <label style={s.label}>From</label>
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} onClick={e => openNativeDatePicker(e.currentTarget)} style={s.input} />
+          </div>
+          <div style={s.filterFieldNarrow}>
+            <label style={s.label}>To</label>
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} onClick={e => openNativeDatePicker(e.currentTarget)} style={s.input} />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Release Controls ── */}
       {isAdmin ? (
-        <div style={{ ...panelStyle, marginTop: '18px' }}>
-          {' '}
-          <h3 style={{ marginTop: 0, color: 'var(--screen-heading)' }}>
-            {' '}
-            Weekly Release Controls{' '}
-          </h3>{' '}
-          <p style={{ color: 'var(--screen-muted, #475569)' }}>
-            {' '}
-            Use the filters above to choose the week, team, or case type, then
-            share or hide filtered audits, or hide all audits at once.{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Filtered Audits:</strong> {filteredAudits.length}{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Already Shared (Filtered):</strong> {sharedFilteredCount}{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Still Hidden (Filtered):</strong> {hiddenFilteredCount}{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Total Audits:</strong> {audits.length}{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Already Shared (All):</strong> {sharedAllCount}{' '}
-          </p>{' '}
-          <p>
-            {' '}
-            <strong>Already Hidden (All):</strong> {hiddenAllCount}{' '}
-          </p>{' '}
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {' '}
-            <button
-              onClick={() => void handleBulkShare(true)}
-              disabled={bulkSaving || filteredAudits.length === 0}
-              style={primaryButton}
-            >
-              {' '}
-              {bulkSaving ? 'Working...' : 'Share Filtered Audits'}{' '}
-            </button>{' '}
-            <button
-              onClick={() => void handleBulkShare(false)}
-              disabled={bulkSaving || filteredAudits.length === 0}
-              style={dangerButton}
-            >
-              {' '}
-              {bulkSaving ? 'Working...' : 'Hide Filtered Audits'}{' '}
-            </button>{' '}
-            <button
-              onClick={() => void handleHideAllAudits()}
-              disabled={bulkSaving || audits.length === 0}
-              style={dangerButton}
-            >
-              {' '}
-              {bulkSaving ? 'Working...' : 'Hide All Audits'}{' '}
-            </button>{' '}
-          </div>{' '}
-        </div>
-      ) : (
-        <div style={infoBanner}>
-          {' '}
-          QA view is read-only on this page. Only admin can edit, delete, or
-          release audits.{' '}
-        </div>
-      )}{' '}
-      
-{showEvaluationProgress ? (
-  <div style={progressPanelStyle}>
-    <div style={progressPanelHeaderStyle}>
-      <div>
-        <div style={sectionEyebrow}>Evaluation Progress</div>
-        <h3 style={{ margin: 0, color: 'var(--screen-heading)' }}>
-          Team Progress Board
-        </h3>
-        <p style={{ margin: '8px 0 0 0', color: 'var(--screen-muted, #475569)' }}>
-          This board uses the currently filtered audits. You can also import a CSV evaluation table to overlay Eval columns, Average, and OFF today.
-        </p>
-      </div>
-      <div style={progressMetaRowStyle}>
-        <span style={progressMetaPillStyle}>
-          Today: {todayStatusDate}
-        </span>
-        <span style={progressMetaPillStyle}>
-          Rows: {evaluationProgressData.rows.length}
-        </span>
-        <span style={progressMetaPillStyle}>
-          Visible Evals: {visibleProgressColumns.length}
-        </span>
-        <span style={progressMetaPillStyle}>
-          Max Evals: {evaluationProgressData.evaluationColumns.length}
-        </span>
-        <span style={progressMetaPillStyle}>
-          OFF Targets: {formatOffTargetSummary(selectedOffEvalIndexes)}
-        </span>
-        {importedFileName ? (
-          <span style={progressMetaPillStyle}>Imported: {importedFileName}</span>
-        ) : null}
-      </div>
-    </div>
-
-    <div style={progressControlsShellStyle}>
-      <div style={progressControlsBlockStyle}>
-        <div style={progressControlsLabelStyle}>Quick View</div>
-        <div style={progressControlsRowStyle}>
-          <button
-            type="button"
-            onClick={() => focusProgressGroup('all')}
-            style={{
-              ...(focusedEvalGroup === 'all'
-                ? progressControlButtonActiveStyle
-                : progressControlButtonStyle),
-            }}
-          >
-            All 24
-          </button>
-          {PROGRESS_GROUPS.map((group) => (
-            <button
-              key={group.key}
-              type="button"
-              onClick={() => focusProgressGroup(group.key)}
-              style={{
-                ...(focusedEvalGroup === group.key
-                  ? progressControlButtonActiveStyle
-                  : progressControlButtonStyle),
-              }}
-            >
-              {group.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={progressControlsBlockStyle}>
-        <div style={progressControlsLabelStyle}>Collapse Groups</div>
-        <div style={progressControlsRowStyle}>
-          {PROGRESS_GROUPS.map((group) => (
-            <button
-              key={group.key}
-              type="button"
-              onClick={() => toggleProgressGroupCollapse(group.key)}
-              style={{
-                ...(collapsedEvalGroups[group.key]
-                  ? progressControlButtonMutedStyle
-                  : progressControlButtonStyle),
-              }}
-            >
-              {collapsedEvalGroups[group.key] ? `Show ${group.label}` : `Hide ${group.label}`}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div style={progressControlsBlockStyle}>
-        <div style={progressControlsLabelStyle}>OFF Targets</div>
-        <div style={progressControlsRowStyle}>
-          <button
-            type="button"
-            onClick={selectAllVisibleOffTargets}
-            style={progressControlButtonStyle}
-          >
-            Select All Visible
-          </button>
-          <button
-            type="button"
-            onClick={clearSelectedOffTargets}
-            style={progressControlButtonStyle}
-          >
-            Clear Selection
-          </button>
-          <span style={progressSelectedTargetsStyle}>
-            {selectedOffEvalIndexes.length > 0
-              ? `Selected: ${formatOffTargetSummary(selectedOffEvalIndexes)}`
-              : 'Selected: None'}
-          </span>
-        </div>
-      </div>
-    </div>
-
-    <div style={progressHintStyle}>
-      Click one or more Eval headers to choose the OFF markers you want. Then use the Today button for an agent to apply or clear those OFF days.
-    </div>
-
-    {evaluationProgressData.rows.length === 0 ? (
-      <div style={progressEmptyStateStyle}>
-        No evaluation progress data matches the current filters yet.
-      </div>
-    ) : visibleProgressColumns.length === 0 ? (
-      <div style={progressEmptyStateStyle}>
-        All eval groups are hidden right now. Use the group buttons above to show a section again.
-      </div>
-    ) : (
-      <div style={progressTableWrapStyle}>
-        <div style={progressTableStyle}>
-          <div
-            style={{
-              ...progressGroupHeaderRowStyle,
-              gridTemplateColumns: progressGridTemplate,
-            }}
-          >
-            <div style={{ ...progressGroupHeaderBlockStyle, gridColumn: 'span 3' }}>
-              Agent Snapshot
+        <div style={{ ...s.panel, marginTop: '14px' }}>
+          <div style={s.releaseHeader}>
+            <div>
+              <div style={s.eyebrow}>Weekly Release Controls</div>
+              <p style={s.releaseDesc}>Use filters to select a scope, then share or hide filtered audits.</p>
             </div>
-            {visibleProgressGroupSpans.map((group) => (
-              <div
-                key={group.key}
-                style={{
-                  ...progressGroupHeaderBlockStyle,
-                  gridColumn: `span ${group.count}`,
-                }}
-              >
-                {group.label}
-              </div>
-            ))}
-            <div style={{ ...progressGroupHeaderBlockStyle, gridColumn: 'span 2' }}>
-              Summary
-            </div>
-          </div>
-
-          <div
-            style={{
-              ...progressRowStyle,
-              ...progressHeaderRowStyle,
-              gridTemplateColumns: progressGridTemplate,
-            }}
-          >
-            <div style={{ ...progressAgentCellStyle, ...progressStickyAgentHeaderCellStyle }}>Agent</div>
-            <div style={{ ...progressMetaCellStyle, ...progressStickyTeamHeaderCellStyle }}>Team</div>
-            <div style={{ ...progressMetaCellStyle, ...progressStickyTodayHeaderCellStyle }}>Today</div>
-            {visibleProgressColumns.map((column) => (
-              <button
-                key={column.label}
-                type="button"
-                onClick={() => toggleOffTargetEval(column.index)}
-                style={{
-                  ...progressEvalHeaderButtonStyle,
-                  ...(selectedOffEvalIndexes.includes(column.index)
-                    ? progressEvalHeaderButtonActiveStyle
-                    : {}),
-                }}
-                title={`Toggle ${column.label} for OFF control`}
-              >
-                {column.label}
-              </button>
-            ))}
-            <div style={progressMetaCellStyle}>Latest Date</div>
-            <div style={progressMetaCellStyle}>Average</div>
-          </div>
-
-          {evaluationProgressData.rows.map((row) => {
-            const rowOffIndexes = row.offIndexes || getRowEffectiveOffIndexes(row);
-            const rowHasAnyOff = rowOffIndexes.length > 0;
-            const allSelectedTargetsAreOff =
-              selectedOffEvalIndexes.length > 0 &&
-              selectedOffEvalIndexes.every((index) => rowOffIndexes.includes(index));
-
-            return (
-              <div
-                key={getAgentProgressKey(row.agent_id, row.team)}
-                style={progressEntryStyle}
-              >
-                <div
-                  style={{
-                    ...progressRowStyle,
-                    gridTemplateColumns: progressGridTemplate,
-                  }}
-                >
-                  <div style={{ ...progressAgentCellStyle, ...progressStickyAgentCellStyle }}>
-                    <div style={primaryCellTextStyle}>{row.agent_name}</div>
-                    <div style={secondaryCellTextStyle}>
-                      {row.display_name || '-'} • {row.agent_id}
-                    </div>
-                  </div>
-
-                  <div style={{ ...progressMetaCellStyle, ...progressStickyTeamCellStyle }}>
-                    <span style={teamMiniPillStyle}>{row.team}</span>
-                  </div>
-
-                  <div style={{ ...progressMetaCellStyle, ...progressStickyTodayCellStyle }}>
-                    <button
-                      type="button"
-                      onClick={() => void toggleAgentOffToday(row.agent_id, row.team)}
-                      disabled={!canManageOffToday}
-                      title={
-                        canManageOffToday
-                          ? selectedOffEvalIndexes.length === 0
-                            ? 'Choose at least one Eval header first'
-                            : allSelectedTargetsAreOff
-                            ? `Clear OFF from ${formatOffTargetSummary(selectedOffEvalIndexes)}`
-                            : `Apply OFF to ${formatOffTargetSummary(selectedOffEvalIndexes)}`
-                          : 'Only admin or QA can update OFF days'
-                      }
-                      style={
-                        rowHasAnyOff
-                          ? {
-                              ...progressOffButtonActiveStyle,
-                              opacity: canManageOffToday ? 1 : 0.7,
-                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                            }
-                          : {
-                              ...progressOffButtonStyle,
-                              opacity: canManageOffToday ? 1 : 0.7,
-                              cursor: canManageOffToday ? 'pointer' : 'not-allowed',
-                            }
-                      }
-                    >
-                      {selectedOffEvalIndexes.length === 0
-                        ? 'Select Eval'
-                        : allSelectedTargetsAreOff
-                        ? `Clear ${selectedOffEvalIndexes.length} OFF`
-                        : `OFF × ${selectedOffEvalIndexes.length}`}
-                    </button>
-                  </div>
-
-                  {visibleProgressColumns.map((column) =>
-                    renderEvaluationCell(row, column)
-                  )}
-
-                  <div style={progressMetaCellStyle}>
-                    {row.latestAuditDate ? (
-                      <div>
-                        <div style={primaryCellTextStyle}>{formatDateOnly(row.latestAuditDate)}</div>
-                        <div style={secondaryCellTextStyle}>
-                          {rowHasAnyOff
-                            ? `OFF in ${formatOffTargetSummary(rowOffIndexes)}`
-                            : 'Latest evaluated audit'}
-                        </div>
-                      </div>
-                    ) : rowHasAnyOff ? (
-                      <span style={progressOffPillStyle}>
-                        {rowOffIndexes.length === 1
-                          ? formatEvalIndexLabel(rowOffIndexes[0])
-                          : `${rowOffIndexes.length} OFF`}
-                      </span>
-                    ) : (
-                      <span style={secondaryCellTextStyle}>-</span>
-                    )}
-                  </div>
-
-                  <div style={progressMetaCellStyle}>
-                    <span style={{ ...progressAveragePillStyle, ...getProgressCellTone(row.averageScore) }}>
-                      {row.averageScore === null ? '-' : `${row.averageScore.toFixed(1)}%`}
-                    </span>
-                  </div>
+            <div style={s.statsRow}>
+              {[
+                { label: 'Filtered', val: filteredAudits.length, color: '#60a5fa' },
+                { label: 'Shared (filtered)', val: sharedFiltered, color: '#34d399' },
+                { label: 'Hidden (filtered)', val: hiddenFiltered, color: '#f87171' },
+                { label: 'Total', val: audits.length, color: '#a78bfa' },
+                { label: 'Shared (all)', val: sharedAll, color: '#34d399' },
+                { label: 'Hidden (all)', val: hiddenAll, color: '#f87171' },
+              ].map(stat => (
+                <div key={stat.label} style={s.statCard}>
+                  <div style={{ ...s.statVal, color: stat.color }}>{stat.val}</div>
+                  <div style={s.statLabel}>{stat.label}</div>
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          </div>
+          <div style={s.btnGroup}>
+            <button onClick={() => void handleBulkShare(true)} disabled={bulkSaving || filteredAudits.length === 0} style={s.btnPrimary}>{bulkSaving ? '…' : 'Share Filtered'}</button>
+            <button onClick={() => void handleBulkShare(false)} disabled={bulkSaving || filteredAudits.length === 0} style={s.btnDanger}>{bulkSaving ? '…' : 'Hide Filtered'}</button>
+            <button onClick={() => void handleHideAll()} disabled={bulkSaving || audits.length === 0} style={s.btnDanger}>{bulkSaving ? '…' : 'Hide All Audits'}</button>
+          </div>
         </div>
-      </div>
-    )}
-  </div>
-) : null}
-      {filteredAudits.length === 0 ? (
-        <p style={{ color: 'var(--screen-muted, #475569)', marginTop: '18px' }}>No audits found.</p>
       ) : (
-        <div style={auditTableWrapStyle}>
-          {' '}
-          <div style={auditTableStyle}>
-            {' '}
-            <div style={{ ...auditRowStyle, ...auditHeaderRowStyle }}>
-              {' '}
-              <div style={auditCellAgentStyle}>Agent</div>{' '}
-              <div style={auditCellDateStyle}>Audit Date</div>{' '}
-              <div style={auditCellCaseStyle}>Case Type</div>{' '}
-              <div style={auditCellReferenceStyle}>Reference</div>{' '}
-              <div style={auditCellScoreStyle}>Quality</div>{' '}
-              <div style={auditCellReleaseStyle}>Release</div>{' '}
-              <div style={auditCellCreatorStyle}>Created By</div>{' '}
-              <div style={auditCellCommentsStyle}>Comments</div>{' '}
-              <div style={auditCellActionsStyle}>Actions</div>{' '}
-            </div>{' '}
-            {filteredAudits.map((audit) => {
+        <div style={s.infoBanner}>QA view — read-only. Only admin can edit, delete, or release audits.</div>
+      )}
+
+      {/* ── Evaluation Progress Board ── */}
+      {showEvaluationProgress && (
+        <div style={{ ...s.panel, marginTop: '14px' }}>
+          <div style={s.progressHeader}>
+            <div>
+              <div style={s.eyebrow}>Evaluation Progress</div>
+              <h3 style={s.sectionTitle}>Team Progress Board</h3>
+              <p style={s.releaseDesc}>Filtered audits displayed below. Import a CSV to overlay Eval columns.</p>
+            </div>
+            <div style={s.metaPills}>
+              {[
+                `Today: ${todayStatusDate}`,
+                `Rows: ${progressData.rows.length}`,
+                `Visible: ${visibleCols.length} evals`,
+                importedFileName ? `CSV: ${importedFileName}` : null,
+              ].filter(Boolean).map(t => <span key={t} style={s.metaPill}>{t}</span>)}
+            </div>
+          </div>
+
+          {/* Controls */}
+          <div style={s.progressControls}>
+            <div style={s.controlBlock}>
+              <div style={s.controlLabel}>Quick View</div>
+              <div style={s.controlRow}>
+                {(['all', ...PROGRESS_GROUPS.map(g => g.key)] as ('all' | ProgressGroupKey)[]).map(k => (
+                  <button key={k} onClick={() => setFocusedEvalGroup(k)} style={focusedEvalGroup === k ? s.chipActive : s.chip}>
+                    {k === 'all' ? 'All 24' : PROGRESS_GROUPS.find(g => g.key === k)?.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={s.controlBlock}>
+              <div style={s.controlLabel}>Groups</div>
+              <div style={s.controlRow}>
+                {PROGRESS_GROUPS.map(g => (
+                  <button key={g.key} onClick={() => toggleGroupCollapse(g.key)} style={collapsedEvalGroups[g.key] ? s.chipMuted : s.chip}>
+                    {collapsedEvalGroups[g.key] ? `+ ${g.label}` : `− ${g.label}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={s.controlBlock}>
+              <div style={s.controlLabel}>OFF Targets</div>
+              <div style={s.controlRow}>
+                <button onClick={() => setSelectedOffEvalIndexes(normalizeOffEvalIndexes(visibleCols.map(c => c.index)))} style={s.chip}>Select All</button>
+                <button onClick={() => setSelectedOffEvalIndexes([])} style={s.chip}>Clear</button>
+                <span style={s.offTargetBadge}>{selectedOffEvalIndexes.length > 0 ? formatOffSummary(selectedOffEvalIndexes) : 'None selected'}</span>
+              </div>
+            </div>
+          </div>
+
+          <p style={s.progressHint}>Click Eval headers to pick OFF targets, then use each agent's Today button to apply.</p>
+
+          {progressData.rows.length === 0 ? (
+            <div style={s.emptyState}>No evaluation progress data for current filters.</div>
+          ) : visibleCols.length === 0 ? (
+            <div style={s.emptyState}>All eval groups hidden — use group buttons above to show one.</div>
+          ) : (
+            <div style={s.tableWrap}>
+              <div style={{ minWidth: '2600px' }}>
+                {/* Group header */}
+                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'rgba(15,23,42,0.6)', borderBottom: '1px solid rgba(148,163,184,0.10)', padding: '10px 16px 0' }}>
+                  <div style={{ ...s.groupHeaderCell, gridColumn: 'span 3' }}>Agent Snapshot</div>
+                  {visibleGroupSpans.map(g => <div key={g.key} style={{ ...s.groupHeaderCell, gridColumn: `span ${g.count}` }}>{g.label}</div>)}
+                  <div style={{ ...s.groupHeaderCell, gridColumn: 'span 2' }}>Summary</div>
+                </div>
+                {/* Column header */}
+                <div style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, background: 'rgba(15,23,42,0.5)', borderBottom: '1px solid rgba(148,163,184,0.12)', position: 'sticky', top: 0, zIndex: 2 }}>
+                  <div style={{ ...s.th, ...s.stickyAgent }}>Agent</div>
+                  <div style={{ ...s.th, ...s.stickyTeam }}>Team</div>
+                  <div style={{ ...s.th, ...s.stickyToday }}>Today</div>
+                  {visibleCols.map(col => (
+                    <button key={col.label} onClick={() => setSelectedOffEvalIndexes(prev => prev.includes(col.index) ? normalizeOffEvalIndexes(prev.filter(i => i !== col.index)) : normalizeOffEvalIndexes([...prev, col.index]))} style={{ ...s.evalHeader, ...(selectedOffEvalIndexes.includes(col.index) ? s.evalHeaderActive : {}) }}>{col.label}</button>
+                  ))}
+                  <div style={s.th}>Latest Date</div>
+                  <div style={s.th}>Average</div>
+                </div>
+                {/* Rows */}
+                {progressData.rows.map(row => {
+                  const offIdx = row.offIndexes || getEffectiveOffIndexes(row.agent_id, row.team);
+                  const hasOff = offIdx.length > 0;
+                  const allOff = selectedOffEvalIndexes.length > 0 && selectedOffEvalIndexes.every(i => offIdx.includes(i));
+                  return (
+                    <div key={agentKey(row.agent_id, row.team)} style={{ ...s.progressRow, gridTemplateColumns: gridTemplate, borderBottom: '1px solid rgba(148,163,184,0.07)', padding: '10px 16px' }}>
+                      <div style={{ ...s.agentCell, ...s.stickyAgent }}>
+                        <div style={s.agentName}>{row.agent_name}</div>
+                        <div style={s.agentSub}>{row.display_name || '—'} · {row.agent_id}</div>
+                      </div>
+                      <div style={{ ...s.metaCell, ...s.stickyTeam }}>
+                        <span style={{ ...s.teamPill, borderColor: getTeamAccent(row.team) + '60', color: getTeamAccent(row.team) }}>{row.team}</span>
+                      </div>
+                      <div style={{ ...s.metaCell, ...s.stickyToday }}>
+                        <button onClick={() => void toggleAgentOff(row.agent_id, row.team)} disabled={!canManageOffToday} style={{ ...s.offBtn, ...(hasOff ? s.offBtnActive : {}), opacity: canManageOffToday ? 1 : 0.5 }}>
+                          {selectedOffEvalIndexes.length === 0 ? '— Select —' : allOff ? `Clear ${selectedOffEvalIndexes.length}` : `OFF ×${selectedOffEvalIndexes.length}`}
+                        </button>
+                      </div>
+                      {visibleCols.map(col => {
+                        const ev = row.shiftedEvaluations?.[col.index] || row.evaluations[col.index] || { score: null, label: '' };
+                        const has = ev.score !== null && Number.isFinite(ev.score);
+                        const isOff = offIdx.includes(col.index);
+                        const isSel = selectedOffEvalIndexes.includes(col.index);
+                        if (isOff) return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...s.evalOff, ...(isSel ? s.evalSelected : {}) }} title={`OFF – ${col.label}`}>OFF</div>;
+                        const band = getScoreBand(ev.score);
+                        return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...s.evalBand[band], ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${ev.score}%` : 'No eval'}>{has ? `${Number(ev.score).toFixed(0)}%` : '—'}</div>;
+                      })}
+                      <div style={s.metaCell}>
+                        {row.latestAuditDate ? <div style={s.agentName}>{formatDateOnly(row.latestAuditDate)}</div> : hasOff ? <span style={s.offPill}>{offIdx.length === 1 ? `Eval ${offIdx[0] + 1}` : `${offIdx.length} OFF`}</span> : <span style={s.agentSub}>—</span>}
+                      </div>
+                      <div style={s.metaCell}>
+                        <span style={{ ...s.avgPill, ...s.evalBand[getScoreBand(row.averageScore)] }}>{row.averageScore === null ? '—' : `${row.averageScore.toFixed(1)}%`}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Audits Table ── */}
+      {filteredAudits.length === 0 ? (
+        <div style={s.emptyState}>No audits found for current filters.</div>
+      ) : (
+        <div style={{ ...s.tableWrap, marginTop: '14px' }}>
+          <div style={{ minWidth: '1800px' }}>
+            {/* Table header */}
+            <div style={{ ...s.auditRow, ...s.auditHeader }}>
+              {['Agent', 'Date', 'Case Type', 'Reference', 'Quality', 'Status', 'Created By', 'Comments', 'Actions'].map(h => (
+                <div key={h} style={s.th}>{h}</div>
+              ))}
+            </div>
+            {/* Table rows */}
+            {filteredAudits.map(audit => {
               const isEditing = editingAuditId === audit.id;
               const isExpanded = expandedId === audit.id || isEditing;
-              const adjustedEditData = isEditing
-                ? getAdjustedScoreData(
-                    editForm.team,
-                    editScores,
-                    editMetricComments
-                  )
-                : null;
+              const adjEdit = isEditing ? getAdjustedScoreData(editForm.team, editScores, editMetricComments) : null;
+              const score = Number(audit.quality_score);
+              const band = getScoreBand(score);
               return (
-                <div key={audit.id} style={auditEntryStyle}>
-                  {' '}
-                  <div style={auditRowStyle}>
-                    {' '}
-                    <div style={auditCellAgentStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {audit.agent_name}
-                      </div>{' '}
-                      <div style={secondaryCellTextStyle}>
-                        {' '}
-                        {getDisplayName(audit) || '-'} • {audit.agent_id} •{' '}
-                        {audit.team}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellDateStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {' '}
-                        {formatDateOnly(audit.audit_date)}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellCaseStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {audit.case_type}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellReferenceStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {' '}
-                        {getAuditReference(audit)}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellScoreStyle}>
-                      {' '}
-                      <span style={scorePillStyle}>
-                        {' '}
-                        {Number(audit.quality_score).toFixed(2)}%{' '}
-                      </span>{' '}
-                    </div>{' '}
-                    <div style={auditCellReleaseStyle}>
-                      {' '}
-                      <span
-                        style={{
-                          ...pillStyle,
-                          backgroundColor: audit.shared_with_agent
-                            ? '#166534'
-                            : '#475569',
-                        }}
-                      >
-                        {' '}
-                        {audit.shared_with_agent ? 'Shared' : 'Hidden'}{' '}
-                      </span>{' '}
-                      <div style={secondaryCellTextStyle}>
-                        {' '}
-                        {formatDate(audit.shared_at)}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellCreatorStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {' '}
-                        {getCreatedByLabel(audit)}{' '}
-                      </div>{' '}
-                      <div style={secondaryCellTextStyle}>
-                        {' '}
-                        {audit.created_by_role || '-'}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellCommentsStyle}>
-                      {' '}
-                      <div style={primaryCellTextStyle}>
-                        {' '}
-                        {getCommentsPreview(audit.comments)}{' '}
-                      </div>{' '}
-                    </div>{' '}
-                    <div style={auditCellActionsStyle}>
-                      {' '}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setExpandedId(
-                            expandedId === audit.id ? null : audit.id
-                          )
-                        }
-                        style={miniSecondaryButton}
-                      >
-                        {' '}
-                        {isExpanded ? 'Hide' : 'Details'}{' '}
-                      </button>{' '}
-                      {isAdmin ? (
-                        <>
-                          {' '}
-                          <button
-                            type="button"
-                            onClick={() => void handleToggleShare(audit)}
-                            disabled={
-                              releaseLoadingId === audit.id ||
-                              saving ||
-                              bulkSaving
-                            }
-                            style={
-                              audit.shared_with_agent
-                                ? miniDangerButton
-                                : miniPrimaryButton
-                            }
-                          >
-                            {' '}
-                            {releaseLoadingId === audit.id
-                              ? '...'
-                              : audit.shared_with_agent
-                              ? 'Hide'
-                              : 'Share'}{' '}
-                          </button>{' '}
-                          {!isEditing ? (
-                            <button
-                              type="button"
-                              onClick={() => startEditAudit(audit)}
-                              style={miniSecondaryButton}
-                            >
-                              {' '}
-                              Edit{' '}
-                            </button>
-                          ) : null}{' '}
-                          <button
-                            type="button"
-                            onClick={() => void handleDelete(audit.id)}
-                            style={miniDangerButton}
-                          >
-                            {' '}
-                            Delete{' '}
-                          </button>{' '}
-                        </>
-                      ) : null}{' '}
-                    </div>{' '}
-                  </div>{' '}
-                  {isExpanded ? (
-                    <div style={auditExpandedRowStyle}>
-                      {' '}
+                <div key={audit.id} style={s.auditEntry}>
+                  <div style={s.auditRow}>
+                    <div>
+                      <div style={s.agentName}>{audit.agent_name}</div>
+                      <div style={s.agentSub}>{getDisplayName(audit) || '—'} · {audit.agent_id} · <span style={{ color: getTeamAccent(audit.team) }}>{audit.team}</span></div>
+                    </div>
+                    <div style={s.agentName}>{formatDateOnly(audit.audit_date)}</div>
+                    <div style={s.agentName}>{audit.case_type}</div>
+                    <div style={{ ...s.agentName, fontSize: '12px' }}>{getAuditReference(audit)}</div>
+                    <div>
+                      <span style={{ ...s.scoreBadge, ...s.evalBand[band] }}>{score.toFixed(2)}%</span>
+                    </div>
+                    <div>
+                      <span style={{ ...s.statusPill, background: audit.shared_with_agent ? 'rgba(16,185,129,0.15)' : 'rgba(100,116,139,0.15)', color: audit.shared_with_agent ? '#34d399' : '#94a3b8', borderColor: audit.shared_with_agent ? 'rgba(52,211,153,0.3)' : 'rgba(148,163,184,0.2)' }}>
+                        {audit.shared_with_agent ? '● Shared' : '○ Hidden'}
+                      </span>
+                      {audit.shared_at && <div style={{ ...s.agentSub, marginTop: '4px' }}>{formatDate(audit.shared_at)}</div>}
+                    </div>
+                    <div>
+                      <div style={s.agentName}>{getCreatedByLabel(audit)}</div>
+                      <div style={s.agentSub}>{audit.created_by_role || '—'}</div>
+                    </div>
+                    <div style={{ ...s.agentName, fontSize: '12px', opacity: 0.8 }}>{getCommentsPreview(audit.comments)}</div>
+                    <div style={s.actionCell}>
+                      <button onClick={() => setExpandedId(expandedId === audit.id ? null : audit.id)} style={s.btnMini}>{isExpanded ? 'Hide' : 'Details'}</button>
+                      {isAdmin && <>
+                        <button onClick={() => void handleToggleShare(audit)} disabled={releaseLoadingId === audit.id || saving || bulkSaving} style={audit.shared_with_agent ? s.btnMiniDanger : s.btnMiniPrimary}>
+                          {releaseLoadingId === audit.id ? '…' : audit.shared_with_agent ? 'Hide' : 'Share'}
+                        </button>
+                        {!isEditing && <button onClick={() => startEditAudit(audit)} style={s.btnMini}>Edit</button>}
+                        <button onClick={() => void handleDelete(audit.id)} style={s.btnMiniDanger}>Delete</button>
+                      </>}
+                    </div>
+                  </div>
+
+                  {/* Expanded row */}
+                  {isExpanded && (
+                    <div style={s.expandedWrap}>
                       {isEditing && isAdmin ? (
-                        <div style={expandedPanelStyle}>
-                          {' '}
-                          <div style={sectionEyebrow}>Edit Audit</div>{' '}
-                          <div style={editGridStyle}>
-                            {' '}
+                        <div style={s.expandedPanel}>
+                          <div style={s.eyebrow}>Edit Audit</div>
+                          <div style={s.editGrid}>
                             <div>
-                              {' '}
-                              <label style={labelStyle}>Team</label>{' '}
-                              <select
-                                value={editForm.team}
-                                onChange={(e) =>
-                                  handleTeamChange(
-                                    e.target.value as EditFormState['team']
-                                  )
-                                }
-                                style={selectFieldStyle}
-                              >
-                                {' '}
-                                <option value="">Select Team</option>{' '}
-                                <option value="Calls">Calls</option>{' '}
-                                <option value="Tickets">Tickets</option>{' '}
-                                <option value="Sales">Sales</option>{' '}
-                              </select>{' '}
-                            </div>{' '}
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              {' '}
-                              <label style={labelStyle}>Agent</label>{' '}
-                              <div
-                                ref={agentPickerRef}
-                                style={{ position: 'relative' }}
-                              >
-                                {' '}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setIsAgentPickerOpen((prev) => !prev)
-                                  }
-                                  style={pickerButtonStyle}
-                                >
-                                  {' '}
-                                  <span
-                                    style={{
-                                      color: selectedAgent
-                                        ? '#f8fafc'
-                                        : '#94a3b8',
-                                    }}
-                                  >
-                                    {' '}
-                                    {selectedAgent
-                                      ? getAgentLabel(selectedAgent)
-                                      : 'Select agent'}{' '}
-                                  </span>{' '}
-                                  <span>▼</span>{' '}
-                                </button>{' '}
-                                {isAgentPickerOpen && (
-                                  <div style={pickerMenuStyle}>
-                                    {' '}
-                                    <div style={pickerSearchWrapStyle}>
-                                      {' '}
-                                      <input
-                                        type="text"
-                                        value={agentSearch}
-                                        onChange={(e) =>
-                                          setAgentSearch(e.target.value)
-                                        }
-                                        placeholder="Search by name, ID, or display name"
-                                        style={fieldStyle}
-                                      />{' '}
-                                    </div>{' '}
-                                    <div style={pickerListStyle}>
-                                      {' '}
-                                      {visibleAgents.length === 0 ? (
-                                        <div style={pickerInfoStyle}>
-                                          {' '}
-                                          No agents found{' '}
-                                        </div>
-                                      ) : (
-                                        visibleAgents.map((profile) => (
-                                          <button
-                                            key={profile.id}
-                                            type="button"
-                                            onClick={() =>
-                                              handleSelectAgent(profile)
-                                            }
-                                            style={{
-                                              ...pickerOptionStyle,
-                                              ...(selectedAgentProfileId ===
-                                              profile.id
-                                                ? pickerOptionActiveStyle
-                                                : {}),
-                                            }}
-                                          >
-                                            {' '}
-                                            {getAgentLabel(profile)}{' '}
-                                          </button>
-                                        ))
-                                      )}{' '}
-                                    </div>{' '}
-                                  </div>
-                                )}{' '}
-                              </div>{' '}
-                            </div>{' '}
-                            <div>
-                              {' '}
-                              <label style={labelStyle}>Case Type</label>{' '}
-                              <input
-                                value={editForm.caseType}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    caseType: e.target.value,
-                                  }))
-                                }
-                                style={fieldStyle}
-                              />{' '}
-                            </div>{' '}
-                            <div>
-                              {' '}
-                              <label style={labelStyle}>Audit Date</label>{' '}
-                              <input
-                                type="date"
-                                value={editForm.auditDate}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    auditDate: e.target.value,
-                                  }))
-                                }
-                                onClick={(e) => openNativeDatePicker(e.currentTarget)}
-                                onFocus={(e) => openNativeDatePicker(e.currentTarget)}
-                                style={fieldStyle}
-                              />{' '}
-                            </div>{' '}
-                            {(editForm.team === 'Calls' ||
-                              editForm.team === 'Sales') && (
-                              <>
-                                {' '}
-                                <div>
-                                  {' '}
-                                  <label style={labelStyle}>
-                                    Order Number
-                                  </label>{' '}
-                                  <input
-                                    value={editForm.orderNumber}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        orderNumber: e.target.value,
-                                      }))
-                                    }
-                                    style={fieldStyle}
-                                  />{' '}
-                                </div>{' '}
-                                <div>
-                                  {' '}
-                                  <label style={labelStyle}>
-                                    Phone Number
-                                  </label>{' '}
-                                  <input
-                                    value={editForm.phoneNumber}
-                                    onChange={(e) =>
-                                      setEditForm((prev) => ({
-                                        ...prev,
-                                        phoneNumber: e.target.value,
-                                      }))
-                                    }
-                                    style={fieldStyle}
-                                  />{' '}
-                                </div>{' '}
-                              </>
-                            )}{' '}
-                            {editForm.team === 'Tickets' && (
-                              <div>
-                                {' '}
-                                <label style={labelStyle}>Ticket ID</label>{' '}
-                                <input
-                                  value={editForm.ticketId}
-                                  onChange={(e) =>
-                                    setEditForm((prev) => ({
-                                      ...prev,
-                                      ticketId: e.target.value,
-                                    }))
-                                  }
-                                  style={fieldStyle}
-                                />{' '}
-                              </div>
-                            )}{' '}
-                            <div style={{ gridColumn: '1 / -1' }}>
-                              {' '}
-                              <label style={labelStyle}>Comments</label>{' '}
-                              <textarea
-                                value={editForm.comments}
-                                onChange={(e) =>
-                                  setEditForm((prev) => ({
-                                    ...prev,
-                                    comments: e.target.value,
-                                  }))
-                                }
-                                rows={4}
-                                style={fieldStyle}
-                              />{' '}
-                            </div>{' '}
-                          </div>{' '}
-                          <div
-                            style={{
-                              marginTop: '18px',
-                              display: 'grid',
-                              gap: '12px',
-                            }}
-                          >
-                            {' '}
-                            {getMetricsForTeam(editForm.team).map((metric) => (
-                              <div key={metric.name} style={scoreRowStyle}>
-                                {' '}
-                                <div
-                                  style={{ color: 'var(--screen-text)', fontWeight: 700 }}
-                                >
-                                  {' '}
-                                  {countsTowardScore(metric)
-                                    ? `${metric.name} (${metric.pass} pts)`
-                                    : metric.name}{' '}
-                                </div>{' '}
-                                <div style={{ display: 'grid', gap: '8px', minWidth: '230px' }}>
-                                  <select
-                                    value={getMetricStoredValue(metric, editScores)}
-                                    onChange={(e) =>
-                                      handleScoreChange(
-                                        metric.name,
-                                        e.target.value
-                                      )
-                                    }
-                                    disabled={LOCKED_NA_METRICS.has(metric.name)}
-                                    style={compactSelectFieldStyle}
-                                  >
-                                    {' '}
-                                    {getMetricOptions(metric).map((option) => (
-                                      <option
-                                        key={option || '__empty__'}
-                                        value={option}
-                                        style={selectOptionStyle}
-                                      >
-                                        {' '}
-                                        {option || 'Select answer'}{' '}
-                                      </option>
-                                    ))}{' '}
-                                  </select>{' '}
-                                  {countsTowardScore(metric) &&
-                                  shouldShowMetricComment(
-                                    getMetricStoredValue(metric, editScores)
-                                  ) ? (
-                                    <textarea
-                                      value={editMetricComments[metric.name] || ''}
-                                      onChange={(e) =>
-                                        handleMetricCommentChange(
-                                          metric.name,
-                                          e.target.value
-                                        )
-                                      }
-                                      rows={2}
-                                      placeholder="Leave a short note explaining the result"
-                                      style={metricCommentFieldStyle}
-                                    />
-                                  ) : null}
-                                </div>
-                              </div>
-                            ))}{' '}
-                          </div>{' '}
-                          {adjustedEditData ? (
-                            <div style={editSummaryStyle}>
-                              {' '}
-                              <div style={summaryEyebrowStyle}>
-                                {' '}
-                                Updated Score Preview{' '}
-                              </div>{' '}
-                              <div style={summaryScoreStyle}>
-                                {' '}
-                                {adjustedEditData.qualityScore}%{' '}
-                              </div>{' '}
+                              <label style={s.label}>Team</label>
+                              <select value={editForm.team} onChange={e => handleTeamChange(e.target.value as EditFormState['team'])} style={s.select}>
+                                <option value="">Select Team</option>
+                                <option value="Calls">Calls</option>
+                                <option value="Tickets">Tickets</option>
+                                <option value="Sales">Sales</option>
+                              </select>
                             </div>
-                          ) : null}{' '}
-                          <div
-                            style={{
-                              marginTop: '18px',
-                              display: 'flex',
-                              gap: '10px',
-                              flexWrap: 'wrap',
-                            }}
-                          >
-                            {' '}
-                            <button
-                              type="button"
-                              onClick={() => void handleUpdate(audit.id)}
-                              disabled={saving}
-                              style={primaryButton}
-                            >
-                              {' '}
-                              {saving ? 'Saving...' : 'Save Changes'}{' '}
-                            </button>{' '}
-                            <button
-                              type="button"
-                              onClick={cancelEdit}
-                              style={secondaryButton}
-                            >
-                              {' '}
-                              Cancel Edit{' '}
-                            </button>{' '}
-                          </div>{' '}
+                            <div style={{ gridColumn: '1/-1' }}>
+                              <label style={s.label}>Agent</label>
+                              <div ref={agentPickerRef} style={{ position: 'relative' }}>
+                                <button onClick={() => setIsAgentPickerOpen(p => !p)} style={s.pickerBtn}>
+                                  <span style={{ color: selectedAgent ? 'var(--color-text)' : '#64748b' }}>{selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent'}</span>
+                                  <span>▾</span>
+                                </button>
+                                {isAgentPickerOpen && (
+                                  <div style={s.pickerMenu}>
+                                    <div style={{ padding: '10px', borderBottom: '1px solid rgba(148,163,184,0.12)' }}>
+                                      <input type="text" value={agentSearch} onChange={e => setAgentSearch(e.target.value)} placeholder="Search agents…" style={s.input} />
+                                    </div>
+                                    <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '8px', display: 'grid', gap: '6px' }}>
+                                      {visibleAgents.length === 0 ? <div style={{ padding: '12px', color: '#64748b' }}>No agents found</div> : visibleAgents.map(p => (
+                                        <button key={p.id} onClick={() => { setSelectedAgentProfileId(p.id); setAgentSearch(getAgentLabel(p)); setIsAgentPickerOpen(false); }} style={{ ...s.pickerOption, ...(selectedAgentProfileId === p.id ? s.pickerOptionActive : {}) }}>{getAgentLabel(p)}</button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            <div>
+                              <label style={s.label}>Case Type</label>
+                              <input value={editForm.caseType} onChange={e => setEditForm(p => ({ ...p, caseType: e.target.value }))} style={s.input} />
+                            </div>
+                            <div>
+                              <label style={s.label}>Audit Date</label>
+                              <input type="date" value={editForm.auditDate} onChange={e => setEditForm(p => ({ ...p, auditDate: e.target.value }))} onClick={e => openNativeDatePicker(e.currentTarget)} style={s.input} />
+                            </div>
+                            {(editForm.team === 'Calls' || editForm.team === 'Sales') && <>
+                              <div><label style={s.label}>Order Number</label><input value={editForm.orderNumber} onChange={e => setEditForm(p => ({ ...p, orderNumber: e.target.value }))} style={s.input} /></div>
+                              <div><label style={s.label}>Phone Number</label><input value={editForm.phoneNumber} onChange={e => setEditForm(p => ({ ...p, phoneNumber: e.target.value }))} style={s.input} /></div>
+                            </>}
+                            {editForm.team === 'Tickets' && <div><label style={s.label}>Ticket ID</label><input value={editForm.ticketId} onChange={e => setEditForm(p => ({ ...p, ticketId: e.target.value }))} style={s.input} /></div>}
+                            <div style={{ gridColumn: '1/-1' }}>
+                              <label style={s.label}>Comments</label>
+                              <textarea value={editForm.comments} onChange={e => setEditForm(p => ({ ...p, comments: e.target.value }))} rows={3} style={{ ...s.input, resize: 'vertical' }} />
+                            </div>
+                          </div>
+
+                          <div style={{ marginTop: '20px', display: 'grid', gap: '10px' }}>
+                            {getMetricsForTeam(editForm.team).map(m => {
+                              const val = getMetricStoredValue(m, editScores);
+                              const showComment = countsTowardScore(m) && shouldShowMetricComment(val);
+                              return (
+                                <div key={m.name} style={s.metricRow}>
+                                  <div style={{ flex: 1 }}>
+                                    <div style={s.metricName}>{countsTowardScore(m) ? `${m.name} (${m.pass} pts)` : m.name}</div>
+                                    {showComment && (
+                                      <textarea value={editMetricComments[m.name] || ''} onChange={e => setEditMetricComments(p => ({ ...p, [m.name]: e.target.value }))} rows={2} placeholder="Short QA note for this result…" style={{ ...s.input, marginTop: '8px', resize: 'vertical', fontSize: '12px' }} />
+                                    )}
+                                  </div>
+                                  <select value={val} onChange={e => handleScoreChange(m.name, e.target.value)} disabled={LOCKED_NA_METRICS.has(m.name)} style={{ ...s.select, minWidth: '160px', flexShrink: 0 }}>
+                                    {getMetricOptions(m).map(o => <option key={o || '__'} value={o}>{o || 'Select answer'}</option>)}
+                                  </select>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {adjEdit && (
+                            <div style={s.scoreSummary}>
+                              <div style={s.eyebrow}>Score Preview</div>
+                              <div style={s.scorePreviewVal}>{adjEdit.qualityScore}%</div>
+                            </div>
+                          )}
+                          <div style={{ ...s.btnGroup, marginTop: '18px' }}>
+                            <button onClick={() => void handleUpdate(audit.id)} disabled={saving} style={s.btnPrimary}>{saving ? 'Saving…' : 'Save Changes'}</button>
+                            <button onClick={cancelEdit} style={s.btnSecondary}>Cancel</button>
+                          </div>
                         </div>
                       ) : (
-                        <div style={expandedPanelStyle}>
-                          {' '}
-                          <div style={sectionEyebrow}>Audit Details</div>{' '}
-                          <div style={detailInfoGridStyle}>
-                            {' '}
-                            <div style={detailInfoCardStyle}>
-                              {' '}
-                              <div style={detailLabelStyle}>
-                                Created By
-                              </div>{' '}
-                              <div style={detailValueStyle}>
-                                {' '}
-                                {getCreatedByLabel(audit)}{' '}
-                              </div>{' '}
-                              <div style={detailSubValueStyle}>
-                                {' '}
-                                {audit.created_by_role || '-'}{' '}
-                              </div>{' '}
-                            </div>{' '}
-                            <div style={detailInfoCardStyle}>
-                              {' '}
-                              <div style={detailLabelStyle}>
-                                Creator Email
-                              </div>{' '}
-                              <div style={detailValueStyle}>
-                                {' '}
-                                {audit.created_by_email || '-'}{' '}
-                              </div>{' '}
-                            </div>{' '}
-                            <div style={detailInfoCardStyle}>
-                              {' '}
-                              <div style={detailLabelStyle}>Reference</div>{' '}
-                              <div style={detailValueStyle}>
-                                {' '}
-                                {getAuditReference(audit)}{' '}
-                              </div>{' '}
-                            </div>{' '}
-                            <div style={detailInfoCardStyle}>
-                              {' '}
-                              <div style={detailLabelStyle}>
-                                Release Date
-                              </div>{' '}
-                              <div style={detailValueStyle}>
-                                {' '}
-                                {formatDate(audit.shared_at)}{' '}
-                              </div>{' '}
-                            </div>{' '}
-                          </div>{' '}
-                          <div style={fullCommentCardStyle}>
-                            {' '}
-                            <div style={detailLabelStyle}>
-                              Full Comment
-                            </div>{' '}
-                            <div style={fullCommentTextStyle}>
-                              {' '}
-                              {audit.comments?.trim() || '-'}{' '}
-                            </div>{' '}
-                          </div>{' '}
-                          <div style={{ ...sectionEyebrow, marginTop: '18px' }}>
-                            {' '}
-                            Score Details{' '}
-                          </div>{' '}
-                          <div style={{ display: 'grid', gap: '10px' }}>
-                            {' '}
-                            {(audit.score_details || []).map((detail) => (
-                              <div
-                                key={`${audit.id}-${detail.metric}`}
-                                style={detailRowStyle}
-                              >
-                                {' '}
-                                <div>
-                                  {' '}
-                                  <div
-                                    style={{
-                                      color: 'var(--screen-heading)',
-                                      fontWeight: 700,
-                                    }}
-                                  >
-                                    {' '}
-                                    {detail.metric}{' '}
-                                  </div>{' '}
-                                  <div
-                                    style={{
-                                      color: 'var(--screen-muted, #475569)',
-                                      fontSize: '12px',
-                                      marginTop: '4px',
-                                    }}
-                                  >
-                                    {' '}
-                                    {isNoScoreDetail(detail)
-                                      ? 'Administrative question'
-                                      : `Pass ${detail.pass} • Borderline ${detail.borderline} • Adjusted ${detail.adjustedWeight.toFixed(2)}`}{' '}
-                                  </div>{' '}
-                                  {detail.metric_comment ? (
-                                    <div style={metricNoteCardStyle}>
-                                      <div style={metricNoteLabelStyle}>QA Note</div>
-                                      <div style={metricNoteTextStyle}>
-                                        {detail.metric_comment}
-                                      </div>
-                                    </div>
-                                  ) : null}
-                                </div>{' '}
-                                <span
-                                  style={{
-                                    ...pillStyle,
-                                    backgroundColor: getResultBadgeColor(
-                                      detail.result
-                                    ),
-                                  }}
-                                >
-                                  {' '}
-                                  {detail.result}{' '}
-                                </span>{' '}
+                        <div style={s.expandedPanel}>
+                          <div style={s.eyebrow}>Audit Details</div>
+                          <div style={s.detailGrid}>
+                            {[
+                              { label: 'Created By', val: getCreatedByLabel(audit), sub: audit.created_by_role },
+                              { label: 'Creator Email', val: audit.created_by_email || '—' },
+                              { label: 'Reference', val: getAuditReference(audit) },
+                              { label: 'Release Date', val: formatDate(audit.shared_at) },
+                            ].map(d => (
+                              <div key={d.label} style={s.detailCard}>
+                                <div style={s.detailLabel}>{d.label}</div>
+                                <div style={s.detailVal}>{d.val}</div>
+                                {d.sub && <div style={s.agentSub}>{d.sub}</div>}
                               </div>
-                            ))}{' '}
-                          </div>{' '}
+                            ))}
+                          </div>
+                          <div style={{ ...s.detailCard, marginBottom: '18px' }}>
+                            <div style={s.detailLabel}>Full Comment</div>
+                            <div style={{ color: 'var(--color-text)', fontSize: '14px', lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{audit.comments?.trim() || '—'}</div>
+                          </div>
+                          <div style={s.eyebrow}>Score Details</div>
+                          <div style={{ display: 'grid', gap: '8px' }}>
+                            {(audit.score_details || []).map(d => (
+                              <div key={`${audit.id}-${d.metric}`} style={s.scoreDetailRow}>
+                                <div style={{ flex: 1 }}>
+                                  <div style={s.metricName}>{d.metric}</div>
+                                  <div style={s.agentSub}>{d.counts_toward_score === false ? 'Administrative question' : `Pass ${d.pass} · Borderline ${d.borderline} · Adj. ${d.adjustedWeight.toFixed(2)}`}</div>
+                                  {d.metric_comment && (
+                                    <div style={s.noteCard}>
+                                      <div style={s.noteLabel}>QA Note</div>
+                                      <div style={s.noteText}>{d.metric_comment}</div>
+                                    </div>
+                                  )}
+                                </div>
+                                <span style={{ ...s.resultBadge, background: getResultColor(d.result) + '22', color: getResultColor(d.result), borderColor: getResultColor(d.result) + '44' }}>{d.result}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      )}{' '}
+                      )}
                     </div>
-                  ) : null}{' '}
+                  )}
                 </div>
               );
-            })}{' '}
-          </div>{' '}
+            })}
+          </div>
         </div>
-      )}{' '}
+      )}
     </div>
   );
 }
-const pageHeaderStyle = {
-  display: 'flex',
-  gap: '12px',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  flexWrap: 'wrap' as const,
-  marginBottom: '18px',
-};
-const sectionEyebrow = {
-  color: 'var(--screen-accent)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.16em',
-  marginBottom: '12px',
-};
-const panelStyle = {
-  background: 'var(--screen-panel-bg)',
-  border: '1px solid var(--screen-border)',
-  borderRadius: '24px',
-  padding: '22px',
-  boxShadow: 'var(--screen-shadow)',
-  backdropFilter: 'blur(14px)',
-};
-const filterGridStyle = {
-  display: 'flex',
-  flexWrap: 'wrap' as const,
-  gap: '14px',
-  alignItems: 'flex-end',
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s: Record<string, CSSProperties> = {
+  root: { color: 'var(--color-text, #e2e8f0)', fontFamily: "'DM Sans', 'Syne', system-ui, sans-serif" },
+  loadingWrap: { display: 'flex', alignItems: 'center', gap: '12px', padding: '40px', color: '#94a3b8' },
+  loadingSpinner: { width: '20px', height: '20px', border: '2px solid rgba(148,163,184,0.2)', borderTop: '2px solid #60a5fa', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+  loadingText: { fontSize: '14px', fontWeight: 600 },
+
+  pageHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap', marginBottom: '20px' },
+  eyebrow: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.18em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '8px' },
+  pageTitle: { margin: '0 0 6px', fontSize: '24px', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.02em', fontFamily: "'Syne', system-ui, sans-serif" },
+  pageSubtitle: { margin: 0, fontSize: '13px', color: '#64748b' },
+  headerActions: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' },
+
+  panel: {
+    background: 'linear-gradient(180deg, rgba(15,23,42,0.80) 0%, rgba(15,23,42,0.65) 100%)',
+    border: '1px solid rgba(148,163,184,0.12)',
+    borderRadius: '20px',
+    padding: '20px 22px',
+    backdropFilter: 'blur(12px)',
+  },
+
+  filterRow: { display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' },
+  filterFieldWide: { flex: '1 1 280px' },
+  filterField: { flex: '1 1 200px' },
+  filterFieldNarrow: { flex: '0 1 190px' },
+
+  searchWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
+  searchIcon: { position: 'absolute', left: '14px', fontSize: '16px', color: '#64748b', zIndex: 1, fontStyle: 'normal' },
+  searchInput: { width: '100%', padding: '11px 14px 11px 40px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', fontSize: '13px', outline: 'none' },
+
+  label: { display: 'block', marginBottom: '7px', fontSize: '12px', fontWeight: 700, color: '#94a3b8', letterSpacing: '0.04em', textTransform: 'uppercase' },
+  input: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', fontSize: '13px', boxSizing: 'border-box', outline: 'none' },
+  select: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.80)', color: '#e2e8f0', fontSize: '13px', appearance: 'none', outline: 'none' },
+
+  btnPrimary: { padding: '10px 18px', background: 'linear-gradient(135deg,#2563eb,#1d4ed8)', color: '#fff', border: '1px solid rgba(96,165,250,0.25)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnSecondary: { padding: '10px 16px', background: 'rgba(15,23,42,0.70)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.20)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnAccent: { padding: '10px 16px', background: 'linear-gradient(135deg,rgba(37,99,235,0.28),rgba(37,99,235,0.14))', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.30)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnDanger: { padding: '10px 18px', background: 'linear-gradient(135deg,#b91c1c,#991b1b)', color: '#fff', border: '1px solid rgba(252,165,165,0.20)', borderRadius: '12px', cursor: 'pointer', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit' },
+  btnMini: { padding: '7px 12px', background: 'rgba(15,23,42,0.70)', color: '#cbd5e1', border: '1px solid rgba(148,163,184,0.18)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnMiniPrimary: { padding: '7px 12px', background: 'rgba(37,99,235,0.20)', color: '#93c5fd', border: '1px solid rgba(59,130,246,0.28)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnMiniDanger: { padding: '7px 12px', background: 'rgba(185,28,28,0.20)', color: '#fca5a5', border: '1px solid rgba(239,68,68,0.24)', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit' },
+  btnGroup: { display: 'flex', gap: '10px', flexWrap: 'wrap' },
+
+  bannerError: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'rgba(127,29,29,0.22)', border: '1px solid rgba(252,165,165,0.22)', color: '#fca5a5', fontSize: '13px', fontWeight: 600 },
+  bannerSuccess: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px', padding: '13px 16px', borderRadius: '14px', background: 'rgba(22,101,52,0.22)', border: '1px solid rgba(134,239,172,0.22)', color: '#86efac', fontSize: '13px', fontWeight: 600 },
+  bannerIcon: { fontSize: '16px', flexShrink: 0 },
+  infoBanner: { marginTop: '14px', padding: '14px 18px', borderRadius: '14px', background: 'rgba(30,64,175,0.16)', border: '1px solid rgba(147,197,253,0.18)', color: '#93c5fd', fontSize: '13px', fontWeight: 600 },
+
+  releaseHeader: { display: 'flex', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '16px' },
+  releaseDesc: { margin: '6px 0 0', fontSize: '13px', color: '#64748b' },
+  sectionTitle: { margin: '0 0 4px', fontSize: '18px', fontWeight: 800, color: '#f1f5f9', fontFamily: "'Syne', system-ui, sans-serif" },
+  statsRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' },
+  statCard: { padding: '10px 14px', borderRadius: '12px', background: 'rgba(15,23,42,0.50)', border: '1px solid rgba(148,163,184,0.10)', minWidth: '80px', textAlign: 'center' },
+  statVal: { fontSize: '22px', fontWeight: 800, fontFamily: "'Syne', system-ui, sans-serif" },
+  statLabel: { fontSize: '11px', color: '#64748b', fontWeight: 600, marginTop: '2px' },
+
+  tableWrap: { overflowX: 'auto', borderRadius: '18px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(10,17,35,0.60)' },
+
+  // Audit table
+  auditRow: { display: 'grid', gridTemplateColumns: '220px 120px 160px minmax(220px,1fr) 110px 170px 170px minmax(240px,1.5fr) 240px', gap: '14px', alignItems: 'center', padding: '14px 18px' },
+  auditHeader: { position: 'sticky', top: 0, zIndex: 1, background: 'rgba(6,12,28,0.95)', borderBottom: '1px solid rgba(148,163,184,0.12)' },
+  auditEntry: { borderBottom: '1px solid rgba(148,163,184,0.07)' },
+  actionCell: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' },
+
+  agentName: { fontSize: '14px', fontWeight: 600, color: '#e2e8f0', lineHeight: 1.4 },
+  agentSub: { fontSize: '12px', color: '#64748b', marginTop: '3px', lineHeight: 1.4 },
+
+  th: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+
+  scoreBadge: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '76px', padding: '6px 10px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
+  statusPill: { display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid' },
+
+  teamPill: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', background: 'rgba(15,23,42,0.50)' },
+
+  evalBand: {
+    strong: { background: 'rgba(16,185,129,0.14)', color: '#34d399', borderColor: 'rgba(52,211,153,0.25)' } as CSSProperties,
+    medium: { background: 'rgba(245,158,11,0.14)', color: '#fbbf24', borderColor: 'rgba(251,191,36,0.25)' } as CSSProperties,
+    weak:   { background: 'rgba(239,68,68,0.14)', color: '#f87171', borderColor: 'rgba(248,113,113,0.25)' } as CSSProperties,
+    empty:  { background: 'rgba(15,23,42,0.40)', color: '#475569', borderColor: 'rgba(148,163,184,0.10)' } as CSSProperties,
+  } as any,
+
+  expandedWrap: { padding: '0 18px 18px' },
+  expandedPanel: { borderRadius: '16px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(10,17,35,0.50)', padding: '18px' },
+  editGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '14px' },
+
+  metricRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.40)' },
+  metricName: { fontSize: '13px', fontWeight: 700, color: '#e2e8f0' },
+
+  scoreSummary: { marginTop: '18px', padding: '16px 20px', borderRadius: '14px', background: 'linear-gradient(135deg,rgba(37,99,235,0.18),rgba(15,23,42,0.40))', border: '1px solid rgba(96,165,250,0.18)' },
+  scorePreviewVal: { fontSize: '32px', fontWeight: 800, color: '#f1f5f9', marginTop: '6px', fontFamily: "'Syne', system-ui, sans-serif" },
+
+  pickerBtn: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid rgba(148,163,184,0.18)', background: 'rgba(15,23,42,0.70)', color: '#e2e8f0', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontFamily: 'inherit' },
+  pickerMenu: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'rgba(6,12,28,0.97)', border: '1px solid rgba(148,163,184,0.14)', borderRadius: '16px', boxShadow: '0 20px 48px rgba(0,0,0,0.50)', zIndex: 20, overflow: 'hidden', backdropFilter: 'blur(16px)' },
+  pickerOption: { padding: '10px 12px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.08)', background: 'rgba(15,23,42,0.50)', textAlign: 'left', cursor: 'pointer', color: '#e2e8f0', fontSize: '13px', fontWeight: 600, fontFamily: 'inherit' },
+  pickerOptionActive: { background: 'rgba(37,99,235,0.28)', borderColor: 'rgba(96,165,250,0.30)', color: '#93c5fd' },
+
+  detailGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '10px', marginBottom: '14px' },
+  detailCard: { padding: '12px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.40)' },
+  detailLabel: { fontSize: '11px', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#475569', marginBottom: '6px' },
+  detailVal: { fontSize: '14px', fontWeight: 600, color: '#e2e8f0' },
+
+  scoreDetailRow: { display: 'flex', gap: '12px', alignItems: 'flex-start', padding: '11px 14px', borderRadius: '12px', border: '1px solid rgba(148,163,184,0.09)', background: 'rgba(15,23,42,0.35)' },
+  resultBadge: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', whiteSpace: 'nowrap', flexShrink: 0 },
+  noteCard: { marginTop: '8px', padding: '9px 11px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.50)' },
+  noteLabel: { fontSize: '10px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '4px' },
+  noteText: { fontSize: '13px', color: '#e2e8f0', lineHeight: 1.55, whiteSpace: 'pre-wrap' },
+
+  emptyState: { marginTop: '14px', padding: '22px', borderRadius: '16px', border: '1px dashed rgba(148,163,184,0.14)', background: 'rgba(15,23,42,0.40)', color: '#475569', textAlign: 'center', fontSize: '14px' },
+
+  // Progress board
+  progressHeader: { display: 'flex', justifyContent: 'space-between', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' },
+  metaPills: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' },
+  metaPill: { padding: '6px 11px', borderRadius: '999px', background: 'rgba(15,23,42,0.60)', border: '1px solid rgba(148,163,184,0.12)', fontSize: '12px', fontWeight: 700, color: '#94a3b8' },
+
+  progressControls: { display: 'grid', gap: '12px', marginBottom: '14px' },
+  controlBlock: { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
+  controlLabel: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.12em', textTransform: 'uppercase', color: '#475569', minWidth: '100px', flexShrink: 0 },
+  controlRow: { display: 'flex', gap: '8px', flexWrap: 'wrap' },
+  chip: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.16)', background: 'rgba(15,23,42,0.60)', color: '#94a3b8', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  chipActive: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(96,165,250,0.30)', background: 'rgba(37,99,235,0.22)', color: '#93c5fd', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap' },
+  chipMuted: { padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.10)', background: 'rgba(15,23,42,0.35)', color: '#475569', cursor: 'pointer', fontWeight: 700, fontSize: '12px', fontFamily: 'inherit', whiteSpace: 'nowrap', opacity: 0.85 },
+  offTargetBadge: { display: 'inline-flex', alignItems: 'center', padding: '7px 13px', borderRadius: '999px', border: '1px solid rgba(148,163,184,0.14)', background: 'rgba(15,23,42,0.50)', fontSize: '12px', fontWeight: 700, color: '#e2e8f0' },
+  progressHint: { margin: '0 0 14px', fontSize: '12px', color: '#475569', lineHeight: 1.6 },
+
+  progressRow: { display: 'grid', alignItems: 'stretch', gap: '8px' },
+  groupHeaderCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '36px', borderRadius: '10px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(148,163,184,0.08)', fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: '#60a5fa', marginBottom: '6px' },
+
+  stickyAgent: { position: 'sticky', left: 0, zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)', justifyContent: 'flex-start' },
+  stickyTeam: { position: 'sticky', left: '288px', zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
+  stickyToday: { position: 'sticky', left: '416px', zIndex: 2, background: 'rgba(6,12,28,0.96)', boxShadow: '4px 0 12px rgba(0,0,0,0.20)' },
+
+  agentCell: { display: 'grid', alignContent: 'center' },
+  metaCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
+
+  evalCell: { minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
+  evalOff: { background: 'rgba(124,58,237,0.16)', color: '#c4b5fd', borderColor: 'rgba(196,181,253,0.22)' },
+  evalSelected: { boxShadow: '0 0 0 2px rgba(96,165,250,0.30) inset' },
+  evalHeader: { minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', background: 'transparent', border: '1px solid rgba(148,163,184,0.12)', color: '#475569', cursor: 'pointer', fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', fontFamily: 'inherit' },
+  evalHeaderActive: { background: 'rgba(16,185,129,0.14)', border: '1px solid rgba(52,211,153,0.30)', color: '#34d399' },
+
+  offBtn: { padding: '7px 11px', borderRadius: '10px', border: '1px solid rgba(148,163,184,0.16)', background: 'rgba(15,23,42,0.60)', color: '#94a3b8', cursor: 'pointer', fontWeight: 700, fontSize: '11px', fontFamily: 'inherit' },
+  offBtnActive: { background: 'rgba(124,58,237,0.18)', color: '#c4b5fd', borderColor: 'rgba(196,181,253,0.24)' },
+  offPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: '999px', background: 'rgba(124,58,237,0.16)', color: '#c4b5fd', border: '1px solid rgba(196,181,253,0.22)', fontWeight: 800, fontSize: '12px' },
+  avgPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '80px', padding: '7px 12px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
 };
 
-const searchFilterFieldStyle = {
-  flex: '1 1 320px',
-  minWidth: '300px',
-};
-
-const standardFilterFieldStyle = {
-  flex: '1 1 240px',
-  minWidth: '220px',
-};
-
-const dateFilterFieldStyle = {
-  flex: '0 1 220px',
-  minWidth: '200px',
-};
-const labelStyle = {
-  display: 'block',
-  marginBottom: '8px',
-  fontSize: '13px',
-  color: 'var(--screen-text)',
-  fontWeight: 700,
-};
-const fieldStyle = {
-  width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-text)',
-};
-const selectFieldStyle = {
-  ...fieldStyle,
-  appearance: 'none' as const,
-  WebkitAppearance: 'none' as const,
-  MozAppearance: 'none' as const,
-  paddingRight: '44px',
-  backgroundImage:
-    'linear-gradient(45deg, transparent 50%, #cbd5e1 50%), linear-gradient(135deg, #cbd5e1 50%, transparent 50%)',
-  backgroundPosition: 'calc(100% - 22px) calc(50% - 3px), calc(100% - 16px) calc(50% - 3px)',
-  backgroundSize: '6px 6px, 6px 6px',
-  backgroundRepeat: 'no-repeat',
-  colorScheme: 'normal' as const,
-};
-const compactFieldStyle = {
-  padding: '10px 12px',
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-text)',
-  minWidth: '170px',
-};
-const compactSelectFieldStyle = {
-  ...compactFieldStyle,
-  appearance: 'none' as const,
-  WebkitAppearance: 'none' as const,
-  MozAppearance: 'none' as const,
-  paddingRight: '40px',
-  backgroundImage:
-    'linear-gradient(45deg, transparent 50%, #cbd5e1 50%), linear-gradient(135deg, #cbd5e1 50%, transparent 50%)',
-  backgroundPosition: 'calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px)',
-  backgroundSize: '6px 6px, 6px 6px',
-  backgroundRepeat: 'no-repeat',
-  colorScheme: 'normal' as const,
-};
-const selectOptionStyle = {
-  backgroundColor: 'var(--screen-select-option-bg)',
-  color: 'var(--screen-select-option-text)',
-};
-const metricCommentFieldStyle = {
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'rgba(15,23,42,0.78)',
-  color: 'var(--screen-text)',
-  resize: 'vertical' as const,
-};
-const metricNoteCardStyle = {
-  marginTop: '10px',
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-  padding: '10px 12px',
-};
-const metricNoteLabelStyle = {
-  color: '#93c5fd',
-  fontSize: '11px',
-  fontWeight: 800,
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase' as const,
-  marginBottom: '6px',
-};
-const metricNoteTextStyle = {
-  color: 'var(--screen-text)',
-  fontSize: '13px',
-  lineHeight: 1.55,
-  whiteSpace: 'pre-wrap' as const,
-};
-const secondaryButton = {
-  padding: '12px 16px',
-  background: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  border: '1px solid var(--screen-border-strong)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-const primaryButton = {
-  padding: '12px 16px',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(96,165,250,0.24)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-const dangerButton = {
-  padding: '12px 16px',
-  background: 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(252,165,165,0.2)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-const miniSecondaryButton = {
-  padding: '8px 10px',
-  background: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  border: '1px solid var(--screen-border-strong)',
-  borderRadius: '10px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-const miniPrimaryButton = {
-  padding: '8px 10px',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(96,165,250,0.24)',
-  borderRadius: '10px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-const miniDangerButton = {
-  padding: '8px 10px',
-  background: 'linear-gradient(135deg, #b91c1c 0%, #991b1b 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(252,165,165,0.2)',
-  borderRadius: '10px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-const errorBanner = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'rgba(127,29,29,0.24)',
-  border: '1px solid rgba(252,165,165,0.24)',
-  color: '#fecaca',
-};
-const successBanner = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'rgba(22,101,52,0.24)',
-  border: '1px solid rgba(134,239,172,0.22)',
-  color: '#bbf7d0',
-};
-const infoBanner = {
-  backgroundColor: 'rgba(30,64,175,0.18)',
-  border: '1px solid rgba(147,197,253,0.22)',
-  borderRadius: '16px',
-  padding: '16px',
-  marginBottom: '24px',
-  color: '#bfdbfe',
-  marginTop: '18px',
-};
-
-const progressPanelStyle = {
-  ...panelStyle,
-  marginTop: '18px',
-};
-const progressPanelHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'flex-start',
-  flexWrap: 'wrap' as const,
-  marginBottom: '16px',
-};
-const progressMetaRowStyle = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap' as const,
-};
-const progressMetaPillStyle = {
-  padding: '8px 10px',
-  borderRadius: '999px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-text)',
-  fontSize: '12px',
-  fontWeight: 700,
-};
-const progressControlsShellStyle = {
-  display: 'grid',
-  gap: '12px',
-  marginBottom: '16px',
-};
-const progressControlsBlockStyle = {
-  display: 'grid',
-  gap: '8px',
-};
-const progressControlsLabelStyle = {
-  color: 'var(--screen-muted, #475569)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-const progressControlsRowStyle = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap' as const,
-  overflowX: 'auto' as const,
-  paddingBottom: '2px',
-};
-const progressControlButtonStyle = {
-  padding: '9px 12px',
-  borderRadius: '999px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: '12px',
-  whiteSpace: 'nowrap' as const,
-};
-const progressControlButtonActiveStyle = {
-  ...progressControlButtonStyle,
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(96,165,250,0.26)',
-  boxShadow: '0 12px 24px rgba(37,99,235,0.22)',
-};
-const progressControlButtonMutedStyle = {
-  ...progressControlButtonStyle,
-  opacity: 0.82,
-  background: 'var(--screen-soft-fill)',
-};
-const progressEmptyStateStyle = {
-  padding: '18px',
-  borderRadius: '16px',
-  border: '1px dashed var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-muted, #475569)',
-};
-const progressTableWrapStyle = {
-  overflowX: 'auto' as const,
-  borderRadius: '18px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-panel-bg)',
-};
-const progressTableStyle = {
-  minWidth: '2560px',
-};
-const progressGroupHeaderRowStyle = {
-  display: 'grid',
-  gap: '10px',
-  alignItems: 'stretch',
-  padding: '12px 14px 0 14px',
-  position: 'sticky' as const,
-  top: 0,
-  zIndex: 3,
-  background: 'var(--screen-table-head-bg)',
-};
-const progressGroupHeaderBlockStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '38px',
-  borderRadius: '12px',
-  border: '1px solid rgba(147,197,253,0.16)',
-  background: 'rgba(255,255,255,0.04)',
-  color: '#bfdbfe',
-  fontSize: '11px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-const progressEntryStyle = {
-  borderBottom: '1px solid rgba(148,163,184,0.08)',
-};
-const progressRowStyle = {
-  display: 'grid',
-  gap: '10px',
-  alignItems: 'stretch',
-  padding: '12px 14px',
-};
-const progressHeaderRowStyle = {
-  position: 'sticky' as const,
-  top: '50px',
-  zIndex: 2,
-  background: 'var(--screen-table-head-bg)',
-  color: '#93c5fd',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-const progressStickyCellShadow = '6px 0 14px rgba(2,6,23,0.12)';
-const progressStickyHeaderBackground = 'var(--screen-table-head-bg)';
-const progressStickyBodyBackground = 'var(--screen-panel-bg)';
-const progressAgentCellStyle = {
-  display: 'grid',
-  alignContent: 'center',
-};
-const progressStickyAgentHeaderCellStyle = {
-  ...progressAgentCellStyle,
-  position: 'sticky' as const,
-  left: 0,
-  zIndex: 4,
-  background: progressStickyHeaderBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressStickyTeamHeaderCellStyle = {
-  position: 'sticky' as const,
-  left: '270px',
-  zIndex: 4,
-  background: progressStickyHeaderBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressStickyTodayHeaderCellStyle = {
-  position: 'sticky' as const,
-  left: '390px',
-  zIndex: 4,
-  background: progressStickyHeaderBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressStickyAgentCellStyle = {
-  ...progressAgentCellStyle,
-  position: 'sticky' as const,
-  left: 0,
-  zIndex: 1,
-  background: progressStickyBodyBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressStickyTeamCellStyle = {
-  position: 'sticky' as const,
-  left: '270px',
-  zIndex: 1,
-  background: progressStickyBodyBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressStickyTodayCellStyle = {
-  position: 'sticky' as const,
-  left: '390px',
-  zIndex: 1,
-  background: progressStickyBodyBackground,
-  boxShadow: progressStickyCellShadow,
-};
-const progressMetaCellStyle = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  textAlign: 'center' as const,
-};
-const progressEvalCellStyle = {
-  minHeight: '54px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  textAlign: 'center' as const,
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border)',
-  fontWeight: 800,
-  fontSize: '13px',
-};
-const progressHintStyle = {
-  marginBottom: '14px',
-  color: 'var(--screen-muted, #475569)',
-  fontSize: '13px',
-  lineHeight: 1.6,
-};
-const progressSelectedTargetsStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  padding: '9px 12px',
-  borderRadius: '999px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-card-soft-bg)',
-  color: 'var(--screen-text)',
-  fontSize: '12px',
-  fontWeight: 700,
-  whiteSpace: 'nowrap' as const,
-};
-const progressEvalHeaderButtonStyle = {
-  ...progressEvalCellStyle,
-  minHeight: '40px',
-  background: 'transparent',
-  color: '#93c5fd',
-  cursor: 'pointer',
-  whiteSpace: 'nowrap' as const,
-};
-const progressEvalHeaderButtonActiveStyle = {
-  border: '1px solid rgba(167,243,208,0.6)',
-  background: 'rgba(16,185,129,0.16)',
-  color: '#d1fae5',
-  boxShadow: '0 0 0 1px rgba(167,243,208,0.18) inset',
-};
-const progressEvalCellSelectedStyle = {
-  boxShadow: '0 0 0 2px rgba(96,165,250,0.22) inset',
-};
-const progressOffEvalCellStyle = {
-  ...progressEvalCellStyle,
-  background: 'var(--progress-off-bg)',
-  color: 'var(--progress-off-text)',
-  border: '1px solid var(--progress-off-border)',
-};
-const progressOffEvalCellSelectedStyle = {
-  boxShadow: '0 0 0 2px rgba(196,181,253,0.28) inset',
-};
-const progressStrongCellStyle = {
-  background: 'var(--progress-strong-bg)',
-  color: 'var(--progress-strong-text)',
-  border: '1px solid var(--progress-strong-border)',
-};
-const progressMediumCellStyle = {
-  background: 'var(--progress-medium-bg)',
-  color: 'var(--progress-medium-text)',
-  border: '1px solid var(--progress-medium-border)',
-};
-const progressWeakCellStyle = {
-  background: 'var(--progress-weak-bg)',
-  color: 'var(--progress-weak-text)',
-  border: '1px solid var(--progress-weak-border)',
-};
-const progressEmptyCellStyle = {
-  background: 'var(--progress-empty-bg)',
-  color: 'var(--progress-empty-text)',
-};
-const progressOffButtonStyle = {
-  padding: '8px 10px',
-  borderRadius: '10px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-secondary-btn-bg)',
-  color: 'var(--screen-secondary-btn-text)',
-  cursor: 'pointer',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-const progressOffButtonActiveStyle = {
-  ...progressOffButtonStyle,
-  background: 'var(--progress-off-bg)',
-  color: 'var(--progress-off-text)',
-  border: '1px solid var(--progress-off-border)',
-};
-const progressOffPillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '8px 10px',
-  borderRadius: '999px',
-  background: 'var(--progress-off-bg)',
-  color: 'var(--progress-off-text)',
-  border: '1px solid var(--progress-off-border)',
-  fontWeight: 800,
-  fontSize: '12px',
-};
-const progressAveragePillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: '82px',
-  padding: '8px 10px',
-  borderRadius: '999px',
-  fontWeight: 800,
-  fontSize: '13px',
-};
-const teamMiniPillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '7px 10px',
-  borderRadius: '999px',
-  background: 'var(--screen-card-soft-bg)',
-  border: '1px solid var(--screen-border)',
-  color: 'var(--screen-text)',
-  fontSize: '12px',
-  fontWeight: 700,
-};
-
-const auditTableWrapStyle = {
-  marginTop: '18px',
-  overflowX: 'auto' as const,
-  borderRadius: '20px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-panel-bg)',
-};
-const auditTableStyle = { minWidth: '1800px' };
-const auditEntryStyle = { borderBottom: '1px solid rgba(148,163,184,0.08)' };
-const auditRowStyle = {
-  display: 'grid',
-  gridTemplateColumns:
-    '220px 130px 170px minmax(240px,1.35fr) 110px 180px 180px minmax(300px,1.8fr) 260px',
-  gap: '14px',
-  alignItems: 'center',
-  padding: '14px 16px',
-};
-const auditHeaderRowStyle = {
-  position: 'sticky' as const,
-  top: 0,
-  zIndex: 1,
-  background: 'var(--screen-table-head-bg)',
-  color: '#93c5fd',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-};
-const auditCellAgentStyle = {};
-const auditCellDateStyle = {};
-const auditCellCaseStyle = {};
-const auditCellReferenceStyle = {};
-const auditCellScoreStyle = {};
-const auditCellReleaseStyle = {};
-const auditCellCreatorStyle = {};
-const auditCellCommentsStyle = {};
-const auditCellActionsStyle = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap' as const,
-};
-const primaryCellTextStyle = {
-  color: 'var(--screen-heading)',
-  fontSize: '14px',
-  fontWeight: 600,
-  lineHeight: 1.4,
-};
-const secondaryCellTextStyle = {
-  marginTop: '4px',
-  color: 'var(--screen-subtle)',
-  fontSize: '12px',
-  fontWeight: 600,
-  lineHeight: 1.4,
-};
-const scorePillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minWidth: '84px',
-  padding: '8px 10px',
-  borderRadius: '999px',
-  background: 'var(--screen-score-pill-bg)',
-  border: '1px solid var(--screen-score-pill-border)',
-  color: 'var(--screen-score-pill-text)',
-  fontSize: '13px',
-  fontWeight: 800,
-};
-const pillStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: '6px 10px',
-  borderRadius: '999px',
-  fontSize: '12px',
-  fontWeight: 800,
-  color: '#ffffff',
-};
-const auditExpandedRowStyle = { padding: '0 16px 16px 16px' };
-const expandedPanelStyle = {
-  borderRadius: '18px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-panel-bg)',
-  padding: '18px',
-};
-const editGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '14px',
-};
-const detailInfoGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '12px',
-  marginBottom: '18px',
-};
-const detailInfoCardStyle = {
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-  padding: '14px 16px',
-};
-const detailLabelStyle = {
-  color: 'var(--screen-muted, #475569)',
-  fontSize: '12px',
-  fontWeight: 700,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.08em',
-  marginBottom: '8px',
-};
-const detailValueStyle = {
-  color: 'var(--screen-heading)',
-  fontSize: '14px',
-  fontWeight: 700,
-  lineHeight: 1.5,
-};
-const detailSubValueStyle = {
-  color: 'var(--screen-subtle)',
-  fontSize: '12px',
-  fontWeight: 600,
-  marginTop: '6px',
-};
-const fullCommentCardStyle = {
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-  padding: '14px 16px',
-};
-const fullCommentTextStyle = {
-  color: 'var(--screen-heading)',
-  fontSize: '14px',
-  lineHeight: 1.7,
-  whiteSpace: 'pre-wrap' as const,
-  wordBreak: 'break-word' as const,
-};
-const pickerButtonStyle = {
-  width: '100%',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  border: '1px solid var(--screen-border-strong)',
-  background: 'var(--screen-field-bg)',
-  color: 'var(--screen-field-text)',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-const pickerMenuStyle = {
-  position: 'absolute' as const,
-  top: 'calc(100% + 8px)',
-  left: 0,
-  right: 0,
-  background: 'rgba(15,23,42,0.96)',
-  border: '1px solid var(--screen-border-strong)',
-  borderRadius: '18px',
-  boxShadow: '0 18px 44px rgba(2,6,23,0.45)',
-  zIndex: 20,
-  overflow: 'hidden',
-  backdropFilter: 'blur(16px)',
-};
-const pickerSearchWrapStyle = {
-  padding: '12px',
-  borderBottom: '1px solid rgba(148,163,184,0.12)',
-};
-const pickerListStyle = {
-  maxHeight: '280px',
-  overflowY: 'auto' as const,
-  padding: '8px',
-  display: 'grid',
-  gap: '8px',
-};
-const pickerInfoStyle = {
-  padding: '12px',
-  borderRadius: '12px',
-  backgroundColor: 'var(--screen-soft-fill)',
-  color: 'var(--screen-muted, #475569)',
-};
-const pickerOptionStyle = {
-  padding: '12px 14px',
-  borderRadius: '12px',
-  border: '1px solid var(--screen-border)',
-  backgroundColor: 'var(--screen-soft-fill)',
-  textAlign: 'left' as const,
-  cursor: 'pointer',
-  color: 'var(--screen-text)',
-  fontWeight: 600,
-};
-const pickerOptionActiveStyle = {
-  border: '1px solid rgba(96,165,250,0.36)',
-  backgroundColor: 'rgba(30,64,175,0.32)',
-};
-const scoreRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'center',
-  flexWrap: 'wrap' as const,
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-};
-const editSummaryStyle = {
-  marginTop: '18px',
-  borderRadius: '18px',
-  padding: '18px',
-  border: '1px solid rgba(96,165,250,0.2)',
-  background:
-    'linear-gradient(135deg, rgba(30,64,175,0.22) 0%, rgba(15,23,42,0.5) 100%)',
-};
-const summaryEyebrowStyle = {
-  color: '#93c5fd',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  fontSize: '12px',
-  letterSpacing: '0.12em',
-};
-const summaryScoreStyle = {
-  fontSize: '32px',
-  fontWeight: 800,
-  color: 'var(--screen-heading)',
-  marginTop: '8px',
-};
-const detailRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'center',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: '1px solid var(--screen-border)',
-  background: 'var(--screen-card-soft-bg)',
-};
 export default AuditsListSupabase;
