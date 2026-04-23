@@ -66,7 +66,6 @@ type AuditDraft = {
   metricComments: Record<string, string>;
 };
 
-const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 const ISSUE_WAS_RESOLVED_METRIC = 'Issue was resolved';
 
@@ -92,7 +91,6 @@ const callsMetrics: Metric[] = [
   { name: 'Friendliness', pass: 5, borderline: 3 },
   { name: 'Hold (≤3 mins)', pass: 8, borderline: 4 },
   { name: 'Call Managing', pass: 8, borderline: 4 },
-  { name: 'Active Listening', pass: 5, borderline: 3 },
   { name: 'Procedure', pass: 12, borderline: 6 },
   { name: 'Notes', pass: 12, borderline: 6 },
   { name: 'Creating REF Order', pass: 12, borderline: 6 },
