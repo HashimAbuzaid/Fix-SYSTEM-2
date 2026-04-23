@@ -1048,7 +1048,7 @@ function AuditsListSupabase() {
                         return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...getEvalBandStyle(band), ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${ev.score}%` : 'No eval'}>{has ? `${Number(ev.score).toFixed(0)}%` : '—'}</div>;
                       })}
                       <div style={s.metaCell}>
-                        {row.latestAuditDate ? <div style={s.agentName}>{formatDateOnly(row.latestAuditDate)}</div> : hasOff ? <span style={s.offPill}>{offIdx.length === 1 ? `Eval ${offIdx[0] + 1}` : `${offIdx.length} OFF`}</span> : <span style={s.agentSub}>—</span>}
+                        {row.latestAuditDate ? <div style={{ ...s.agentName, ...numericTextStyle }}>{formatDateOnly(row.latestAuditDate)}</div> : hasOff ? <span style={s.offPill}>{offIdx.length === 1 ? `Eval ${offIdx[0] + 1}` : `${offIdx.length} OFF`}</span> : <span style={s.agentSub}>—</span>}
                       </div>
                       <div style={s.metaCell}>
                         <span style={{ ...s.avgPill, ...getEvalBandStyle(getScoreBand(row.averageScore)) }}>{row.averageScore === null ? '—' : `${row.averageScore.toFixed(1)}%`}</span>
@@ -1088,9 +1088,9 @@ function AuditsListSupabase() {
                       <div style={s.agentName}>{audit.agent_name}</div>
                       <div style={s.agentSub}>{getDisplayName(audit) || '—'} · {audit.agent_id} · <span style={{ color: getTeamAccent(audit.team) }}>{audit.team}</span></div>
                     </div>
-                    <div style={s.agentName}>{formatDateOnly(audit.audit_date)}</div>
+                    <div style={{ ...s.agentName, ...numericTextStyle }}>{formatDateOnly(audit.audit_date)}</div>
                     <div style={s.agentName}>{audit.case_type}</div>
-                    <div style={{ ...s.agentName, fontSize: '12px' }}>{getAuditReference(audit)}</div>
+                    <div style={{ ...s.agentName, ...numericTextStyle, fontSize: '12px' }}>{getAuditReference(audit)}</div>
                     <div>
                       <span style={{ ...s.scoreBadge, ...getEvalBandStyle(band) }}>{score.toFixed(2)}%</span>
                     </div>
@@ -1098,7 +1098,7 @@ function AuditsListSupabase() {
                       <span style={{ ...s.statusPill, background: audit.shared_with_agent ? 'var(--al-progress-strong-bg)' : 'var(--al-chip-muted-bg)', color: audit.shared_with_agent ? 'var(--al-progress-strong-text)' : 'var(--al-subtle)', borderColor: audit.shared_with_agent ? 'var(--al-progress-strong-border)' : 'var(--al-border)' }}>
                         {audit.shared_with_agent ? '● Shared' : '○ Hidden'}
                       </span>
-                      {audit.shared_at && <div style={{ ...s.agentSub, marginTop: '4px' }}>{formatDate(audit.shared_at)}</div>}
+                      {audit.shared_at && <div style={{ ...s.agentSub, ...numericTextStyle, marginTop: '4px' }}>{formatDate(audit.shared_at)}</div>}
                     </div>
                     <div>
                       <div style={s.agentName}>{getCreatedByLabel(audit)}</div>
@@ -1216,7 +1216,7 @@ function AuditsListSupabase() {
                             ].map(d => (
                               <div key={d.label} style={s.detailCard}>
                                 <div style={s.detailLabel}>{d.label}</div>
-                                <div style={s.detailVal}>{d.val}</div>
+                                <div style={{ ...s.detailVal, ...(d.label === 'Reference' || d.label === 'Release Date' ? numericTextStyle : {}) }}>{d.val}</div>
                                 {d.sub && <div style={s.agentSub}>{d.sub}</div>}
                               </div>
                             ))}
@@ -1258,6 +1258,14 @@ function AuditsListSupabase() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+const NUMERIC_FONT_FAMILY = "'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif";
+const numericTextStyle: CSSProperties = {
+  fontFamily: NUMERIC_FONT_FAMILY,
+  fontVariantNumeric: 'tabular-nums lining-nums',
+  fontFeatureSettings: '"tnum" 1, "lnum" 1',
+  letterSpacing: '-0.02em',
+};
+
 const s: Record<string, CSSProperties> = {
   root: { color: 'var(--al-text)', fontFamily: "'DM Sans', 'Syne', system-ui, sans-serif" },
   loadingWrap: { display: 'flex', alignItems: 'center', gap: '12px', padding: '40px', color: 'var(--al-subtle)' },
@@ -1310,7 +1318,7 @@ const s: Record<string, CSSProperties> = {
   sectionTitle: { margin: '0 0 4px', fontSize: '18px', fontWeight: 800, color: 'var(--al-heading-soft)', fontFamily: "'Syne', system-ui, sans-serif" },
   statsRow: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'flex-start' },
   statCard: { padding: '10px 14px', borderRadius: '12px', background: 'var(--al-surface-soft)', border: '1px solid var(--al-border-soft)', minWidth: '80px', textAlign: 'center' },
-  statVal: { fontSize: '22px', fontWeight: 800, fontFamily: "'Syne', system-ui, sans-serif" },
+  statVal: { ...numericTextStyle, fontSize: '22px', fontWeight: 800, lineHeight: 1, color: 'var(--al-heading-soft)' },
   statLabel: { fontSize: '11px', color: 'var(--al-subtle)', fontWeight: 600, marginTop: '2px' },
 
   tableWrap: { overflowX: 'auto', borderRadius: '18px', border: '1px solid var(--al-border-soft)', background: 'var(--al-table-bg)' },
@@ -1326,7 +1334,7 @@ const s: Record<string, CSSProperties> = {
 
   th: { fontSize: '11px', fontWeight: 800, letterSpacing: '0.10em', textTransform: 'uppercase', color: 'var(--al-chip-muted-text)', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
 
-  scoreBadge: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '76px', padding: '6px 10px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
+  scoreBadge: { ...numericTextStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '88px', padding: '7px 12px', borderRadius: '999px', fontWeight: 800, fontSize: '14px', lineHeight: 1, border: '1px solid' },
   statusPill: { display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid' },
 
   teamPill: { display: 'inline-flex', alignItems: 'center', padding: '5px 10px', borderRadius: '999px', fontWeight: 700, fontSize: '12px', border: '1px solid', background: 'var(--al-surface-soft)' },
@@ -1346,7 +1354,7 @@ const s: Record<string, CSSProperties> = {
   metricName: { fontSize: '13px', fontWeight: 700, color: 'var(--al-field-text)' },
 
   scoreSummary: { marginTop: '18px', padding: '16px 20px', borderRadius: '14px', background: 'var(--al-highlight-bg)', border: '1px solid var(--al-info-border)' },
-  scorePreviewVal: { fontSize: '32px', fontWeight: 800, color: 'var(--al-heading-soft)', marginTop: '6px', fontFamily: "'Syne', system-ui, sans-serif" },
+  scorePreviewVal: { ...numericTextStyle, fontSize: '32px', fontWeight: 800, color: 'var(--al-heading-soft)', marginTop: '6px', lineHeight: 1 },
 
   pickerBtn: { width: '100%', padding: '11px 14px', borderRadius: '14px', border: '1px solid var(--al-border)', background: 'var(--al-field-bg)', color: 'var(--al-field-text)', textAlign: 'left', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '13px', fontFamily: 'inherit' },
   pickerMenu: { position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0, background: 'var(--al-table-head)', border: '1px solid rgba(148,163,184,0.14)', borderRadius: '16px', boxShadow: 'var(--al-shadow)', zIndex: 20, overflow: 'hidden', backdropFilter: 'blur(16px)' },
@@ -1391,7 +1399,7 @@ const s: Record<string, CSSProperties> = {
   agentCell: { display: 'grid', alignContent: 'center' },
   metaCell: { display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' },
 
-  evalCell: { minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
+  evalCell: { ...numericTextStyle, minHeight: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', fontWeight: 800, fontSize: '13px', lineHeight: 1, border: '1px solid' },
   evalOff: { background: 'var(--al-off-bg)', color: 'var(--al-off-text)', borderColor: 'var(--al-off-border)' },
   evalSelected: { boxShadow: '0 0 0 2px rgba(96,165,250,0.30) inset' },
   evalHeader: { minHeight: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '10px', background: 'transparent', border: '1px solid var(--al-panel-border)', color: 'var(--al-chip-muted-text)', cursor: 'pointer', fontWeight: 700, fontSize: '11px', letterSpacing: '0.06em', fontFamily: 'inherit' },
@@ -1399,8 +1407,8 @@ const s: Record<string, CSSProperties> = {
 
   offBtn: { padding: '7px 11px', borderRadius: '10px', border: '1px solid var(--al-border)', background: 'var(--al-chip-bg)', color: 'var(--al-subtle)', cursor: 'pointer', fontWeight: 700, fontSize: '11px', fontFamily: 'inherit' },
   offBtnActive: { background: 'rgba(124,58,237,0.18)', color: 'var(--al-off-text)', borderColor: 'rgba(196,181,253,0.24)' },
-  offPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: '999px', background: 'var(--al-off-bg)', color: 'var(--al-off-text)', border: '1px solid rgba(196,181,253,0.22)', fontWeight: 800, fontSize: '12px' },
-  avgPill: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '80px', padding: '7px 12px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', border: '1px solid' },
+  offPill: { ...numericTextStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '6px 10px', borderRadius: '999px', background: 'var(--al-off-bg)', color: 'var(--al-off-text)', border: '1px solid rgba(196,181,253,0.22)', fontWeight: 800, fontSize: '12px', lineHeight: 1 },
+  avgPill: { ...numericTextStyle, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '88px', padding: '7px 12px', borderRadius: '999px', fontWeight: 800, fontSize: '13px', lineHeight: 1, border: '1px solid' },
 };
 
 export default AuditsListSupabase;
