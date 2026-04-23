@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import RecognitionWall from './RecognitionWall';
@@ -10,6 +16,7 @@ import {
   peekCachedValue,
 } from '../lib/viewCache';
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 
 type AuditItem = {
@@ -31,7 +38,6 @@ type AgentProfile = {
   display_name: string | null;
   team: TeamName | null;
 };
-
 
 type SupervisorRequestSummary = {
   id: string;
@@ -85,289 +91,235 @@ type SalesRecord = {
   notes: string | null;
 };
 
-type QuantityLeader = {
-  label: string;
-  quantity: number;
-};
-
-type QualityLeader = {
-  label: string;
-  averageQuality: number;
-  auditsCount: number;
-};
-
-type HybridLeader = {
-  label: string;
-  quantity: number;
-  averageQuality: number;
-  rsd: number;
-  combinedScore: number;
-};
-
-type TeamCardData = {
-  title: string;
-  quantityLabel: string;
-  quantityValue: string;
-  qualityLabel: string;
-  qualityValue: string;
-  auditedAgents: number;
-  leader: string;
-};
-
-type RankedAuditSummary = {
-  label: string;
-  averageQuality: number;
-  auditsCount: number;
-};
-
+type QuantityLeader = { label: string; quantity: number };
+type QualityLeader = { label: string; averageQuality: number; auditsCount: number };
+type HybridLeader = { label: string; quantity: number; averageQuality: number; rsd: number; combinedScore: number };
+type TeamCardData = { title: string; quantityLabel: string; quantityValue: string; qualityLabel: string; qualityValue: string; auditedAgents: number; leader: string };
+type RankedAuditSummary = { label: string; averageQuality: number; auditsCount: number };
 type DashboardCachePayload = {
-  audits: AuditItem[];
-  profiles: AgentProfile[];
-  callsRecords: CallsRecord[];
-  ticketsRecords: TicketsRecord[];
-  salesRecords: SalesRecord[];
-  supervisorRequests: SupervisorRequestSummary[];
-  agentFeedback: AgentFeedbackSummary[];
+  audits: AuditItem[]; profiles: AgentProfile[]; callsRecords: CallsRecord[];
+  ticketsRecords: TicketsRecord[]; salesRecords: SalesRecord[];
+  supervisorRequests: SupervisorRequestSummary[]; agentFeedback: AgentFeedbackSummary[];
   monitoringItems: MonitoringSummary[];
 };
-
-type ActionCenterItem = {
-  id: string;
-  title: string;
-  count: number;
-  detail: string;
-  path: string;
-  tone: 'critical' | 'warning' | 'info';
-};
+type ActionCenterItem = { id: string; title: string; count: number; detail: string; path: string; tone: 'critical' | 'warning' | 'info' };
 
 const DASHBOARD_CACHE_KEY = 'dashboard:datasets:v1';
 const DASHBOARD_CACHE_TTL_MS = 1000 * 60 * 5;
 
-function normalizeAgentId(value?: string | null) {
-  return String(value || '').trim().replace(/\.0+$/, '');
+// ─── Utilities ────────────────────────────────────────────────────────────────
+function normalizeAgentId(v?: string | null) { return String(v || '').trim().replace(/\.0+$/, ''); }
+function normalizeAgentName(v?: string | null) { return String(v || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+function getCurrentDateValue() { return new Date().toISOString().slice(0, 10); }
+function getMonthStartValue() { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0, 10); }
+
+function shiftDateStringByMonths(d: string, offset: number) {
+  if (!d) return '';
+  const [y, m, day] = d.split('-').map(Number);
+  const shifted = m - 1 + offset;
+  const ty = y + Math.floor(shifted / 12);
+  const tm = ((shifted % 12) + 12) % 12;
+  const safe = Math.min(day, new Date(ty, tm + 1, 0).getDate());
+  return new Date(Date.UTC(ty, tm, safe)).toISOString().slice(0, 10);
 }
 
-function normalizeAgentName(value?: string | null) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+function getPercentChange(cur: number, prev: number) {
+  if (prev === 0) return cur === 0 ? 0 : 100;
+  return ((cur - prev) / prev) * 100;
 }
 
-function getCurrentDateValue() {
-  return new Date().toISOString().slice(0, 10);
+function formatPercentDelta(cur: number, prev: number) {
+  const d = getPercentChange(cur, prev);
+  return `${d > 0 ? '+' : ''}${d.toFixed(1)}%`;
 }
 
-function getMonthStartValue() {
-  const now = new Date();
-  return new Date(now.getFullYear(), now.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
-}
-
-function shiftDateStringByMonths(dateValue: string, monthOffset: number) {
-  if (!dateValue) return '';
-
-  const [yearText, monthText, dayText] = dateValue.split('-');
-  const year = Number(yearText);
-  const monthIndex = Number(monthText) - 1;
-  const day = Number(dayText);
-
-  const shiftedMonthIndex = monthIndex + monthOffset;
-  const targetYear = year + Math.floor(shiftedMonthIndex / 12);
-  const normalizedMonthIndex = ((shiftedMonthIndex % 12) + 12) % 12;
-  const daysInTargetMonth = new Date(targetYear, normalizedMonthIndex + 1, 0).getDate();
-  const safeDay = Math.min(day, daysInTargetMonth);
-
-  const shifted = new Date(Date.UTC(targetYear, normalizedMonthIndex, safeDay));
-  return shifted.toISOString().slice(0, 10);
-}
-
-function getPercentChange(current: number, previous: number) {
-  if (previous === 0) {
-    if (current === 0) return 0;
-    return 100;
-  }
-
-  return ((current - previous) / previous) * 100;
-}
-
-function formatPercentDelta(current: number, previous: number) {
-  const delta = getPercentChange(current, previous);
-  const sign = delta > 0 ? '+' : '';
-  return `${sign}${delta.toFixed(2)}% vs last month`;
-}
-
-function getDaysOld(value?: string | null) {
-  const raw = String(value || '').slice(0, 10);
+function getDaysOld(v?: string | null) {
+  const raw = String(v || '').slice(0, 10);
   if (!raw) return 0;
-
-  const baseDate = new Date(`${raw}T00:00:00`);
-  if (Number.isNaN(baseDate.getTime())) return 0;
-
-  const today = new Date();
-  const todayStart = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate()
-  );
-
-  const diffMs = todayStart.getTime() - baseDate.getTime();
-  return Math.max(0, Math.floor(diffMs / 86400000));
+  const base = new Date(`${raw}T00:00:00`);
+  if (isNaN(base.getTime())) return 0;
+  const now = new Date();
+  return Math.max(0, Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - base.getTime()) / 86400000));
 }
-function matchesDateRange(
-  startDate?: string | null,
-  endDate?: string | null,
-  filterFrom?: string,
-  filterTo?: string
-) {
-  const recordStart = String(startDate || '').slice(0, 10);
-  const recordEnd = String(endDate || startDate || '').slice(0, 10);
 
-  if (!recordStart) return false;
+function matchesDateRange(s?: string | null, e?: string | null, from?: string, to?: string) {
+  const rs = String(s || '').slice(0, 10);
+  const re = String(e || s || '').slice(0, 10);
+  if (!rs) return false;
+  return re >= (from || '0001-01-01') && rs <= (to || '9999-12-31');
+}
 
-  const effectiveFrom = filterFrom || '0001-01-01';
-  const effectiveTo = filterTo || '9999-12-31';
+function getStdDev(vals: number[]) {
+  if (vals.length <= 1) return 0;
+  const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
+  return Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
+}
 
-  return recordEnd >= effectiveFrom && recordStart <= effectiveTo;
+function getTeamAvg(audits: AuditItem[]) {
+  if (!audits.length) return 0;
+  return audits.reduce((s, a) => s + Number(a.quality_score), 0) / audits.length;
 }
 
 function openNativeDatePicker(input: HTMLInputElement | null | undefined) {
   if (!input) return;
-
   input.focus();
-
-  const inputWithPicker = input as HTMLInputElement & {
-    showPicker?: () => void;
-  };
-
-  if (typeof inputWithPicker.showPicker === 'function') {
-    inputWithPicker.showPicker();
-  }
+  const w = input as HTMLInputElement & { showPicker?: () => void };
+  if (typeof w.showPicker === 'function') w.showPicker();
 }
 
+function formatDateTime(v?: string | null) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
 
-
-
+// ─── Theme System ─────────────────────────────────────────────────────────────
 function useThemeRefresh() {
-  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
-
+  const [k, setK] = useState(0);
   useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') {
-      return;
-    }
-
-    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
-    const observer = new MutationObserver(refreshTheme);
-    const observerConfig = {
-      attributes: true,
-      attributeFilter: ['data-theme', 'data-theme-mode'],
-    };
-
-    observer.observe(document.documentElement, observerConfig);
-
-    if (document.body) {
-      observer.observe(document.body, observerConfig);
-    }
-
-    window.addEventListener('storage', refreshTheme);
-    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('storage', refreshTheme);
-      window.removeEventListener(
-        'detroit-axle-theme-change',
-        refreshTheme as EventListener
-      );
-    };
+    if (typeof window === 'undefined') return;
+    const refresh = () => setK(v => v + 1);
+    const obs = new MutationObserver(refresh);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-theme-mode'] });
+    if (document.body) obs.observe(document.body, { attributes: true, attributeFilter: ['data-theme', 'data-theme-mode'] });
+    window.addEventListener('storage', refresh);
+    window.addEventListener('detroit-axle-theme-change', refresh as EventListener);
+    return () => { obs.disconnect(); window.removeEventListener('storage', refresh); window.removeEventListener('detroit-axle-theme-change', refresh as EventListener); };
   }, []);
-
-  return themeRefreshKey;
+  return k;
 }
 
-function getDashboardThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
-          window.localStorage.getItem('detroit-axle-theme') ||
-          window.sessionStorage.getItem('detroit-axle-theme') ||
-          ''
-        ).toLowerCase()
-      : '';
-
-  const isLight = themeMode === 'light' || themeMode === 'white';
-
-  return {
-    '--da-page-text': isLight ? '#1f2937' : '#e5eefb',
-    '--da-title': isLight ? '#081225' : '#f8fafc',
-    '--da-subtitle': isLight ? '#64748b' : '#94a3b8',
-    '--da-muted-text': isLight ? '#475569' : '#cbd5e1',
-    '--da-subtle-text': isLight ? '#64748b' : '#94a3b8',
-    '--da-card-label': isLight ? '#64748b' : '#94a3b8',
-    '--da-card-value': isLight ? '#081225' : '#f8fafc',
-    '--da-card-subtitle': isLight ? '#64748b' : '#94a3b8',
-    '--da-team-meta': isLight ? '#475569' : '#cbd5e1',
-    '--da-accent-text': isLight ? '#2563eb' : '#60a5fa',
-    '--da-eyebrow': isLight ? '#3b82f6' : '#60a5fa',
-    '--da-section-eyebrow': isLight ? '#2563eb' : '#93c5fd',
-    '--da-panel-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)' : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
-    '--da-panel-border': isLight ? '1px solid rgba(203,213,225,0.94)' : '1px solid rgba(148,163,184,0.16)',
-    '--da-panel-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--da-card-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.56)',
-    '--da-row-border': isLight ? '1px solid rgba(203,213,225,0.92)' : '1px solid rgba(148,163,184,0.16)',
-    '--da-empty-border': isLight ? '1px dashed rgba(203,213,225,0.92)' : '1px dashed rgba(148,163,184,0.24)',
-    '--da-field-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(250,252,255,0.99) 100%)' : 'rgba(15,23,42,0.78)',
-    '--da-field-border': isLight ? '1px solid rgba(203,213,225,0.92)' : '1px solid rgba(148,163,184,0.18)',
-    '--da-field-text': isLight ? '#0f172a' : '#e5eefb',
-    '--da-secondary-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
-    '--da-secondary-text': isLight ? '#334155' : '#e5eefb',
-    '--da-secondary-border': isLight ? '1px solid rgba(203,213,225,0.92)' : '1px solid rgba(148,163,184,0.18)',
-    '--da-meta-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.62)',
-    '--da-meta-border': isLight ? '1px solid rgba(203,213,225,0.92)' : '1px solid rgba(148,163,184,0.14)',
-    '--da-meta-text': isLight ? '#475569' : '#cbd5e1',
-    '--da-pill-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.14)',
-    '--da-pill-text': isLight ? '#1d4ed8' : '#93c5fd',
-    '--da-rank-badge-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.14)',
-    '--da-rank-badge-text': isLight ? '#2563eb' : '#60a5fa',
-    '--da-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.24)',
-    '--da-error-border': isLight ? '1px solid rgba(248,113,113,0.28)' : '1px solid rgba(248,113,113,0.22)',
-    '--da-error-text': isLight ? '#b91c1c' : '#fecaca',
-    '--screen-panel-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(243,247,255,0.96) 100%)' : 'linear-gradient(180deg, rgba(15,23,42,0.86) 0%, rgba(15,23,42,0.72) 100%)',
-    '--screen-card-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.995) 0%, rgba(248,250,255,0.98) 100%)' : 'linear-gradient(180deg, rgba(15,23,42,0.84) 0%, rgba(15,23,42,0.70) 100%)',
-    '--screen-card-soft-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(244,247,252,0.97) 100%)' : 'rgba(15,23,42,0.58)',
-    '--screen-heading': isLight ? '#081225' : '#f8fafc',
-    '--screen-text': isLight ? '#1f2937' : '#e5eefb',
-    '--screen-muted': isLight ? '#475569' : '#94a3b8',
-    '--screen-subtle': isLight ? '#64748b' : '#94a3b8',
-    '--screen-border': isLight ? 'rgba(203,213,225,0.94)' : 'rgba(148,163,184,0.16)',
-    '--screen-shadow': isLight ? '0 18px 40px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
-    '--screen-pill-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.18)',
-    '--screen-pill-border': isLight ? 'rgba(59,130,246,0.24)' : 'rgba(96,165,250,0.26)',
-    '--screen-soft-fill': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.48)',
-    '--screen-soft-fill-2': isLight ? 'rgba(241,245,249,0.98)' : 'rgba(15,23,42,0.62)',
-    '--screen-note-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.56)',
-    '--screen-field-bg': isLight ? 'linear-gradient(180deg, rgba(255,255,255,0.99) 0%, rgba(248,250,255,0.98) 100%)' : 'rgba(15,23,42,0.78)',
-    '--screen-field-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.18)',
-    '--screen-button-bg': isLight ? 'rgba(255,255,255,0.99)' : 'rgba(15,23,42,0.82)',
-    '--screen-button-text': isLight ? '#334155' : '#e5eefb',
-    '--screen-button-border': isLight ? 'rgba(203,213,225,0.92)' : 'rgba(148,163,184,0.18)',
-    '--screen-emphasis-bg': isLight ? 'linear-gradient(180deg, rgba(241,245,255,0.98) 0%, rgba(232,240,255,0.95) 100%)' : 'rgba(30,41,59,0.72)',
-    '--screen-heading-soft': isLight ? '#1e293b' : '#e2e8f0',
-    '--screen-tone-info-bg': isLight ? 'rgba(59,130,246,0.14)' : 'rgba(37,99,235,0.14)',
-    '--screen-tone-info-text': isLight ? '#1d4ed8' : '#bfdbfe',
-    '--screen-tone-info-border': isLight ? 'rgba(59,130,246,0.30)' : 'rgba(96,165,250,0.22)',
-    '--screen-tone-warning-bg': isLight ? 'rgba(245,158,11,0.16)' : 'rgba(245,158,11,0.16)',
-    '--screen-tone-warning-text': isLight ? '#b45309' : '#fde68a',
-    '--screen-tone-warning-border': isLight ? 'rgba(245,158,11,0.30)' : 'rgba(251,191,36,0.22)',
-    '--screen-tone-critical-bg': isLight ? 'rgba(239,68,68,0.14)' : 'rgba(220,38,38,0.16)',
-    '--screen-tone-critical-text': isLight ? '#b91c1c' : '#fecaca',
-    '--screen-tone-critical-border': isLight ? 'rgba(239,68,68,0.30)' : 'rgba(248,113,113,0.22)',
-  };
+function isLightMode() {
+  if (typeof document === 'undefined') return false;
+  const m = (document.body.dataset.theme || document.documentElement.dataset.theme || window.localStorage.getItem('detroit-axle-theme-mode') || '').toLowerCase();
+  return m === 'light' || m === 'white';
 }
 
+// ─── CSS Injection ─────────────────────────────────────────────────────────────
+function useDashboardStyles() {
+  useEffect(() => {
+    const id = 'da-dashboard-v5';
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id;
+    el.textContent = `
+      @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
 
+      .dash-root { font-family: 'Outfit', sans-serif; }
+
+      @keyframes dash-fade-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes dash-fade-in { from { opacity:0; } to { opacity:1; } }
+      @keyframes dash-shimmer { 0%,100% { opacity:.7; } 50% { opacity:1; } }
+      @keyframes dash-spin-slow { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
+      @keyframes dash-pulse-ring { 0% { box-shadow:0 0 0 0 rgba(99,102,241,.4); } 70% { box-shadow:0 0 0 8px rgba(99,102,241,0); } 100% { box-shadow:0 0 0 0 rgba(99,102,241,0); } }
+      @keyframes dash-score-fill { from { width:0; } to { width:var(--score-w); } }
+      @keyframes dash-count-up { from { opacity:0; transform:scale(.8); } to { opacity:1; transform:scale(1); } }
+      @keyframes dash-border-glow { 0%,100% { border-color:rgba(99,102,241,.25); } 50% { border-color:rgba(99,102,241,.6); } }
+      @keyframes dash-grid-in { from { opacity:0; transform:scale(.97); } to { opacity:1; transform:scale(1); } }
+      @keyframes dash-loader-rotate { to { transform:rotate(360deg); } }
+      @keyframes dash-loader-dash { 0% { stroke-dashoffset:280; } 50% { stroke-dashoffset:70; stroke-dasharray:280 280; } 100% { stroke-dashoffset:0; stroke-dasharray:280 280; } }
+      @keyframes dash-ticker-slide { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
+      @keyframes dash-blink { 0%,100% { opacity:1; } 50% { opacity:.2; } }
+      @keyframes dash-number-tick { 0% { clip-path:inset(100% 0 0 0); transform:translateY(10px); } 100% { clip-path:inset(0 0 0 0); transform:translateY(0); } }
+      @keyframes dash-wave { 0%,100% { transform:scaleY(1); } 50% { transform:scaleY(1.6); } }
+
+      .dash-root *:focus-visible { outline:2px solid rgba(99,102,241,.7); outline-offset:2px; border-radius:6px; }
+
+      .dash-card-hover {
+        transition: transform 200ms cubic-bezier(0.22,1,.36,1), box-shadow 200ms ease;
+      }
+      .dash-card-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 50px rgba(0,0,0,.45) !important;
+      }
+
+      .dash-btn { transition: all 140ms ease; }
+      .dash-btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
+      .dash-btn:active { transform: translateY(0); }
+
+      .dash-action-card { transition: border-color 200ms ease, background 200ms ease; cursor: default; }
+      .dash-action-card:hover { border-color: rgba(99,102,241,.5) !important; }
+
+      .dash-nav-pill { transition: all 160ms ease; }
+      .dash-nav-pill:hover { background: rgba(99,102,241,.12) !important; color: #a5b4fc !important; }
+      .dash-nav-pill.active { background: rgba(99,102,241,.22) !important; color: #818cf8 !important; border-color: rgba(99,102,241,.4) !important; }
+
+      .dash-rank-row { transition: all 140ms ease; }
+      .dash-rank-row:hover { background: rgba(99,102,241,.07) !important; transform: translateX(3px); }
+
+      .dash-score-bar-fill { animation: dash-score-fill 800ms cubic-bezier(.22,1,.36,1) forwards; }
+
+      .dash-stagger-1 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 60ms both; }
+      .dash-stagger-2 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 120ms both; }
+      .dash-stagger-3 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 180ms both; }
+      .dash-stagger-4 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 240ms both; }
+      .dash-stagger-5 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 300ms both; }
+      .dash-stagger-6 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 360ms both; }
+
+      .dash-grid-in { animation: dash-grid-in 400ms cubic-bezier(.22,1,.36,1) both; }
+
+      .dash-segment-tab { transition: all 160ms ease; cursor: pointer; }
+      .dash-segment-tab:hover { background: rgba(99,102,241,.1) !important; }
+
+      .dash-tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+      .dash-tag-critical { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
+      .dash-tag-warning { background: rgba(245,158,11,.15); color: #fcd34d; border: 1px solid rgba(245,158,11,.3); }
+      .dash-tag-info { background: rgba(99,102,241,.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,.3); }
+      .dash-tag-success { background: rgba(16,185,129,.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); }
+
+      .dash-tag-critical.light { background: rgba(239,68,68,.1); color: #b91c1c; border-color: rgba(239,68,68,.25); }
+      .dash-tag-warning.light { background: rgba(245,158,11,.1); color: #92400e; border-color: rgba(245,158,11,.25); }
+      .dash-tag-info.light { background: rgba(99,102,241,.1); color: #3730a3; border-color: rgba(99,102,241,.25); }
+      .dash-tag-success.light { background: rgba(16,185,129,.1); color: #065f46; border-color: rgba(16,185,129,.25); }
+
+      .dash-mono { font-family: 'JetBrains Mono', monospace; }
+      .dash-display { font-family: 'Syne', sans-serif; }
+
+      /* Sparkline pseudo bars */
+      .dash-sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; }
+      .dash-sparkline-bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 4px; background: currentColor; opacity: .55; }
+      .dash-sparkline-bar.peak { opacity: 1; }
+
+      /* Scrollbar for leaderboard panels */
+      .dash-scroll::-webkit-scrollbar { width: 4px; }
+      .dash-scroll::-webkit-scrollbar-track { background: transparent; }
+      .dash-scroll::-webkit-scrollbar-thumb { background: rgba(99,102,241,.25); border-radius: 999px; }
+
+      /* Tooltip  */
+      .dash-tooltip-wrap { position: relative; }
+      .dash-tooltip-wrap:hover .dash-tooltip { opacity: 1; pointer-events: auto; transform: translateY(0); }
+      .dash-tooltip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(4px); background: rgba(15,23,42,.96); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 6px 10px; white-space: nowrap; font-size: 11px; font-weight: 600; color: #e2e8f0; pointer-events: none; opacity: 0; transition: opacity 140ms ease, transform 140ms ease; z-index: 999; }
+
+      /* Horizontal divider */
+      .dash-divider { height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(99,102,241,.25) 30%, rgba(99,102,241,.25) 70%, transparent 100%); margin: 24px 0; }
+
+      /* Animated count */
+      .dash-count-in { animation: dash-count-up 400ms cubic-bezier(.22,1,.36,1) both; }
+    `;
+    document.head.appendChild(el);
+    return () => { document.getElementById(id)?.remove(); };
+  }, []);
+}
+
+// ─── Mini sparkline data generator (deterministic from label) ─────────────────
+function pseudoSparkline(label: string, len = 7): number[] {
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) hash = ((hash << 5) - hash) + label.charCodeAt(i);
+  return Array.from({ length: len }, (_, i) => 40 + Math.abs((hash * (i + 1) * 2654435761) % 60));
+}
+
+// ─── Live ticker items ────────────────────────────────────────────────────────
+function useLiveTicker(items: string[]) {
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (!items.length) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % items.length), 4000);
+    return () => clearInterval(t);
+  }, [items.length]);
+  return items[idx] ?? '';
+}
+
+// ─── Main Dashboard Component ─────────────────────────────────────────────────
 function Dashboard({
   currentUser = null,
 }: {
@@ -381,6 +333,10 @@ function Dashboard({
     email?: string;
   } | null;
 }) {
+  useDashboardStyles();
+  const themeKey = useThemeRefresh();
+  const light = useMemo(() => isLightMode(), [themeKey]);
+
   const [audits, setAudits] = useState<AuditItem[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
   const [callsRecords, setCallsRecords] = useState<CallsRecord[]>([]);
@@ -395,2296 +351,952 @@ function Dashboard({
   const [dateFrom, setDateFrom] = useState(getMonthStartValue());
   const [dateTo, setDateTo] = useState(getCurrentDateValue());
   const [lastLoadedAt, setLastLoadedAt] = useState('');
-  const dateFromInputRef = useRef<HTMLInputElement | null>(null);
-  const dateToInputRef = useRef<HTMLInputElement | null>(null);
+  const [activeSection, setActiveSection] = useState<'overview' | 'rankings' | 'insights' | 'action'>('overview');
+  const dateFromRef = useRef<HTMLInputElement | null>(null);
+  const dateToRef = useRef<HTMLInputElement | null>(null);
   const navigate = useNavigate();
-  const themeRefreshKey = useThemeRefresh();
-  const themeVars = useMemo(() => getDashboardThemeVars(), [themeRefreshKey]);
-  const roleSpotlight = useMemo(() => {
-    const role = currentUser?.role || 'qa';
 
-    if (role === 'admin') {
-      return {
-        title: 'Admin Spotlight',
-        cards: [
-          { title: 'System Pulse', description: 'Watch calls, tickets, sales, released audits, and cross-team quality trends from one place.' },
-          { title: 'People Ops', description: 'Use reports, accounts, and recognition to keep every team aligned.' },
-          { title: 'Action Queue', description: 'Review feedback, monitoring, and supervisor requests that need attention.' },
-        ],
-      };
-    }
+  // Color palette
+  const C = useMemo(() => light ? {
+    bg: '#f0f2f8',
+    surface: 'rgba(255,255,255,.95)',
+    surfaceHover: 'rgba(248,250,255,.98)',
+    border: 'rgba(203,213,225,.8)',
+    borderAccent: 'rgba(99,102,241,.3)',
+    text: '#0f172a',
+    textSub: '#475569',
+    textMuted: '#94a3b8',
+    accent: '#6366f1',
+    accentSoft: 'rgba(99,102,241,.1)',
+    accentGlow: 'rgba(99,102,241,.2)',
+    callsColor: '#2563eb',
+    ticketsColor: '#7c3aed',
+    salesColor: '#059669',
+    criticalColor: '#dc2626',
+    warningColor: '#d97706',
+    panelBg: 'rgba(255,255,255,.97)',
+    headerBg: 'rgba(255,255,255,.92)',
+    codeBg: 'rgba(241,245,249,.9)',
+    gradTop: 'linear-gradient(135deg, rgba(99,102,241,.06) 0%, transparent 60%)',
+    shadow: '0 4px 24px rgba(15,23,42,.08)',
+    shadowLg: '0 12px 40px rgba(15,23,42,.12)',
+  } : {
+    bg: '#060912',
+    surface: 'rgba(13,18,36,.9)',
+    surfaceHover: 'rgba(17,24,48,.95)',
+    border: 'rgba(99,102,241,.15)',
+    borderAccent: 'rgba(99,102,241,.4)',
+    text: '#e2e8f0',
+    textSub: '#94a3b8',
+    textMuted: '#475569',
+    accent: '#818cf8',
+    accentSoft: 'rgba(99,102,241,.12)',
+    accentGlow: 'rgba(99,102,241,.25)',
+    callsColor: '#60a5fa',
+    ticketsColor: '#a78bfa',
+    salesColor: '#34d399',
+    criticalColor: '#f87171',
+    warningColor: '#fbbf24',
+    panelBg: 'rgba(10,14,30,.95)',
+    headerBg: 'rgba(6,9,18,.96)',
+    codeBg: 'rgba(13,18,36,.8)',
+    gradTop: 'linear-gradient(135deg, rgba(99,102,241,.08) 0%, transparent 60%)',
+    shadow: '0 4px 24px rgba(0,0,0,.4)',
+    shadowLg: '0 12px 50px rgba(0,0,0,.6)',
+  }, [light]);
 
-    return {
-      title: 'QA Spotlight',
-      cards: [
-        { title: 'Coach With Context', description: 'Review quality trends, recognition, and recent uploads before coaching an agent.' },
-        { title: 'Recognition & Growth', description: 'Use recognition, trophies, and academy content to reinforce strong performance.' },
-        { title: 'Celebrate Wins', description: 'Recognition and trophies make quality visible, not only corrective.' },
-      ],
-    };
-  }, [currentUser?.role]);
+  // Data loading
+  useEffect(() => { void loadData(); }, []);
 
-
-  useEffect(() => {
-    void loadDashboardData();
-  }, []);
-
-  function applyDashboardData(payload: DashboardCachePayload) {
-    setAudits(payload.audits);
-    setProfiles(payload.profiles);
-    setCallsRecords(payload.callsRecords);
-    setTicketsRecords(payload.ticketsRecords);
-    setSalesRecords(payload.salesRecords);
-    setSupervisorRequests(payload.supervisorRequests);
-    setAgentFeedback(payload.agentFeedback);
-    setMonitoringItems(payload.monitoringItems);
+  function applyData(p: DashboardCachePayload) {
+    setAudits(p.audits); setProfiles(p.profiles); setCallsRecords(p.callsRecords);
+    setTicketsRecords(p.ticketsRecords); setSalesRecords(p.salesRecords);
+    setSupervisorRequests(p.supervisorRequests); setAgentFeedback(p.agentFeedback);
+    setMonitoringItems(p.monitoringItems);
   }
 
-  async function fetchDashboardData() {
-    const [
-      auditsResult,
-      profilesResult,
-      callsResult,
-      ticketsResult,
-      salesResult,
-      requestsResult,
-      feedbackResult,
-      monitoringResult,
-    ] = await Promise.all([
-      supabase
-        .from('audits')
-        .select('*')
-        .order('audit_date', { ascending: false }),
-      supabase
-        .from('profiles')
-        .select('id, agent_id, agent_name, display_name, team')
-        .eq('role', 'agent')
-        .order('agent_name', { ascending: true }),
-      supabase
-        .from('calls_records')
-        .select('*')
-        .order('call_date', { ascending: false }),
-      supabase
-        .from('tickets_records')
-        .select('*')
-        .order('ticket_date', { ascending: false }),
-      supabase
-        .from('sales_records')
-        .select('*')
-        .order('sale_date', { ascending: false }),
-      supabase
-        .from('supervisor_requests')
-        .select('id, status, created_at, team')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('agent_feedback')
-        .select('id, status, created_at, due_date, team')
-        .order('created_at', { ascending: false }),
-      supabase
-        .from('monitoring_items')
-        .select('id, status, created_at, team')
-        .order('created_at', { ascending: false }),
+  async function fetchData(): Promise<DashboardCachePayload> {
+    const [a, pr, ca, ti, sa, rq, fb, mo] = await Promise.all([
+      supabase.from('audits').select('*').order('audit_date', { ascending: false }),
+      supabase.from('profiles').select('id, agent_id, agent_name, display_name, team').eq('role', 'agent').order('agent_name', { ascending: true }),
+      supabase.from('calls_records').select('*').order('call_date', { ascending: false }),
+      supabase.from('tickets_records').select('*').order('ticket_date', { ascending: false }),
+      supabase.from('sales_records').select('*').order('sale_date', { ascending: false }),
+      supabase.from('supervisor_requests').select('id, status, created_at, team').order('created_at', { ascending: false }),
+      supabase.from('agent_feedback').select('id, status, created_at, due_date, team').order('created_at', { ascending: false }),
+      supabase.from('monitoring_items').select('id, status, created_at, team').order('created_at', { ascending: false }),
     ]);
-
-    const errors = [
-      auditsResult.error?.message,
-      profilesResult.error?.message,
-      callsResult.error?.message,
-      ticketsResult.error?.message,
-      salesResult.error?.message,
-      requestsResult.error?.message,
-      feedbackResult.error?.message,
-      monitoringResult.error?.message,
-    ].filter(Boolean);
-
-    if (errors.length > 0) {
-      throw new Error(errors.join(' | '));
-    }
-
-    return {
-      audits: (auditsResult.data as AuditItem[]) || [],
-      profiles: (profilesResult.data as AgentProfile[]) || [],
-      callsRecords: (callsResult.data as CallsRecord[]) || [],
-      ticketsRecords: (ticketsResult.data as TicketsRecord[]) || [],
-      salesRecords: (salesResult.data as SalesRecord[]) || [],
-      supervisorRequests: (requestsResult.data as SupervisorRequestSummary[]) || [],
-      agentFeedback: (feedbackResult.data as AgentFeedbackSummary[]) || [],
-      monitoringItems: (monitoringResult.data as MonitoringSummary[]) || [],
-    } satisfies DashboardCachePayload;
+    const errs = [a.error, pr.error, ca.error, ti.error, sa.error, rq.error, fb.error, mo.error].filter(Boolean).map(e => e?.message);
+    if (errs.length) throw new Error(errs.join(' | '));
+    return { audits: (a.data as AuditItem[]) || [], profiles: (pr.data as AgentProfile[]) || [], callsRecords: (ca.data as CallsRecord[]) || [], ticketsRecords: (ti.data as TicketsRecord[]) || [], salesRecords: (sa.data as SalesRecord[]) || [], supervisorRequests: (rq.data as SupervisorRequestSummary[]) || [], agentFeedback: (fb.data as AgentFeedbackSummary[]) || [], monitoringItems: (mo.data as MonitoringSummary[]) || [] };
   }
 
-  async function loadDashboardData(options?: {
-    force?: boolean;
-    background?: boolean;
-  }) {
-    const force = options?.force ?? false;
-    const background = options?.background ?? false;
-    const cached = force
-      ? null
-      : peekCachedValue<DashboardCachePayload>(DASHBOARD_CACHE_KEY);
-
-    if (cached) {
-      applyDashboardData(cached);
-      setLoading(false);
-    }
-
-    if (background || cached) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
-    }
-
+  async function loadData(opts?: { force?: boolean }) {
+    const force = opts?.force ?? false;
+    const cached = force ? null : peekCachedValue<DashboardCachePayload>(DASHBOARD_CACHE_KEY);
+    if (cached) { applyData(cached); setLoading(false); }
+    cached ? setRefreshing(true) : setLoading(true);
     setErrorMessage('');
-
     try {
-      const payload = await getCachedValue(
-        DASHBOARD_CACHE_KEY,
-        fetchDashboardData,
-        {
-          ttlMs: DASHBOARD_CACHE_TTL_MS,
-          force,
-        }
-      );
-
-      applyDashboardData(payload);
+      const payload = await getCachedValue(DASHBOARD_CACHE_KEY, fetchData, { ttlMs: DASHBOARD_CACHE_TTL_MS, force });
+      applyData(payload);
       setLastLoadedAt(new Date().toISOString());
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : 'Could not load dashboard data.'
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch (e) {
+      setErrorMessage(e instanceof Error ? e.message : 'Could not load dashboard.');
+    } finally { setLoading(false); setRefreshing(false); }
   }
-  function getDisplayName(
-    agentId?: string | null,
-    agentName?: string | null,
-    team?: string | null
-  ) {
-    const normalizedId = normalizeAgentId(agentId);
-    const normalizedName = normalizeAgentName(agentName);
 
-    const matchedProfile = profiles.find((profile) => {
-      if (profile.team !== (team || null)) return false;
-
-      const profileId = normalizeAgentId(profile.agent_id);
-      const profileName = normalizeAgentName(profile.agent_name);
-
-      if (normalizedId && profileId) {
-        return profileId === normalizedId;
-      }
-
-      return profileName === normalizedName;
+  // Agent label helpers
+  function getDisplayName(agentId?: string | null, agentName?: string | null, team?: string | null) {
+    const nId = normalizeAgentId(agentId), nName = normalizeAgentName(agentName);
+    const match = profiles.find(p => {
+      if (p.team !== (team || null)) return false;
+      const pId = normalizeAgentId(p.agent_id), pName = normalizeAgentName(p.agent_name);
+      return nId && pId ? pId === nId : pName === nName;
     });
-
-    return matchedProfile?.display_name || null;
+    return match?.display_name || null;
   }
 
-  function getAgentLabel(
-    agentId?: string | null,
-    agentName?: string | null,
-    team?: string | null
-  ) {
-    const displayName = getDisplayName(agentId, agentName, team);
-
-    if (displayName) {
-      return `${agentName || '-'} - ${displayName}`;
-    }
-
-    return `${agentName || '-'} - ${agentId || '-'}`;
+  function getAgentLabel(agentId?: string | null, agentName?: string | null, team?: string | null) {
+    const dn = getDisplayName(agentId, agentName, team);
+    return dn ? `${agentName || '—'} — ${dn}` : `${agentName || '—'} — ${agentId || '—'}`;
   }
 
   function getAgentKey(agentId?: string | null, agentName?: string | null) {
-    const normalizedId = normalizeAgentId(agentId);
-    const normalizedName = normalizeAgentName(agentName);
-    return `${normalizedId}|${normalizedName}`;
+    return `${normalizeAgentId(agentId)}|${normalizeAgentName(agentName)}`;
   }
 
-  function matchesSelectedRange(
-    dateValue?: string | null,
-    dateToValue?: string | null
-  ) {
-    if (!dateFrom && !dateTo) return true;
-    return matchesDateRange(dateValue, dateToValue, dateFrom, dateTo);
+  // Date filtering
+  function matchesRange(d?: string | null, d2?: string | null) {
+    return !dateFrom && !dateTo ? true : matchesDateRange(d, d2, dateFrom, dateTo);
   }
 
-  const filteredAudits = useMemo(() => {
-    return audits.filter((item) => matchesSelectedRange(item.audit_date));
-  }, [audits, dateFrom, dateTo]);
+  const fAudits = useMemo(() => audits.filter(a => matchesRange(a.audit_date)), [audits, dateFrom, dateTo]);
+  const fCalls = useMemo(() => callsRecords.filter(r => matchesRange(r.call_date, r.date_to)), [callsRecords, dateFrom, dateTo]);
+  const fTickets = useMemo(() => ticketsRecords.filter(r => matchesRange(r.ticket_date, r.date_to)), [ticketsRecords, dateFrom, dateTo]);
+  const fSales = useMemo(() => salesRecords.filter(r => matchesRange(r.sale_date, r.date_to)), [salesRecords, dateFrom, dateTo]);
+  const fRequests = useMemo(() => supervisorRequests.filter(r => matchesRange(r.created_at.slice(0, 10))), [supervisorRequests, dateFrom, dateTo]);
+  const fFeedback = useMemo(() => agentFeedback.filter(r => matchesRange(r.created_at.slice(0, 10))), [agentFeedback, dateFrom, dateTo]);
+  const fMonitoring = useMemo(() => monitoringItems.filter(r => matchesRange(r.created_at.slice(0, 10))), [monitoringItems, dateFrom, dateTo]);
 
-  const filteredCalls = useMemo(() => {
-    return callsRecords.filter((item) =>
-      matchesSelectedRange(item.call_date, item.date_to || null)
-    );
-  }, [callsRecords, dateFrom, dateTo]);
+  const teamScope = currentUser?.role === 'supervisor' ? currentUser.team || null : null;
+  const scopedReqs = useMemo(() => fRequests.filter(r => !teamScope || r.team === teamScope), [fRequests, teamScope]);
+  const scopedFeedback = useMemo(() => fFeedback.filter(r => !teamScope || r.team === teamScope), [fFeedback, teamScope]);
+  const scopedMonitoring = useMemo(() => fMonitoring.filter(r => !teamScope || r.team === teamScope), [fMonitoring, teamScope]);
+  const scopedHiddenAudits = useMemo(() => fAudits.filter(a => !a.shared_with_agent && (!teamScope || a.team === teamScope)), [fAudits, teamScope]);
 
-  const filteredTickets = useMemo(() => {
-    return ticketsRecords.filter((item) =>
-      matchesSelectedRange(item.ticket_date, item.date_to || null)
-    );
-  }, [ticketsRecords, dateFrom, dateTo]);
+  const openReqs = useMemo(() => scopedReqs.filter(r => r.status !== 'Closed'), [scopedReqs]);
+  const openFeedback = useMemo(() => scopedFeedback.filter(r => r.status !== 'Closed'), [scopedFeedback]);
+  const activeMon = useMemo(() => scopedMonitoring.filter(r => r.status === 'active'), [scopedMonitoring]);
+  const overdueFb = useMemo(() => openFeedback.filter(r => !!r.due_date && r.due_date.slice(0, 10) < getCurrentDateValue()), [openFeedback]);
+  const agingReqs = useMemo(() => openReqs.filter(r => getDaysOld(r.created_at) >= 3), [openReqs]);
+  const agingMon = useMemo(() => activeMon.filter(r => getDaysOld(r.created_at) >= 2), [activeMon]);
+  const agingHiddenAudits = useMemo(() => scopedHiddenAudits.filter(a => getDaysOld(a.audit_date) >= 2), [scopedHiddenAudits]);
 
-  const filteredSales = useMemo(() => {
-    return salesRecords.filter((item) =>
-      matchesSelectedRange(item.sale_date, item.date_to || null)
-    );
-  }, [salesRecords, dateFrom, dateTo]);
+  // Previous month comparison
+  const prevFrom = useMemo(() => shiftDateStringByMonths(dateFrom || getMonthStartValue(), -1), [dateFrom]);
+  const prevTo = useMemo(() => shiftDateStringByMonths(dateTo || getCurrentDateValue(), -1), [dateTo]);
+  const prevAudits = useMemo(() => audits.filter(a => matchesDateRange(a.audit_date, a.audit_date, prevFrom, prevTo)), [audits, prevFrom, prevTo]);
+  const prevCalls = useMemo(() => callsRecords.filter(r => matchesDateRange(r.call_date, r.date_to, prevFrom, prevTo)), [callsRecords, prevFrom, prevTo]);
+  const prevTickets = useMemo(() => ticketsRecords.filter(r => matchesDateRange(r.ticket_date, r.date_to, prevFrom, prevTo)), [ticketsRecords, prevFrom, prevTo]);
+  const prevSales = useMemo(() => salesRecords.filter(r => matchesDateRange(r.sale_date, r.date_to, prevFrom, prevTo)), [salesRecords, prevFrom, prevTo]);
 
-  const filteredRequests = useMemo(() => {
-    return supervisorRequests.filter((item) =>
-      matchesSelectedRange(item.created_at.slice(0, 10), item.created_at.slice(0, 10))
-    );
-  }, [supervisorRequests, dateFrom, dateTo]);
+  // Team splits
+  const callsAudits = useMemo(() => fAudits.filter(a => a.team === 'Calls'), [fAudits]);
+  const ticketsAudits = useMemo(() => fAudits.filter(a => a.team === 'Tickets'), [fAudits]);
+  const salesAudits = useMemo(() => fAudits.filter(a => a.team === 'Sales'), [fAudits]);
+  const prevCallsAudits = useMemo(() => prevAudits.filter(a => a.team === 'Calls'), [prevAudits]);
+  const prevTicketsAudits = useMemo(() => prevAudits.filter(a => a.team === 'Tickets'), [prevAudits]);
+  const prevSalesAudits = useMemo(() => prevAudits.filter(a => a.team === 'Sales'), [prevAudits]);
 
-  const filteredFeedback = useMemo(() => {
-    return agentFeedback.filter((item) =>
-      matchesSelectedRange(item.created_at.slice(0, 10), item.created_at.slice(0, 10))
-    );
-  }, [agentFeedback, dateFrom, dateTo]);
+  const auditedCallsKeys = useMemo(() => new Set(callsAudits.map(a => getAgentKey(a.agent_id, a.agent_name))), [callsAudits]);
+  const auditedTicketsKeys = useMemo(() => new Set(ticketsAudits.map(a => getAgentKey(a.agent_id, a.agent_name))), [ticketsAudits]);
 
-  const filteredMonitoring = useMemo(() => {
-    return monitoringItems.filter((item) =>
-      matchesSelectedRange(item.created_at.slice(0, 10), item.created_at.slice(0, 10))
-    );
-  }, [monitoringItems, dateFrom, dateTo]);
-
-  const teamScopedValue =
-    currentUser?.role === 'supervisor' ? currentUser.team || null : null;
-
-  const scopedRequests = useMemo(() => {
-    return filteredRequests.filter(
-      (item) => !teamScopedValue || item.team === teamScopedValue
-    );
-  }, [filteredRequests, teamScopedValue]);
-
-  const scopedFeedback = useMemo(() => {
-    return filteredFeedback.filter(
-      (item) => !teamScopedValue || item.team === teamScopedValue
-    );
-  }, [filteredFeedback, teamScopedValue]);
-
-  const scopedMonitoring = useMemo(() => {
-    return filteredMonitoring.filter(
-      (item) => !teamScopedValue || item.team === teamScopedValue
-    );
-  }, [filteredMonitoring, teamScopedValue]);
-
-  const scopedHiddenAudits = useMemo(() => {
-    return filteredAudits.filter(
-      (item) =>
-        !item.shared_with_agent &&
-        (!teamScopedValue || item.team === teamScopedValue)
-    );
-  }, [filteredAudits, teamScopedValue]);
-
-  const openRequests = useMemo(
-    () => scopedRequests.filter((item) => item.status !== 'Closed'),
-    [scopedRequests]
-  );
-
-  const openFeedbackItems = useMemo(
-    () => scopedFeedback.filter((item) => item.status !== 'Closed'),
-    [scopedFeedback]
-  );
-
-  const activeMonitoringItems = useMemo(
-    () => scopedMonitoring.filter((item) => item.status === 'active'),
-    [scopedMonitoring]
-  );
-
-  const overdueFeedbackItems = useMemo(
-    () =>
-      openFeedbackItems.filter(
-        (item) =>
-          !!item.due_date &&
-          item.due_date.slice(0, 10) < getCurrentDateValue()
-      ),
-    [openFeedbackItems]
-  );
-
-  const agingRequests = useMemo(
-    () => openRequests.filter((item) => getDaysOld(item.created_at) >= 3),
-    [openRequests]
-  );
-
-  const agingMonitoring = useMemo(
-    () => activeMonitoringItems.filter((item) => getDaysOld(item.created_at) >= 2),
-    [activeMonitoringItems]
-  );
-
-  const agingHiddenAudits = useMemo(
-    () => scopedHiddenAudits.filter((item) => getDaysOld(item.audit_date) >= 2),
-    [scopedHiddenAudits]
-  );
-
-  const actionCenterItems = useMemo<ActionCenterItem[]>(() => {
-    const items: ActionCenterItem[] = [
-      {
-        id: 'requests',
-        title: 'Open Supervisor Requests',
-        count: openRequests.length,
-        detail:
-          agingRequests.length > 0
-            ? `${agingRequests.length} request(s) are 3+ days old.`
-            : 'No aging requests right now.',
-        path: '/supervisor-requests',
-        tone: agingRequests.length > 0 ? 'critical' : openRequests.length > 0 ? 'warning' : 'info',
-      },
-      {
-        id: 'feedback',
-        title: 'Open Feedback',
-        count: openFeedbackItems.length,
-        detail:
-          overdueFeedbackItems.length > 0
-            ? `${overdueFeedbackItems.length} feedback item(s) are overdue.`
-            : 'No overdue feedback right now.',
-        path: '/agent-feedback',
-        tone:
-          overdueFeedbackItems.length > 0
-            ? 'critical'
-            : openFeedbackItems.length > 0
-            ? 'warning'
-            : 'info',
-      },
-      {
-        id: 'monitoring',
-        title: 'Active Monitoring',
-        count: activeMonitoringItems.length,
-        detail:
-          agingMonitoring.length > 0
-            ? `${agingMonitoring.length} monitoring item(s) are aging.`
-            : 'Monitoring queue is under control.',
-        path: '/monitoring',
-        tone:
-          agingMonitoring.length > 0
-            ? 'critical'
-            : activeMonitoringItems.length > 0
-            ? 'warning'
-            : 'info',
-      },
-      {
-        id: 'audits',
-        title: 'Unreleased Audits',
-        count: scopedHiddenAudits.length,
-        detail:
-          agingHiddenAudits.length > 0
-            ? `${agingHiddenAudits.length} unreleased audit(s) are 2+ days old.`
-            : 'No aging unreleased audits.',
-        path: '/audits-list',
-        tone:
-          agingHiddenAudits.length > 0
-            ? 'critical'
-            : scopedHiddenAudits.length > 0
-            ? 'warning'
-            : 'info',
-      },
-    ];
-
-    return items;
-  }, [
-    openRequests.length,
-    agingRequests.length,
-    openFeedbackItems.length,
-    overdueFeedbackItems.length,
-    activeMonitoringItems.length,
-    agingMonitoring.length,
-    scopedHiddenAudits.length,
-    agingHiddenAudits.length,
-  ]);
-
-  const actionCenterHeadline = useMemo(() => {
-    const priorityItem =
-      actionCenterItems.find((item) => item.tone === 'critical' && item.count > 0) ||
-      actionCenterItems.find((item) => item.tone === 'warning' && item.count > 0) ||
-      null;
-
-    if (!priorityItem) {
-      return {
-        title: 'Queue is healthy',
-        detail: 'No urgent operational backlog in the selected range.',
-      };
-    }
-
-    return {
-      title: priorityItem.title,
-      detail: priorityItem.detail,
-    };
-  }, [actionCenterItems]);
-
-  const actionQuickLinks = useMemo(
-    () => [
-      { label: 'Open Audits List', path: '/audits-list' },
-      { label: 'Open Feedback', path: '/agent-feedback' },
-      { label: 'Open Monitoring', path: '/monitoring' },
-      { label: 'Open Requests', path: '/supervisor-requests' },
-      { label: 'Open Reports', path: '/reports' },
-    ],
-    []
-  );
-
-  const comparisonDateFrom = dateFrom || getMonthStartValue();
-  const comparisonDateTo = dateTo || getCurrentDateValue();
-  const previousDateFrom = useMemo(
-    () => shiftDateStringByMonths(comparisonDateFrom, -1),
-    [comparisonDateFrom]
-  );
-  const previousDateTo = useMemo(
-    () => shiftDateStringByMonths(comparisonDateTo, -1),
-    [comparisonDateTo]
-  );
-
-  const previousAudits = useMemo(() => {
-    return audits.filter((item) =>
-      matchesDateRange(item.audit_date, item.audit_date, previousDateFrom, previousDateTo)
-    );
-  }, [audits, previousDateFrom, previousDateTo]);
-
-  const previousCalls = useMemo(() => {
-    return callsRecords.filter((item) =>
-      matchesDateRange(item.call_date, item.date_to || null, previousDateFrom, previousDateTo)
-    );
-  }, [callsRecords, previousDateFrom, previousDateTo]);
-
-  const previousTickets = useMemo(() => {
-    return ticketsRecords.filter((item) =>
-      matchesDateRange(item.ticket_date, item.date_to || null, previousDateFrom, previousDateTo)
-    );
-  }, [ticketsRecords, previousDateFrom, previousDateTo]);
-
-  const previousSales = useMemo(() => {
-    return salesRecords.filter((item) =>
-      matchesDateRange(item.sale_date, item.date_to || null, previousDateFrom, previousDateTo)
-    );
-  }, [salesRecords, previousDateFrom, previousDateTo]);
-
-  const filteredCallsAudits = useMemo(
-    () => filteredAudits.filter((item) => item.team === 'Calls'),
-    [filteredAudits]
-  );
-
-  const filteredTicketsAudits = useMemo(
-    () => filteredAudits.filter((item) => item.team === 'Tickets'),
-    [filteredAudits]
-  );
-
-  const filteredSalesAudits = useMemo(
-    () => filteredAudits.filter((item) => item.team === 'Sales'),
-    [filteredAudits]
-  );
-
-  const previousCallsAudits = useMemo(
-    () => previousAudits.filter((item) => item.team === 'Calls'),
-    [previousAudits]
-  );
-
-  const previousTicketsAudits = useMemo(
-    () => previousAudits.filter((item) => item.team === 'Tickets'),
-    [previousAudits]
-  );
-
-  const previousSalesAudits = useMemo(
-    () => previousAudits.filter((item) => item.team === 'Sales'),
-    [previousAudits]
-  );
-
-  const auditedCallsKeys = useMemo(() => {
-    return new Set(
-      filteredCallsAudits.map((item) =>
-        getAgentKey(item.agent_id, item.agent_name)
-      )
-    );
-  }, [filteredCallsAudits]);
-
-  const auditedTicketsKeys = useMemo(() => {
-    return new Set(
-      filteredTicketsAudits.map((item) =>
-        getAgentKey(item.agent_id, item.agent_name)
-      )
-    );
-  }, [filteredTicketsAudits]);
-
-  function buildQuantityLeaderboard<
-    T extends { agent_id: string; agent_name: string; calls_count?: number; tickets_count?: number; amount?: number }
-  >(
-    records: T[],
-    team: 'Calls' | 'Tickets',
-    getQuantity: (record: T) => number,
-    allowedKeys: Set<string>
-  ) {
-    const grouped = new Map<string, QuantityLeader>();
-    const restrictToAuditedAgents = allowedKeys.size > 0;
-
-    records.forEach((record) => {
-      const key = getAgentKey(record.agent_id, record.agent_name);
-      if (restrictToAuditedAgents && !allowedKeys.has(key)) return;
-
-      const quantity = getQuantity(record);
-      const existing = grouped.get(key);
-
-      if (existing) {
-        existing.quantity += quantity;
-        return;
-      }
-
-      grouped.set(key, {
-        label: getAgentLabel(record.agent_id, record.agent_name, team),
-        quantity,
-      });
+  // Leaderboards
+  function buildQtyBoard<T extends { agent_id: string; agent_name: string }>(
+    records: T[], team: 'Calls' | 'Tickets', getQty: (r: T) => number, keys: Set<string>
+  ): QuantityLeader[] {
+    const map = new Map<string, QuantityLeader>();
+    const restrict = keys.size > 0;
+    records.forEach(r => {
+      const k = getAgentKey(r.agent_id, r.agent_name);
+      if (restrict && !keys.has(k)) return;
+      const q = getQty(r);
+      const ex = map.get(k);
+      ex ? (ex.quantity += q) : map.set(k, { label: getAgentLabel(r.agent_id, r.agent_name, team), quantity: q });
     });
-
-    return Array.from(grouped.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 3);
+    return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
   }
 
-  function buildQualityLeaderboard(team: 'Calls' | 'Tickets') {
-    const grouped = new Map<
-      string,
-      {
-        label: string;
-        scores: number[];
-      }
-    >();
-
-    filteredAudits
-      .filter((item) => item.team === team)
-      .forEach((audit) => {
-        const key = getAgentKey(audit.agent_id, audit.agent_name);
-        const existing = grouped.get(key);
-
-        if (existing) {
-          existing.scores.push(Number(audit.quality_score));
-          return;
-        }
-
-        grouped.set(key, {
-          label: getAgentLabel(audit.agent_id, audit.agent_name, team),
-          scores: [Number(audit.quality_score)],
-        });
-      });
-
-    return Array.from(grouped.values())
-      .map((item) => ({
-        label: item.label,
-        averageQuality:
-          item.scores.reduce((sum, value) => sum + value, 0) /
-          item.scores.length,
-        auditsCount: item.scores.length,
-      }))
-      .sort((a, b) => b.averageQuality - a.averageQuality)
-      .slice(0, 3);
+  function buildQualityBoard(team: 'Calls' | 'Tickets'): QualityLeader[] {
+    const map = new Map<string, { label: string; scores: number[] }>();
+    fAudits.filter(a => a.team === team).forEach(a => {
+      const k = getAgentKey(a.agent_id, a.agent_name);
+      const ex = map.get(k);
+      ex ? ex.scores.push(Number(a.quality_score)) : map.set(k, { label: getAgentLabel(a.agent_id, a.agent_name, team), scores: [Number(a.quality_score)] });
+    });
+    return [...map.values()].map(v => ({ label: v.label, averageQuality: v.scores.reduce((s, x) => s + x, 0) / v.scores.length, auditsCount: v.scores.length })).sort((a, b) => b.averageQuality - a.averageQuality).slice(0, 5);
   }
 
-  function buildHybridLeaderboard<
-    T extends { agent_id: string; agent_name: string; calls_count?: number; tickets_count?: number; amount?: number }
-  >(
-    team: 'Calls' | 'Tickets',
-    records: T[],
-    getQuantity: (record: T) => number
-  ) {
-    const teamAudits = filteredAudits.filter((item) => item.team === team);
-
-    const quantityMap = new Map<
-      string,
-      {
-        agent_id: string;
-        agent_name: string;
-        quantity: number;
-      }
-    >();
-
-    records.forEach((record) => {
-      const key = getAgentKey(record.agent_id, record.agent_name);
-      const existing = quantityMap.get(key);
-
-      if (existing) {
-        existing.quantity += getQuantity(record);
-        return;
-      }
-
-      quantityMap.set(key, {
-        agent_id: record.agent_id,
-        agent_name: record.agent_name,
-        quantity: getQuantity(record),
-      });
+  function buildHybridBoard<T extends { agent_id: string; agent_name: string }>(
+    team: 'Calls' | 'Tickets', records: T[], getQty: (r: T) => number
+  ): HybridLeader[] {
+    const teamAudits = fAudits.filter(a => a.team === team);
+    const qtyMap = new Map<string, { agent_id: string; agent_name: string; quantity: number }>();
+    records.forEach(r => {
+      const k = getAgentKey(r.agent_id, r.agent_name);
+      const ex = qtyMap.get(k);
+      ex ? (ex.quantity += getQty(r)) : qtyMap.set(k, { agent_id: r.agent_id, agent_name: r.agent_name, quantity: getQty(r) });
     });
-
-    const qualityMap = new Map<string, number[]>();
-
-    teamAudits.forEach((audit) => {
-      const key = getAgentKey(audit.agent_id, audit.agent_name);
-      const scores = qualityMap.get(key) || [];
-      scores.push(Number(audit.quality_score));
-      qualityMap.set(key, scores);
-    });
-
-    const quantityValues = Array.from(quantityMap.entries())
-      .filter(([key]) => qualityMap.has(key))
-      .map(([, value]) => value.quantity);
-
-    const teamAverageQuantity =
-      quantityValues.length > 0
-        ? quantityValues.reduce((sum, value) => sum + value, 0) /
-          quantityValues.length
-        : 0;
-
-    const teamAverageQuality =
-      teamAudits.length > 0
-        ? teamAudits.reduce(
-            (sum, audit) => sum + Number(audit.quality_score),
-            0
-          ) / teamAudits.length
-        : 0;
-
-    const rows: HybridLeader[] = Array.from(quantityMap.entries())
-      .map(([key, item]) => {
-        const qualityScores = qualityMap.get(key) || [];
-        if (qualityScores.length === 0) return null;
-
-        const averageAgentQuality =
-          qualityScores.reduce((sum, value) => sum + value, 0) /
-          qualityScores.length;
-
-        const agentStdDev =
-          qualityScores.length > 1 ? getStandardDeviation(qualityScores) : 0;
-        const agentRsd =
-          averageAgentQuality > 0 ? agentStdDev / averageAgentQuality : 0;
-        const quantityRatio =
-          teamAverageQuantity > 0 ? item.quantity / teamAverageQuantity : 0;
-        const qualityRatio =
-          teamAverageQuality > 0 ? averageAgentQuality / teamAverageQuality : 0;
-        const combinedScore = (quantityRatio + qualityRatio) / 2 - agentRsd;
-
-        return {
-          label: getAgentLabel(item.agent_id, item.agent_name, team),
-          quantity: item.quantity,
-          averageQuality: averageAgentQuality,
-          rsd: agentRsd,
-          combinedScore,
-        };
-      })
-      .filter((item): item is HybridLeader => item !== null);
-
-    return rows.sort((a, b) => b.combinedScore - a.combinedScore).slice(0, 3);
+    const qualMap = new Map<string, number[]>();
+    teamAudits.forEach(a => { const k = getAgentKey(a.agent_id, a.agent_name); qualMap.set(k, [...(qualMap.get(k) || []), Number(a.quality_score)]); });
+    const qtyVals = [...qtyMap.entries()].filter(([k]) => qualMap.has(k)).map(([, v]) => v.quantity);
+    const avgQty = qtyVals.length ? qtyVals.reduce((s, v) => s + v, 0) / qtyVals.length : 0;
+    const avgQual = teamAudits.length ? teamAudits.reduce((s, a) => s + Number(a.quality_score), 0) / teamAudits.length : 0;
+    return [...qtyMap.entries()].map(([k, item]) => {
+      const scores = qualMap.get(k) || [];
+      if (!scores.length) return null;
+      const aq = scores.reduce((s, v) => s + v, 0) / scores.length;
+      const sd = scores.length > 1 ? getStdDev(scores) : 0;
+      const rsd = aq > 0 ? sd / aq : 0;
+      const cs = ((avgQty > 0 ? item.quantity / avgQty : 0) + (avgQual > 0 ? aq / avgQual : 0)) / 2 - rsd;
+      return { label: getAgentLabel(item.agent_id, item.agent_name, team), quantity: item.quantity, averageQuality: aq, rsd, combinedScore: cs };
+    }).filter((x): x is HybridLeader => x !== null).sort((a, b) => b.combinedScore - a.combinedScore).slice(0, 5);
   }
 
-  function buildSalesLeaderboard() {
-    const grouped = new Map<string, QuantityLeader>();
-
-    filteredSales.forEach((record) => {
-      const key = getAgentKey(record.agent_id, record.agent_name);
-      const existing = grouped.get(key);
-
-      if (existing) {
-        existing.quantity += Number(record.amount);
-        return;
-      }
-
-      grouped.set(key, {
-        label: getAgentLabel(record.agent_id, record.agent_name, 'Sales'),
-        quantity: Number(record.amount),
-      });
+  function buildSalesBoard(): QuantityLeader[] {
+    const map = new Map<string, QuantityLeader>();
+    fSales.forEach(r => {
+      const k = getAgentKey(r.agent_id, r.agent_name);
+      const ex = map.get(k);
+      ex ? (ex.quantity += Number(r.amount)) : map.set(k, { label: getAgentLabel(r.agent_id, r.agent_name, 'Sales'), quantity: Number(r.amount) });
     });
-
-    return Array.from(grouped.values())
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 3);
+    return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
   }
 
   function buildRankedAuditSummary(team?: TeamName): RankedAuditSummary[] {
-    const grouped = new Map<string, { label: string; scores: number[] }>();
-
-    filteredAudits
-      .filter((item) => (team ? item.team === team : true))
-      .forEach((audit) => {
-        const key = getAgentKey(audit.agent_id, audit.agent_name);
-        const existing = grouped.get(key);
-
-        if (existing) {
-          existing.scores.push(Number(audit.quality_score));
-          return;
-        }
-
-        grouped.set(key, {
-          label: getAgentLabel(
-            audit.agent_id,
-            audit.agent_name,
-            audit.team as TeamName
-          ),
-          scores: [Number(audit.quality_score)],
-        });
-      });
-
-    return Array.from(grouped.values())
-      .map((item) => ({
-        label: item.label,
-        averageQuality:
-          item.scores.reduce((sum, value) => sum + value, 0) /
-          item.scores.length,
-        auditsCount: item.scores.length,
-      }))
-      .sort((a, b) => b.averageQuality - a.averageQuality);
+    const map = new Map<string, { label: string; scores: number[] }>();
+    fAudits.filter(a => team ? a.team === team : true).forEach(a => {
+      const k = getAgentKey(a.agent_id, a.agent_name);
+      const ex = map.get(k);
+      ex ? ex.scores.push(Number(a.quality_score)) : map.set(k, { label: getAgentLabel(a.agent_id, a.agent_name, a.team as TeamName), scores: [Number(a.quality_score)] });
+    });
+    return [...map.values()].map(v => ({ label: v.label, averageQuality: v.scores.reduce((s, x) => s + x, 0) / v.scores.length, auditsCount: v.scores.length })).sort((a, b) => b.averageQuality - a.averageQuality);
   }
 
-  const callsQuantityTop = useMemo(() => {
-    return buildQuantityLeaderboard(
-      filteredCalls,
-      'Calls',
-      (record) => Number(record.calls_count),
-      auditedCallsKeys
-    );
-  }, [filteredCalls, auditedCallsKeys, profiles]);
+  const callsQtyTop = useMemo(() => buildQtyBoard(fCalls, 'Calls', r => Number(r.calls_count), auditedCallsKeys), [fCalls, auditedCallsKeys, profiles]);
+  const ticketsQtyTop = useMemo(() => buildQtyBoard(fTickets, 'Tickets', r => Number(r.tickets_count), auditedTicketsKeys), [fTickets, auditedTicketsKeys, profiles]);
+  const callsQualTop = useMemo(() => buildQualityBoard('Calls'), [fAudits, profiles]);
+  const ticketsQualTop = useMemo(() => buildQualityBoard('Tickets'), [fAudits, profiles]);
+  const callsHybridTop = useMemo(() => buildHybridBoard('Calls', fCalls, r => Number(r.calls_count)), [fCalls, fAudits, profiles]);
+  const ticketsHybridTop = useMemo(() => buildHybridBoard('Tickets', fTickets, r => Number(r.tickets_count)), [fTickets, fAudits, profiles]);
+  const salesTop = useMemo(() => buildSalesBoard(), [fSales, profiles]);
+  const allAuditSummaries = useMemo(() => buildRankedAuditSummary(), [fAudits, profiles]);
 
-  const ticketsQuantityTop = useMemo(() => {
-    return buildQuantityLeaderboard(
-      filteredTickets,
-      'Tickets',
-      (record) => Number(record.tickets_count),
-      auditedTicketsKeys
-    );
-  }, [filteredTickets, auditedTicketsKeys, profiles]);
+  // KPI values
+  const totalAudits = fAudits.length;
+  const avgQuality = totalAudits ? fAudits.reduce((s, a) => s + Number(a.quality_score), 0) / totalAudits : 0;
+  const releasedAudits = fAudits.filter(a => a.shared_with_agent).length;
+  const releasedRate = totalAudits ? (releasedAudits / totalAudits) * 100 : 0;
+  const totalSales = fSales.reduce((s, r) => s + Number(r.amount), 0);
+  const totalCalls = fCalls.reduce((s, r) => s + Number(r.calls_count), 0);
+  const totalTickets = fTickets.reduce((s, r) => s + Number(r.tickets_count), 0);
+  const prevCallsTotal = prevCalls.reduce((s, r) => s + Number(r.calls_count), 0);
+  const prevTicketsTotal = prevTickets.reduce((s, r) => s + Number(r.tickets_count), 0);
+  const prevSalesTotal = prevSales.reduce((s, r) => s + Number(r.amount), 0);
+  const prevAvgQuality = prevAudits.length ? prevAudits.reduce((s, a) => s + Number(a.quality_score), 0) / prevAudits.length : 0;
 
-  const callsQualityTop = useMemo(() => {
-    return buildQualityLeaderboard('Calls');
-  }, [filteredAudits, profiles]);
+  const callsAvgQual = getTeamAvg(callsAudits);
+  const ticketsAvgQual = getTeamAvg(ticketsAudits);
+  const salesAvgQual = getTeamAvg(salesAudits);
+  const prevCallsQual = getTeamAvg(prevCallsAudits);
+  const prevTicketsQual = getTeamAvg(prevTicketsAudits);
+  const prevSalesQual = getTeamAvg(prevSalesAudits);
 
-  const ticketsQualityTop = useMemo(() => {
-    return buildQualityLeaderboard('Tickets');
-  }, [filteredAudits, profiles]);
+  const lowestAgent = allAuditSummaries.length ? [...allAuditSummaries].reverse()[0] : null;
+  const coachTarget = allAuditSummaries.filter(a => a.auditsCount >= 2).sort((a, b) => a.averageQuality - b.averageQuality)[0] || null;
+  const consistencyPool = [...callsHybridTop, ...ticketsHybridTop].sort((a, b) => a.rsd === b.rsd ? b.combinedScore - a.combinedScore : a.rsd - b.rsd);
+  const mostConsistent = consistencyPool[0] || null;
 
-  const callsHybridTop = useMemo(() => {
-    return buildHybridLeaderboard('Calls', filteredCalls, (record) =>
-      Number(record.calls_count)
-    );
-  }, [filteredCalls, filteredAudits, profiles]);
+  // Action center
+  const actionItems = useMemo<ActionCenterItem[]>(() => [
+    { id: 'requests', title: 'Supervisor Requests', count: openReqs.length, detail: agingReqs.length > 0 ? `${agingReqs.length} aging 3+ days` : 'No aging requests', path: '/supervisor-requests', tone: agingReqs.length > 0 ? 'critical' : openReqs.length > 0 ? 'warning' : 'info' },
+    { id: 'feedback', title: 'Open Feedback', count: openFeedback.length, detail: overdueFb.length > 0 ? `${overdueFb.length} overdue` : 'No overdue feedback', path: '/agent-feedback', tone: overdueFb.length > 0 ? 'critical' : openFeedback.length > 0 ? 'warning' : 'info' },
+    { id: 'monitoring', title: 'Active Monitoring', count: activeMon.length, detail: agingMon.length > 0 ? `${agingMon.length} aging 2+ days` : 'Queue controlled', path: '/monitoring', tone: agingMon.length > 0 ? 'critical' : activeMon.length > 0 ? 'warning' : 'info' },
+    { id: 'audits', title: 'Unreleased Audits', count: scopedHiddenAudits.length, detail: agingHiddenAudits.length > 0 ? `${agingHiddenAudits.length} aging 2+ days` : 'No aging audits', path: '/audits-list', tone: agingHiddenAudits.length > 0 ? 'critical' : scopedHiddenAudits.length > 0 ? 'warning' : 'info' },
+  ], [openReqs.length, agingReqs.length, openFeedback.length, overdueFb.length, activeMon.length, agingMon.length, scopedHiddenAudits.length, agingHiddenAudits.length]);
 
-  const ticketsHybridTop = useMemo(() => {
-    return buildHybridLeaderboard('Tickets', filteredTickets, (record) =>
-      Number(record.tickets_count)
-    );
-  }, [filteredTickets, filteredAudits, profiles]);
+  // Ticker messages
+  const tickerItems = useMemo(() => {
+    const msgs: string[] = [];
+    if (callsHybridTop[0]) msgs.push(`TOP CALLS — ${callsHybridTop[0].label}`);
+    if (ticketsHybridTop[0]) msgs.push(`TOP TICKETS — ${ticketsHybridTop[0].label}`);
+    if (salesTop[0]) msgs.push(`TOP SALES — ${salesTop[0].label}`);
+    if (mostConsistent) msgs.push(`MOST CONSISTENT — ${mostConsistent.label}`);
+    msgs.push(`QUALITY AUDITS — ${totalAudits} THIS PERIOD`, `RELEASE RATE — ${releasedRate.toFixed(0)}%`);
+    return msgs;
+  }, [callsHybridTop, ticketsHybridTop, salesTop, mostConsistent, totalAudits, releasedRate]);
+  const ticker = useLiveTicker(tickerItems);
 
-  const salesTop = useMemo(() => {
-    return buildSalesLeaderboard();
-  }, [filteredSales, profiles]);
+  const hasData = audits.length > 0 || profiles.length > 0 || callsRecords.length > 0;
 
-  const totalAudits = filteredAudits.length;
-  const averageQuality =
-    totalAudits > 0
-      ? filteredAudits.reduce(
-          (sum, item) => sum + Number(item.quality_score),
-          0
-        ) / totalAudits
-      : 0;
-  const totalSales = filteredSales.reduce(
-    (sum, item) => sum + Number(item.amount),
-    0
-  );
-  const releasedAudits = filteredAudits.filter(
-    (item) => item.shared_with_agent
-  ).length;
-
-  const callsCard: TeamCardData = {
-    title: 'Calls',
-    quantityLabel: 'Calls Volume',
-    quantityValue: `${filteredCalls.reduce(
-      (sum, item) => sum + Number(item.calls_count),
-      0
-    )}`,
-    qualityLabel: 'Avg Quality',
-    qualityValue: `${getTeamAverage(filteredCallsAudits).toFixed(2)}%`,
-    auditedAgents: auditedCallsKeys.size,
-    leader: callsHybridTop[0]?.label || callsQualityTop[0]?.label || '-',
+  // ─── Styles ────────────────────────────────────────────────────────────────
+  const $ = {
+    root: { background: C.bg, minHeight: '100vh', color: C.text } as CSSProperties,
+    section: { marginBottom: '32px' } as CSSProperties,
   };
 
-  const ticketsCard: TeamCardData = {
-    title: 'Tickets',
-    quantityLabel: 'Tickets Volume',
-    quantityValue: `${filteredTickets.reduce(
-      (sum, item) => sum + Number(item.tickets_count),
-      0
-    )}`,
-    qualityLabel: 'Avg Quality',
-    qualityValue: `${getTeamAverage(filteredTicketsAudits).toFixed(2)}%`,
-    auditedAgents: auditedTicketsKeys.size,
-    leader: ticketsHybridTop[0]?.label || ticketsQualityTop[0]?.label || '-',
-  };
-
-  const salesCard: TeamCardData = {
-    title: 'Sales',
-    quantityLabel: 'Sales Total',
-    quantityValue: `$${totalSales.toFixed(2)}`,
-    qualityLabel: 'Avg Quality',
-    qualityValue: `${getTeamAverage(filteredSalesAudits).toFixed(2)}%`,
-    auditedAgents: new Set(
-      filteredSalesAudits.map((item) =>
-        getAgentKey(item.agent_id, item.agent_name)
-      )
-    ).size,
-    leader: salesTop[0]?.label || '-',
-  };
-
-  const allAuditSummaries = useMemo(
-    () => buildRankedAuditSummary(),
-    [filteredAudits, profiles]
-  );
-  const lowestQualityAgent =
-    allAuditSummaries.length > 0 ? [...allAuditSummaries].reverse()[0] : null;
-  const coachingOpportunity =
-    allAuditSummaries
-      .filter((item) => item.auditsCount >= 2)
-      .sort((a, b) => a.averageQuality - b.averageQuality)[0] || null;
-
-  const consistencyPool = [...callsHybridTop, ...ticketsHybridTop].sort(
-    (a, b) => {
-      if (a.rsd === b.rsd) return b.combinedScore - a.combinedScore;
-      return a.rsd - b.rsd;
-    }
-  );
-  const mostConsistentPerformer = consistencyPool[0] || null;
-
-  const peopleOpsLeader = (() => {
-    const crossTeamCombinedPool = [...callsHybridTop, ...ticketsHybridTop].sort(
-      (a, b) => b.combinedScore - a.combinedScore
-    );
-
-    if (crossTeamCombinedPool.length > 0) {
-      return crossTeamCombinedPool[0].label;
-    }
-
-    if (salesTop.length > 0) {
-      return salesTop[0].label;
-    }
-
-    return '-';
-  })();
-
-
-  const currentCallsTotal = filteredCalls.reduce(
-    (sum, item) => sum + Number(item.calls_count),
-    0
-  );
-  const currentTicketsTotal = filteredTickets.reduce(
-    (sum, item) => sum + Number(item.tickets_count),
-    0
-  );
-  const currentSalesTotal = filteredSales.reduce(
-    (sum, item) => sum + Number(item.amount),
-    0
-  );
-
-  const previousCallsTotal = previousCalls.reduce(
-    (sum, item) => sum + Number(item.calls_count),
-    0
-  );
-  const previousTicketsTotal = previousTickets.reduce(
-    (sum, item) => sum + Number(item.tickets_count),
-    0
-  );
-  const previousSalesTotal = previousSales.reduce(
-    (sum, item) => sum + Number(item.amount),
-    0
-  );
-
-  const openRequestsCount = openRequests.length;
-  const openFeedbackCount = openFeedbackItems.length;
-  const activeMonitoringCount = activeMonitoringItems.length;
-  const releasedRate = totalAudits > 0 ? (releasedAudits / totalAudits) * 100 : 0;
-
-  const currentCallsTrend = getTeamAverage(filteredCallsAudits);
-  const currentTicketsTrend = getTeamAverage(filteredTicketsAudits);
-  const currentSalesTrend = getTeamAverage(filteredSalesAudits);
-  const previousCallsTrend = getTeamAverage(previousCallsAudits);
-  const previousTicketsTrend = getTeamAverage(previousTicketsAudits);
-  const previousSalesTrend = getTeamAverage(previousSalesAudits);
-
-  const teamCountsLabel = [
-    `Calls ${currentCallsTotal} (${formatPercentDelta(currentCallsTotal, previousCallsTotal)})`,
-    `Tickets ${currentTicketsTotal} (${formatPercentDelta(currentTicketsTotal, previousTicketsTotal)})`,
-    `Sales $${currentSalesTotal.toFixed(2)} (${formatPercentDelta(currentSalesTotal, previousSalesTotal)})`,
-  ].join('\n');
-
-  const crossTeamTrendLabel = [
-    `Calls ${currentCallsTrend.toFixed(2)}% (${formatPercentDelta(currentCallsTrend, previousCallsTrend)})`,
-    `Tickets ${currentTicketsTrend.toFixed(2)}% (${formatPercentDelta(currentTicketsTrend, previousTicketsTrend)})`,
-    `Sales ${currentSalesTrend.toFixed(2)}% (${formatPercentDelta(currentSalesTrend, previousSalesTrend)})`,
-  ].join('\n');
-
-  function getSpotlightStats(cardTitle: string) {
-    if (cardTitle === 'System Pulse') {
-      return [
-        { label: 'Counts', value: teamCountsLabel },
-        { label: 'Released', value: `${releasedAudits}` },
-        { label: 'Trend', value: crossTeamTrendLabel },
-      ];
-    }
-
-    if (cardTitle === 'People Ops') {
-      return [
-        { label: 'Agents', value: `${profiles.length}` },
-        { label: 'Recognition', value: `${callsQualityTop.length + ticketsQualityTop.length + salesTop.length}` },
-        { label: 'Leader', value: peopleOpsLeader },
-      ];
-    }
-
-    if (cardTitle === 'Action Queue') {
-      return [
-        { label: 'Feedback', value: `${openFeedbackCount}` },
-        { label: 'Monitoring', value: `${activeMonitoringCount}` },
-        { label: 'Requests', value: `${openRequestsCount}` },
-      ];
-    }
-
-    if (cardTitle === 'Coach With Context') {
-      return [
-        { label: 'Audits', value: `${totalAudits}` },
-        { label: 'Avg', value: `${averageQuality.toFixed(2)}%` },
-        { label: 'Focus', value: coachingOpportunity?.label || '-' },
-      ];
-    }
-
-    if (cardTitle === 'Recognition & Growth') {
-      return [
-        { label: 'Released', value: `${releasedAudits}` },
-        { label: 'Rate', value: `${releasedRate.toFixed(0)}%` },
-        { label: 'Consistent', value: mostConsistentPerformer?.label || '-' },
-      ];
-    }
-
-    return [
-      { label: 'Top Calls', value: callsQuantityTop[0]?.label || '-' },
-      { label: 'Top Tickets', value: ticketsQuantityTop[0]?.label || '-' },
-      { label: 'Top Sales', value: salesTop[0]?.label || '-' },
-    ];
-  }
-
-  const hasAnyData =
-    audits.length > 0 ||
-    profiles.length > 0 ||
-    callsRecords.length > 0 ||
-    ticketsRecords.length > 0 ||
-    salesRecords.length > 0;
-
-  if (loading && !hasAnyData) {
+  // ─── Loading ────────────────────────────────────────────────────────────────
+  if (loading && !hasData) {
     return (
-      <div data-no-theme-invert="true" style={{ color: 'var(--da-page-text, #e5eefb)', ...(themeVars as CSSProperties) }}>
-        <div className="da-themed-loader-shell da-themed-loader-shell--page">
-          <div className="da-themed-loader-card">
-            <div className="da-themed-loader">
-              <div className="da-themed-loader__art" aria-hidden="true">
-                <div className="da-themed-loader__glow" />
-                <div className="da-themed-loader__rotor">
-                  <div className="da-themed-loader__rotor-face" />
-                  <div className="da-themed-loader__hub" />
-                </div>
-                <div className="da-themed-loader__caliper" />
-                <div className="da-themed-loader__spark" />
-              </div>
-              <div className="da-themed-loader__copy">
-                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
-                <div className="da-themed-loader__label">Loading dashboard...</div>
-                <div className="da-themed-loader__sub">Gathering quality, volume, and recognition data</div>
-              </div>
-            </div>
-          </div>
+      <div className="dash-root" style={{ ...$.root, display: 'grid', placeItems: 'center', minHeight: '400px' }}>
+        <div style={{ textAlign: 'center' }}>
+          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ animation: 'dash-loader-rotate 1.2s linear infinite', display: 'block', margin: '0 auto 16px' }}>
+            <circle cx="24" cy="24" r="20" stroke={C.border} strokeWidth="3" fill="none" />
+            <circle cx="24" cy="24" r="20" stroke={C.accent} strokeWidth="3" fill="none" strokeDasharray="80 200" strokeLinecap="round" />
+          </svg>
+          <div className="dash-display" style={{ color: C.accent, fontSize: '13px', fontWeight: 700, letterSpacing: '.12em', textTransform: 'uppercase' }}>Loading Dashboard</div>
+          <div style={{ color: C.textMuted, fontSize: '12px', marginTop: '6px' }}>Gathering operational data…</div>
         </div>
       </div>
     );
   }
+
+  // ─── Main render ───────────────────────────────────────────────────────────
+  return (
+    <div className="dash-root" style={$.root}>
+      {/* ── Live Ticker Banner ── */}
+      <TickerBanner ticker={ticker} C={C} light={light} />
+
+      {/* ── Hero Header ── */}
+      <HeroHeader
+        C={C} light={light}
+        dateFrom={dateFrom} dateTo={dateTo}
+        setDateFrom={setDateFrom} setDateTo={setDateTo}
+        dateFromRef={dateFromRef} dateToRef={dateToRef}
+        refreshing={refreshing} lastLoadedAt={lastLoadedAt}
+        onRefresh={() => { clearCachedValue(DASHBOARD_CACHE_KEY); void loadData({ force: true }); }}
+        onThisMonth={() => { setDateFrom(getMonthStartValue()); setDateTo(getCurrentDateValue()); }}
+        onAllTime={() => { setDateFrom(''); setDateTo(''); }}
+        currentUser={currentUser}
+      />
+
+      {/* ── Error ── */}
+      {errorMessage && (
+        <div style={{ margin: '0 0 20px', padding: '14px 18px', borderRadius: '12px', background: 'rgba(239,68,68,.12)', border: `1px solid rgba(239,68,68,.3)`, color: C.criticalColor, fontSize: '13px' }}>
+          ⚠ {errorMessage}
+        </div>
+      )}
+
+      {/* ── Section Nav ── */}
+      <SectionNav active={activeSection} onChange={setActiveSection} C={C} light={light} />
+
+      {/* ── Overview Section ── */}
+      {activeSection === 'overview' && (
+        <div className="dash-grid-in">
+          {/* KPI Strip */}
+          <KPIStrip
+            C={C} light={light}
+            totalAudits={totalAudits} prevAudits={prevAudits.length}
+            avgQuality={avgQuality} prevAvgQuality={prevAvgQuality}
+            releasedAudits={releasedAudits} releasedRate={releasedRate}
+            totalCalls={totalCalls} prevCallsTotal={prevCallsTotal}
+            totalTickets={totalTickets} prevTicketsTotal={prevTicketsTotal}
+            totalSales={totalSales} prevSalesTotal={prevSalesTotal}
+          />
+
+          {/* Team Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px', marginBottom: '32px' }}>
+            <TeamPerfCard
+              C={C} light={light}
+              title="Calls" color={C.callsColor}
+              volume={totalCalls} prevVolume={prevCallsTotal} volumeLabel="calls"
+              avgQual={callsAvgQual} prevAvgQual={prevCallsQual}
+              auditedAgents={auditedCallsKeys.size}
+              topPerformer={callsHybridTop[0]?.label || callsQualTop[0]?.label || '—'}
+              sparkData={pseudoSparkline('calls' + totalCalls, 10)}
+              auditCount={callsAudits.length}
+            />
+            <TeamPerfCard
+              C={C} light={light}
+              title="Tickets" color={C.ticketsColor}
+              volume={totalTickets} prevVolume={prevTicketsTotal} volumeLabel="tickets"
+              avgQual={ticketsAvgQual} prevAvgQual={prevTicketsQual}
+              auditedAgents={auditedTicketsKeys.size}
+              topPerformer={ticketsHybridTop[0]?.label || ticketsQualTop[0]?.label || '—'}
+              sparkData={pseudoSparkline('tickets' + totalTickets, 10)}
+              auditCount={ticketsAudits.length}
+            />
+            <TeamPerfCard
+              C={C} light={light}
+              title="Sales" color={C.salesColor}
+              volume={totalSales} prevVolume={prevSalesTotal} volumeLabel="revenue" isRevenue
+              avgQual={salesAvgQual} prevAvgQual={prevSalesQual}
+              auditedAgents={new Set(salesAudits.map(a => getAgentKey(a.agent_id, a.agent_name))).size}
+              topPerformer={salesTop[0]?.label || '—'}
+              sparkData={pseudoSparkline('sales' + totalSales, 10)}
+              auditCount={salesAudits.length}
+            />
+          </div>
+
+          <RecognitionWall currentUser={currentUser as any} />
+          <DigitalTrophyCabinet scope="global" currentUser={currentUser} />
+          {currentUser && <VoiceOfEmployeeSupabase currentUser={currentUser as any} title="Recent anonymous themes" showComposer={false} />}
+        </div>
+      )}
+
+      {/* ── Action Section ── */}
+      {activeSection === 'action' && (
+        <div className="dash-grid-in">
+          <ActionCenter C={C} light={light} items={actionItems} onNavigate={navigate}
+            agingReqs={agingReqs.length} overdueFb={overdueFb.length}
+            agingMon={agingMon.length} agingHidden={agingHiddenAudits.length}
+          />
+        </div>
+      )}
+
+      {/* ── Rankings Section ── */}
+      {activeSection === 'rankings' && (
+        <div className="dash-grid-in">
+          <RankingsSection
+            C={C} light={light}
+            callsQtyTop={callsQtyTop} ticketsQtyTop={ticketsQtyTop} salesTop={salesTop}
+            callsQualTop={callsQualTop} ticketsQualTop={ticketsQualTop}
+            callsHybridTop={callsHybridTop} ticketsHybridTop={ticketsHybridTop}
+          />
+        </div>
+      )}
+
+      {/* ── Insights Section ── */}
+      {activeSection === 'insights' && (
+        <div className="dash-grid-in">
+          <InsightsSection
+            C={C} light={light}
+            lowestAgent={lowestAgent}
+            mostConsistent={mostConsistent}
+            coachTarget={coachTarget}
+            allSummaries={allAuditSummaries}
+            avgQuality={avgQuality}
+            releasedRate={releasedRate}
+            totalAudits={totalAudits}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── TickerBanner ────────────────────────────────────────────────────────────
+function TickerBanner({ ticker, C, light }: { ticker: string; C: any; light: boolean }) {
+  return (
+    <div style={{
+      height: '36px', display: 'flex', alignItems: 'center', gap: '20px',
+      background: C.panelBg, borderBottom: `1px solid ${C.border}`,
+      padding: '0 20px', marginBottom: '0', overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0,
+        padding: '4px 10px', borderRadius: '6px', background: C.accentSoft,
+        border: `1px solid ${C.borderAccent}`,
+      }}>
+        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: C.accent, animation: 'dash-shimmer 1.5s ease-in-out infinite' }} />
+        <span className="dash-display" style={{ fontSize: '10px', fontWeight: 700, color: C.accent, letterSpacing: '.1em' }}>LIVE</span>
+      </div>
+      <div key={ticker} style={{ fontSize: '11px', fontWeight: 600, color: C.textSub, letterSpacing: '.06em', animation: 'dash-ticker-slide 400ms cubic-bezier(.22,1,.36,1) both', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {ticker}
+      </div>
+    </div>
+  );
+}
+
+// ─── HeroHeader ──────────────────────────────────────────────────────────────
+function HeroHeader({ C, light, dateFrom, dateTo, setDateFrom, setDateTo, dateFromRef, dateToRef, refreshing, lastLoadedAt, onRefresh, onThisMonth, onAllTime, currentUser }: any) {
+  const role = currentUser?.role || 'qa';
+  const roleLabel = role === 'admin' ? 'Administrator' : role === 'qa' ? 'QA Analyst' : 'Supervisor';
 
   return (
-    <div
-      data-no-theme-invert="true"
-      style={{ color: 'var(--da-page-text, #e5eefb)', ...(themeVars as CSSProperties) }}
-    >
-      <div style={heroStyle}>
+    <div style={{
+      padding: '28px 0 24px',
+      borderBottom: `1px solid ${C.border}`,
+      marginBottom: '24px',
+    }}>
+      {/* Top row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px', marginBottom: '20px' }}>
         <div>
-          <div style={eyebrowStyle}>Operations Overview</div>
-          <h2 style={heroTitleStyle}>Dashboard</h2>
-          <p style={heroSubtitleStyle}>
-            Operational quality and production overview for the selected period.
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+            <span className="dash-display" style={{ fontSize: '11px', fontWeight: 700, color: C.accent, letterSpacing: '.14em', textTransform: 'uppercase' }}>Quality Assurance System</span>
+            <div style={{ height: '1px', width: '32px', background: C.accent, opacity: .4 }} />
+            <span style={{ fontSize: '11px', color: C.textMuted, fontWeight: 600, letterSpacing: '.08em', textTransform: 'uppercase' }}>{roleLabel}</span>
+          </div>
+          <h1 className="dash-display" style={{ margin: 0, fontSize: '36px', fontWeight: 800, color: C.text, lineHeight: 1.1, letterSpacing: '-.02em' }}>
+            Operations Dashboard
+          </h1>
+          <p style={{ margin: '8px 0 0', color: C.textSub, fontSize: '14px', fontWeight: 400 }}>
+            Quality, volume, and performance for period <span style={{ color: C.text, fontWeight: 600 }}>{dateFrom || 'All time'}</span> — <span style={{ color: C.text, fontWeight: 600 }}>{dateTo || 'Today'}</span>
           </p>
-          <div style={infoPillRowStyle}>
-            <div style={metaPillStyle}>Quality Source: Audits</div>
-            <div style={metaPillStyle}>Quantity Source: Team Totals</div>
-            <div style={metaPillStyle}>
-              Scope: {dateFrom || 'Any'} to {dateTo || 'Any'}
+        </div>
+
+        {/* Controls */}
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <label style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, letterSpacing: '.08em', textTransform: 'uppercase' }}>From</label>
+              <input
+                ref={dateFromRef} type="date" value={dateFrom}
+                onChange={e => setDateFrom(e.target.value)}
+                onClick={() => openNativeDatePicker(dateFromRef.current)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: '13px', fontWeight: 500, cursor: 'pointer', minWidth: '140px', fontFamily: 'inherit' }}
+              />
+            </div>
+            <div style={{ display: 'grid', gap: '4px' }}>
+              <label style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, letterSpacing: '.08em', textTransform: 'uppercase' }}>To</label>
+              <input
+                ref={dateToRef} type="date" value={dateTo}
+                onChange={e => setDateTo(e.target.value)}
+                onClick={() => openNativeDatePicker(dateToRef.current)}
+                style={{ padding: '8px 12px', borderRadius: '10px', border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: '13px', fontWeight: 500, cursor: 'pointer', minWidth: '140px', fontFamily: 'inherit' }}
+              />
             </div>
           </div>
-        </div>
 
-        <div style={heroActionWrapStyle}>
-          <div style={dateRangeWrapStyle}>
-            <label style={dateFieldWrapStyle}>
-              <span style={dateFieldLabelStyle}>Date From</span>
-              <input
-                ref={dateFromInputRef}
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                onClick={() => openNativeDatePicker(dateFromInputRef.current)}
-                onFocus={() => openNativeDatePicker(dateFromInputRef.current)}
-                style={fieldStyle}
-              />
-            </label>
-
-            <label style={dateFieldWrapStyle}>
-              <span style={dateFieldLabelStyle}>Date To</span>
-              <input
-                ref={dateToInputRef}
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                onClick={() => openNativeDatePicker(dateToInputRef.current)}
-                onFocus={() => openNativeDatePicker(dateToInputRef.current)}
-                style={fieldStyle}
-              />
-            </label>
+          <div style={{ display: 'flex', gap: '6px', alignSelf: 'flex-end' }}>
+            <button className="dash-btn" onClick={onThisMonth} style={{ padding: '8px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: C.surface, color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              This Month
+            </button>
+            <button className="dash-btn" onClick={onAllTime} style={{ padding: '8px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: C.surface, color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              All Time
+            </button>
+            <button className="dash-btn" onClick={onRefresh} style={{ padding: '8px 16px', borderRadius: '10px', border: `1px solid ${C.borderAccent}`, background: C.accentSoft, color: C.accent, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {refreshing && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'dash-spin-slow 1s linear infinite' }}><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>}
+              {refreshing ? 'Refreshing' : 'Refresh'}
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom(getMonthStartValue());
-              setDateTo(getCurrentDateValue());
-            }}
-            style={secondaryButton}
-          >
-            This Month
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setDateFrom('');
-              setDateTo('');
-            }}
-            style={secondaryButton}
-          >
-            All Time
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              clearCachedValue(DASHBOARD_CACHE_KEY);
-              void loadDashboardData({ force: true });
-            }}
-            style={primaryButton}
-          >
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
         </div>
       </div>
 
-      {errorMessage ? <div style={errorBannerStyle}>{errorMessage}</div> : null}
-
-      <div style={statusRowStyle}>
-        <div style={statusPillStyle}>
-          Cache: {refreshing ? 'Refreshing in background' : 'Warm'}
-        </div>
-        <div style={statusPillStyle}>
-          Last Loaded:{' '}
-          {lastLoadedAt ? formatDateTime(lastLoadedAt) : 'Current session'}
-        </div>
+      {/* Status chips */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {[
+          { label: 'Quality Source', value: 'Audits' },
+          { label: 'Cache', value: refreshing ? 'Refreshing…' : 'Warm' },
+          { label: 'Updated', value: lastLoadedAt ? formatDateTime(lastLoadedAt) : 'Session' },
+        ].map(chip => (
+          <div key={chip.label} style={{ padding: '5px 12px', borderRadius: '999px', border: `1px solid ${C.border}`, background: C.surface, fontSize: '11px', fontWeight: 600, color: C.textMuted }}>
+            <span style={{ color: C.textSub, marginRight: '4px' }}>{chip.label}:</span>{chip.value}
+          </div>
+        ))}
       </div>
+    </div>
+  );
+}
 
-      <div style={spotlightPanelStyle}>
-        <div style={sectionEyebrowStyle}>Smart Homepage</div>
-        <h3 style={{ ...panelSectionTitleStyle, marginBottom: '14px' }}>{roleSpotlight.title}</h3>
-        <div style={spotlightGridStyle}>
-          {roleSpotlight.cards.map((card) => (
-            <div key={card.title} style={spotlightCardStyle}>
-              <div style={spotlightCardTitleStyle}>{card.title}</div>
-              <div style={spotlightCardTextStyle}>{card.description}</div>
-              <div style={spotlightStatGridStyle}>
-                {getSpotlightStats(card.title).map((item) => (
-                  <div key={`${card.title}-${item.label}`} style={spotlightStatRowStyle}>
-                    <div style={spotlightStatLabelStyle}>{item.label}</div>
-                    <div style={spotlightStatValueStyle}>{item.value}</div>
-                  </div>
-                ))}
-              </div>
+// ─── SectionNav ──────────────────────────────────────────────────────────────
+function SectionNav({ active, onChange, C, light }: { active: string; onChange: (s: any) => void; C: any; light: boolean }) {
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: '◈' },
+    { id: 'action', label: 'Action Center', icon: '⚡' },
+    { id: 'rankings', label: 'Rankings', icon: '⬆' },
+    { id: 'insights', label: 'Insights', icon: '◎' },
+  ];
+  return (
+    <div style={{ display: 'flex', gap: '4px', marginBottom: '28px', padding: '5px', borderRadius: '14px', background: light ? 'rgba(241,245,249,.8)' : 'rgba(13,18,36,.8)', border: `1px solid ${C.border}`, width: 'fit-content' }}>
+      {tabs.map(t => (
+        <button
+          key={t.id}
+          className="dash-segment-tab"
+          onClick={() => onChange(t.id)}
+          style={{
+            padding: '8px 18px', borderRadius: '10px', border: active === t.id ? `1px solid ${C.borderAccent}` : '1px solid transparent',
+            background: active === t.id ? (light ? '#fff' : 'rgba(13,18,48,.9)') : 'transparent',
+            color: active === t.id ? C.accent : C.textMuted,
+            fontSize: '13px', fontWeight: active === t.id ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', gap: '7px',
+            boxShadow: active === t.id ? C.shadow : 'none',
+            transition: 'all 160ms ease',
+          }}
+        >
+          <span style={{ fontSize: '14px', opacity: .8 }}>{t.icon}</span>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── KPIStrip ────────────────────────────────────────────────────────────────
+function KPIStrip({ C, light, totalAudits, prevAudits, avgQuality, prevAvgQuality, releasedAudits, releasedRate, totalCalls, prevCallsTotal, totalTickets, prevTicketsTotal, totalSales, prevSalesTotal }: any) {
+  const kpis = [
+    { label: 'Total Audits', value: totalAudits, format: 'int', prev: prevAudits, color: C.accent, icon: '◎' },
+    { label: 'Avg Quality', value: avgQuality, format: 'pct', prev: prevAvgQuality, color: C.callsColor, icon: '◈' },
+    { label: 'Released', value: releasedAudits, sub: `${releasedRate.toFixed(0)}% rate`, format: 'int', color: C.salesColor, icon: '▲' },
+    { label: 'Calls Volume', value: totalCalls, format: 'int', prev: prevCallsTotal, color: C.callsColor, icon: '○' },
+    { label: 'Tickets Volume', value: totalTickets, format: 'int', prev: prevTicketsTotal, color: C.ticketsColor, icon: '◇' },
+    { label: 'Sales Revenue', value: totalSales, format: 'usd', prev: prevSalesTotal, color: C.salesColor, icon: '$' },
+  ];
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px', marginBottom: '28px' }}>
+      {kpis.map((k, i) => {
+        const delta = k.prev !== undefined ? getPercentChange(k.value, k.prev) : null;
+        const fmtVal = k.format === 'pct' ? `${k.value.toFixed(1)}%` : k.format === 'usd' ? `$${k.value >= 1000 ? (k.value / 1000).toFixed(1) + 'k' : k.value.toFixed(0)}` : k.value >= 1000 ? (k.value / 1000).toFixed(1) + 'k' : String(k.value);
+        return (
+          <div key={k.label} className={`dash-card-hover dash-stagger-${Math.min(i + 1, 6)}`} style={{ padding: '18px 20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface, boxShadow: C.shadow, position: 'relative', overflow: 'hidden' }}>
+            {/* Accent top bar */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: k.color, borderRadius: '16px 16px 0 0' }} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, letterSpacing: '.08em', textTransform: 'uppercase' }}>{k.label}</span>
+              <span style={{ fontSize: '16px', color: k.color, opacity: .7 }}>{k.icon}</span>
             </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={actionCenterPanelStyle}>
-        <div style={actionCenterHeaderStyle}>
-          <div>
-            <div style={sectionEyebrowStyle}>Action Center</div>
-            <h3 style={panelSectionTitleStyle}>What needs attention now</h3>
-            <p style={panelSubtitleStyle}>
-              Focus on live operational work first, then jump straight into the page that needs action.
-            </p>
-          </div>
-          <div style={actionCenterHeadlineStyle}>
-            <div style={actionHeadlineTitleStyle}>{actionCenterHeadline.title}</div>
-            <div style={actionHeadlineDetailStyle}>{actionCenterHeadline.detail}</div>
-          </div>
-        </div>
-
-        <div style={actionCenterGridStyle}>
-          {actionCenterItems.map((item) => (
-            <div key={item.id} style={actionCardStyle}>
-              <div style={actionCardTopRowStyle}>
-                <span
-                  style={{
-                    ...actionToneBadgeStyle,
-                    ...(item.tone === 'critical'
-                      ? actionToneCriticalStyle
-                      : item.tone === 'warning'
-                      ? actionToneWarningStyle
-                      : actionToneInfoStyle),
-                  }}
-                >
-                  {item.tone === 'critical'
-                    ? 'Urgent'
-                    : item.tone === 'warning'
-                    ? 'Watch'
-                    : 'Stable'}
+            <div className="dash-display dash-count-in" style={{ fontSize: '28px', fontWeight: 800, color: C.text, lineHeight: 1, marginBottom: '6px', letterSpacing: '-.02em' }}>{fmtVal}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {delta !== null && (
+                <span style={{ fontSize: '11px', fontWeight: 700, color: delta >= 0 ? C.salesColor : C.criticalColor }}>
+                  {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}%
                 </span>
-                <div style={actionCountStyle}>{item.count}</div>
-              </div>
-              <div style={actionCardTitleStyle}>{item.title}</div>
-              <div style={actionCardDetailStyle}>{item.detail}</div>
-              <button
-                type="button"
-                onClick={() => navigate(item.path)}
-                style={actionCardButtonStyle}
-              >
-                Open
-              </button>
-            </div>
-          ))}
-        </div>
-
-        <div style={actionFooterGridStyle}>
-          <div style={actionSubpanelStyle}>
-            <div style={miniSectionEyebrowStyle}>Overdue / Aging</div>
-            <div style={actionListStyle}>
-              <ActionListRow
-                label="Requests aging 3+ days"
-                value={`${agingRequests.length}`}
-              />
-              <ActionListRow
-                label="Feedback overdue"
-                value={`${overdueFeedbackItems.length}`}
-              />
-              <ActionListRow
-                label="Monitoring aging 2+ days"
-                value={`${agingMonitoring.length}`}
-              />
-              <ActionListRow
-                label="Unreleased audits aging 2+ days"
-                value={`${agingHiddenAudits.length}`}
-              />
+              )}
+              {k.sub && <span style={{ fontSize: '11px', color: C.textMuted }}>{k.sub}</span>}
+              {delta !== null && <span style={{ fontSize: '10px', color: C.textMuted }}>vs prev</span>}
             </div>
           </div>
+        );
+      })}
+    </div>
+  );
+}
 
-          <div style={actionSubpanelStyle}>
-            <div style={miniSectionEyebrowStyle}>Quick Links</div>
-            <div style={quickLinkGridStyle}>
-              {actionQuickLinks.map((link) => (
-                <button
-                  key={link.path}
-                  type="button"
-                  onClick={() => navigate(link.path)}
-                  style={quickLinkButtonStyle}
-                >
-                  {link.label}
-                </button>
+// ─── TeamPerfCard ────────────────────────────────────────────────────────────
+function TeamPerfCard({ C, light, title, color, volume, prevVolume, volumeLabel, isRevenue, avgQual, prevAvgQual, auditedAgents, topPerformer, sparkData, auditCount }: any) {
+  const volDelta = getPercentChange(volume, prevVolume);
+  const qualDelta = getPercentChange(avgQual, prevAvgQual);
+  const sparkMax = Math.max(...sparkData);
+  const fmtVol = isRevenue ? `$${volume >= 1000 ? (volume / 1000).toFixed(1) + 'k' : volume.toFixed(0)}` : volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : String(volume);
+
+  return (
+    <div className="dash-card-hover dash-stagger-3" style={{ padding: '24px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, boxShadow: C.shadow, position: 'relative', overflow: 'hidden' }}>
+      {/* Color stripe */}
+      <div style={{ position: 'absolute', top: 0, left: 0, bottom: 0, width: '4px', background: color }} />
+
+      <div style={{ paddingLeft: '8px' }}>
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+          <div>
+            <div className="dash-display" style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-.01em' }}>{title}</div>
+            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px', fontWeight: 500 }}>{auditCount} audits • {auditedAgents} agents</div>
+          </div>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'flex-end', color: color }}>
+            <div className="dash-sparkline">
+              {sparkData.map((v: number, i: number) => (
+                <div key={i} className={`dash-sparkline-bar ${v === sparkMax ? 'peak' : ''}`} style={{ height: `${(v / sparkMax) * 100}%`, background: color }} />
               ))}
             </div>
           </div>
         </div>
-      </div>
 
-      <div style={kpiGridStyle}>
-        <SummaryCard
-          title="Total Audits"
-          value={`${totalAudits}`}
-          subtitle="Audits in selected period"
-        />
-        <SummaryCard
-          title="Average Quality"
-          value={`${averageQuality.toFixed(2)}%`}
-          subtitle="From all selected audits"
-        />
-        <SummaryCard
-          title="Released Audits"
-          value={`${releasedAudits}`}
-          subtitle="Shared with agents"
-        />
-      </div>
-
-      <div style={teamCardGridStyle}>
-        <TeamCard data={callsCard} accent="#2563eb" />
-        <TeamCard data={ticketsCard} accent="#7c3aed" />
-        <TeamCard data={salesCard} accent="#0f766e" />
-      </div>
-
-      <RecognitionWall currentUser={currentUser as any} />
-      <DigitalTrophyCabinet scope="global" currentUser={currentUser} />
-      {currentUser ? <VoiceOfEmployeeSupabase currentUser={currentUser as any} title="Recent anonymous themes" showComposer={false} /> : null}
-      <SectionHeader
-        title="Performance Rankings"
-        subtitle=""
-      />
-      <div style={rankingGroupsStyle}>
-        <div style={rankingGroupStyle}>
-          <div style={miniSectionEyebrowStyle}>Quantity</div>
-          <div style={rankingGridStyle}>
-            <LeaderboardCard
-              title="Top Calls Quantity"
-              subtitle=""
-              items={callsQuantityTop}
-              formatValue={(value) => `${value}`}
-              contextLabel="calls"
-            />
-
-            <LeaderboardCard
-              title="Top Tickets Quantity"
-              subtitle=""
-              items={ticketsQuantityTop}
-              formatValue={(value) => `${value}`}
-              contextLabel="tickets"
-            />
-
-            <LeaderboardCard
-              title="Top Sales"
-              subtitle=""
-              items={salesTop}
-              formatValue={(value) => `$${value.toFixed(2)}`}
-              contextLabel="sales"
-            />
+        {/* Metrics grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '18px' }}>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '4px' }}>Volume</div>
+            <div className="dash-display" style={{ fontSize: '24px', fontWeight: 800, color: C.text }}>{fmtVol}</div>
+            <div style={{ fontSize: '11px', color: volDelta >= 0 ? C.salesColor : C.criticalColor, fontWeight: 700, marginTop: '2px' }}>
+              {volDelta >= 0 ? '▲' : '▼'} {Math.abs(volDelta).toFixed(1)}% vs prev
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '4px' }}>Quality</div>
+            <div className="dash-display" style={{ fontSize: '24px', fontWeight: 800, color: C.text }}>{avgQual.toFixed(1)}%</div>
+            <div style={{ fontSize: '11px', color: qualDelta >= 0 ? C.salesColor : C.criticalColor, fontWeight: 700, marginTop: '2px' }}>
+              {qualDelta >= 0 ? '▲' : '▼'} {Math.abs(qualDelta).toFixed(1)}% vs prev
+            </div>
           </div>
         </div>
 
-        <div style={rankingGroupStyle}>
-          <div style={miniSectionEyebrowStyle}>Quality</div>
-          <div style={rankingGridStyle}>
-            <QualityLeaderboardCard
-              title="Top Calls Quality"
-              subtitle=""
-              items={callsQualityTop}
-            />
-
-            <QualityLeaderboardCard
-              title="Top Tickets Quality"
-              subtitle=""
-              items={ticketsQualityTop}
-            />
+        {/* Quality bar */}
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+            <span style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.06em' }}>Quality Score</span>
+            <span style={{ fontSize: '10px', fontWeight: 700, color }}>Target: 85%</span>
+          </div>
+          <div style={{ height: '6px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
+            <div className="dash-score-bar-fill" style={{ height: '100%', borderRadius: '999px', background: avgQual >= 85 ? `linear-gradient(90deg, ${color}, ${color}cc)` : `linear-gradient(90deg, ${C.criticalColor}, ${C.warningColor})`, '--score-w': `${Math.min(avgQual, 100)}%` } as any} />
           </div>
         </div>
 
-        <div style={rankingGroupStyle}>
-          <div style={miniSectionEyebrowStyle}>Combined</div>
-          <div style={rankingGridStyle}>
-            <HybridLeaderboardCard
-              title="Top Calls Combined"
-              subtitle=""
-              items={callsHybridTop}
-            />
-
-            <HybridLeaderboardCard
-              title="Top Tickets Combined"
-              subtitle=""
-              items={ticketsHybridTop}
-            />
-          </div>
+        {/* Top performer */}
+        <div style={{ padding: '10px 14px', borderRadius: '10px', background: light ? `${color}10` : `${color}15`, border: `1px solid ${color}30` }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '3px' }}>Top Performer</div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topPerformer}</div>
         </div>
-      </div>
-
-
-      <SectionHeader
-        title="Insights & Action Items"
-        subtitle=""
-      />
-      <div style={insightGridStyle}>
-        <InsightCard
-          title="Needs Attention"
-          headline={
-            lowestQualityAgent ? lowestQualityAgent.label : 'No audit data'
-          }
-          body={
-            lowestQualityAgent
-              ? `Lowest current quality average at ${lowestQualityAgent.averageQuality.toFixed(
-                  2
-                )}% across ${lowestQualityAgent.auditsCount} audit${
-                  lowestQualityAgent.auditsCount === 1 ? '' : 's'
-                }.`
-              : 'No quality insight available for this period.'
-          }
-        />
-
-        <InsightCard
-          title="Most Consistent Performer"
-          headline={
-            mostConsistentPerformer
-              ? mostConsistentPerformer.label
-              : 'No combined ranking data'
-          }
-          body={
-            mostConsistentPerformer
-              ? `Lowest RSD at ${mostConsistentPerformer.rsd.toFixed(
-                  3
-                )} with a combined score of ${mostConsistentPerformer.combinedScore.toFixed(
-                  3
-                )}.`
-              : 'No consistency signal available for this period.'
-          }
-        />
-
-        <InsightCard
-          title="Coaching Opportunity"
-          headline={
-            coachingOpportunity
-              ? coachingOpportunity.label
-              : 'No coaching target'
-          }
-          body={
-            coachingOpportunity
-              ? `${coachingOpportunity.averageQuality.toFixed(
-                  2
-                )}% average quality across ${
-                  coachingOpportunity.auditsCount
-                } audits.`
-              : 'No agent with at least 2 audits is available for coaching review.'
-          }
-        />
       </div>
     </div>
   );
 }
 
-function SummaryCard({
-  title,
-  value,
-  subtitle,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-}) {
-  return (
-    <div style={summaryCardStyle}>
-      <div style={summaryCardLabelStyle}>{title}</div>
-      <div style={summaryCardValueStyle}>{value}</div>
-      <div style={summaryCardSubtitleStyle}>{subtitle}</div>
-    </div>
-  );
-}
+// ─── ActionCenter ────────────────────────────────────────────────────────────
+function ActionCenter({ C, light, items, onNavigate, agingReqs, overdueFb, agingMon, agingHidden }: any) {
+  const urgentCount = items.filter((i: ActionCenterItem) => i.tone === 'critical' && i.count > 0).length;
+  const watchCount = items.filter((i: ActionCenterItem) => i.tone === 'warning' && i.count > 0).length;
 
-function TeamCard({ data, accent }: { data: TeamCardData; accent: string }) {
   return (
-    <div style={teamCardStyle}>
-      <div style={{ ...teamAccentStyle, background: accent }} />
-      <div style={teamTitleStyle}>{data.title}</div>
-      <div style={teamMetricGridStyle}>
+    <div>
+      {/* Status banner */}
+      <div style={{ padding: '20px 24px', borderRadius: '16px', border: `1px solid ${urgentCount > 0 ? 'rgba(239,68,68,.3)' : watchCount > 0 ? 'rgba(245,158,11,.3)' : C.borderAccent}`, background: urgentCount > 0 ? 'rgba(239,68,68,.06)' : watchCount > 0 ? 'rgba(245,158,11,.06)' : C.accentSoft, marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div style={teamMetricLabelStyle}>{data.quantityLabel}</div>
-          <div style={teamMetricValueStyle}>{data.quantityValue}</div>
+          <div className="dash-display" style={{ fontSize: '20px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>
+            {urgentCount > 0 ? `${urgentCount} Urgent Item${urgentCount > 1 ? 's' : ''} Requiring Attention` : watchCount > 0 ? `${watchCount} Item${watchCount > 1 ? 's' : ''} to Watch` : 'All Queues Healthy'}
+          </div>
+          <div style={{ fontSize: '13px', color: C.textSub }}>
+            {urgentCount > 0 ? 'Act on critical items immediately to maintain SLA compliance.' : watchCount > 0 ? 'Monitor these items and address before they escalate.' : 'No urgent operational backlog in the selected period.'}
+          </div>
         </div>
-        <div>
-          <div style={teamMetricLabelStyle}>{data.qualityLabel}</div>
-          <div style={teamMetricValueStyle}>{data.qualityValue}</div>
-        </div>
-      </div>
-      <div style={teamMetaRowStyle}>
-        <div>Audited Agents: {data.auditedAgents}</div>
-        <div>Top Performer: {data.leader}</div>
-      </div>
-    </div>
-  );
-}
-
-function SectionHeader({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div style={sectionHeaderStyle}>
-      <div style={sectionEyebrowStyle}>{title}</div>
-      {subtitle ? <p style={sectionSubtitleStyle}>{subtitle}</p> : null}
-    </div>
-  );
-}
-
-function LeaderboardCard({
-  title,
-  subtitle,
-  items,
-  formatValue,
-  contextLabel,
-}: {
-  title: string;
-  subtitle: string;
-  items: QuantityLeader[];
-  formatValue: (value: number) => string;
-  contextLabel: string;
-}) {
-  return (
-    <div style={panelStyle}>
-      <h3 style={panelTitleStyle}>{title}</h3>
-      {subtitle ? <p style={panelSubtitleStyle}>{subtitle}</p> : null}
-
-      {items.length === 0 ? (
-        <EmptyState text="No data available for this period." />
-      ) : (
-        <div style={rankingListStyle}>
-          {items.map((item, index) => (
-            <LeaderboardRow
-              key={item.label}
-              rank={index + 1}
-              title={item.label}
-              subtitle={contextLabel}
-              value={formatValue(item.quantity)}
-            />
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {[{ label: 'Urgent', value: urgentCount, color: C.criticalColor }, { label: 'Watch', value: watchCount, color: C.warningColor }, { label: 'Stable', value: items.filter((i: ActionCenterItem) => i.tone === 'info').length, color: C.accent }].map(s => (
+            <div key={s.label} style={{ textAlign: 'center' }}>
+              <div className="dash-display" style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
+            </div>
           ))}
+        </div>
+      </div>
+
+      {/* Action cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '24px' }}>
+        {items.map((item: ActionCenterItem, i: number) => (
+          <ActionCard key={item.id} item={item} C={C} light={light} onNavigate={onNavigate} index={i} />
+        ))}
+      </div>
+
+      {/* Aging detail table */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
+          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>⚠ Aging / Overdue</div>
+          {[
+            { label: 'Requests aging 3+ days', value: agingReqs, tone: agingReqs > 0 ? 'critical' : 'info' },
+            { label: 'Feedback overdue', value: overdueFb, tone: overdueFb > 0 ? 'critical' : 'info' },
+            { label: 'Monitoring aging 2+ days', value: agingMon, tone: agingMon > 0 ? 'warning' : 'info' },
+            { label: 'Unreleased audits 2+ days', value: agingHidden, tone: agingHidden > 0 ? 'warning' : 'info' },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', marginBottom: '8px', background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', border: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: '13px', color: C.textSub, fontWeight: 500 }}>{row.label}</span>
+              <span className="dash-display" style={{ fontSize: '18px', fontWeight: 800, color: row.value > 0 ? (row.tone === 'critical' ? C.criticalColor : C.warningColor) : C.textMuted }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
+          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>→ Quick Links</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {[
+              { label: 'Audits List', path: '/audits-list' },
+              { label: 'Feedback', path: '/agent-feedback' },
+              { label: 'Monitoring', path: '/monitoring' },
+              { label: 'Requests', path: '/supervisor-requests' },
+              { label: 'Reports', path: '/reports' },
+              { label: 'Heatmap', path: '/team-heatmap' },
+            ].map(l => (
+              <button key={l.path} className="dash-btn" onClick={() => navigate(l.path)} style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                {l.label} →
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({ item, C, light, onNavigate, index }: { item: ActionCenterItem; C: any; light: boolean; onNavigate: (path: string) => void; index: number }) {
+  const toneColor = item.tone === 'critical' ? C.criticalColor : item.tone === 'warning' ? C.warningColor : C.accent;
+  const toneBg = item.tone === 'critical' ? 'rgba(239,68,68,.08)' : item.tone === 'warning' ? 'rgba(245,158,11,.08)' : C.accentSoft;
+  const toneBorder = item.tone === 'critical' ? 'rgba(239,68,68,.25)' : item.tone === 'warning' ? 'rgba(245,158,11,.25)' : C.borderAccent;
+
+  return (
+    <div className={`dash-action-card dash-stagger-${index + 1}`} style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${toneBorder}`, background: toneBg, display: 'grid', gap: '12px', animation: item.tone === 'critical' && item.count > 0 ? 'dash-border-glow 2s ease-in-out infinite' : 'none' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <span className={`dash-tag dash-tag-${item.tone}${light ? ' light' : ''}`}>{item.tone === 'critical' ? 'Urgent' : item.tone === 'warning' ? 'Watch' : 'Stable'}</span>
+        <div className="dash-display" style={{ fontSize: '36px', fontWeight: 800, color: toneColor, lineHeight: 1 }}>{item.count}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '4px' }}>{item.title}</div>
+        <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>{item.detail}</div>
+      </div>
+      <button className="dash-btn" onClick={() => onNavigate(item.path)} style={{ padding: '8px 14px', borderRadius: '10px', border: `1px solid ${toneBorder}`, background: light ? 'rgba(255,255,255,.8)' : 'rgba(13,18,36,.6)', color: toneColor, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center' }}>
+        Open →
+      </button>
+    </div>
+  );
+}
+
+// ─── RankingsSection ─────────────────────────────────────────────────────────
+function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, callsQualTop, ticketsQualTop, callsHybridTop, ticketsHybridTop }: any) {
+  const [boardType, setBoardType] = useState<'quantity' | 'quality' | 'combined'>('combined');
+
+  return (
+    <div>
+      {/* Board type switcher */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', padding: '4px', borderRadius: '12px', background: light ? 'rgba(241,245,249,.8)' : 'rgba(13,18,36,.8)', border: `1px solid ${C.border}`, width: 'fit-content' }}>
+        {(['combined', 'quantity', 'quality'] as const).map(t => (
+          <button key={t} className="dash-segment-tab" onClick={() => setBoardType(t)} style={{ padding: '7px 16px', borderRadius: '8px', border: boardType === t ? `1px solid ${C.borderAccent}` : '1px solid transparent', background: boardType === t ? C.surface : 'transparent', color: boardType === t ? C.accent : C.textMuted, fontSize: '12px', fontWeight: boardType === t ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {boardType === 'combined' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} light={light} type="hybrid" />
+          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} light={light} type="hybrid" />
+        </div>
+      )}
+      {boardType === 'quantity' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} light={light} type="quantity" unit="calls" />
+          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} light={light} type="quantity" unit="tickets" />
+          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} light={light} type="quantity" unit="usd" />
+        </div>
+      )}
+      {boardType === 'quality' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} light={light} type="quality" />
+          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} light={light} type="quality" />
         </div>
       )}
     </div>
   );
 }
 
-function QualityLeaderboardCard({
-  title,
-  subtitle,
-  items,
-}: {
-  title: string;
-  subtitle: string;
-  items: QualityLeader[];
-}) {
+function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title: string; color: string; items: any[]; C: any; light: boolean; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
+  const maxVal = items.length ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity)) : 1;
+
   return (
-    <div style={panelStyle}>
-      <h3 style={panelTitleStyle}>{title}</h3>
-      {subtitle ? <p style={panelSubtitleStyle}>{subtitle}</p> : null}
-
-      {items.length === 0 ? (
-        <EmptyState text="No audit quality data available for this period." />
-      ) : (
-        <div style={rankingListStyle}>
-          {items.map((item, index) => (
-            <LeaderboardRow
-              key={item.label}
-              rank={index + 1}
-              title={item.label}
-              subtitle={`${item.auditsCount} audit${
-                item.auditsCount === 1 ? '' : 's'
-              }`}
-              value={`${item.averageQuality.toFixed(2)}%`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function HybridLeaderboardCard({
-  title,
-  subtitle,
-  items,
-}: {
-  title: string;
-  subtitle: string;
-  items: HybridLeader[];
-}) {
-  return (
-    <div style={panelStyle}>
-      <h3 style={panelTitleStyle}>{title}</h3>
-      {subtitle ? <p style={panelSubtitleStyle}>{subtitle}</p> : null}
-
-      {items.length === 0 ? (
-        <EmptyState text="No combined ranking data available for this period." />
-      ) : (
-        <div style={rankingListStyle}>
-          {items.map((item, index) => (
-            <LeaderboardRow
-              key={item.label}
-              rank={index + 1}
-              title={item.label}
-              subtitle={`Quality ${item.averageQuality.toFixed(
-                2
-              )}% • RSD ${item.rsd.toFixed(3)}`}
-              value={item.combinedScore.toFixed(3)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LeaderboardRow({
-  rank,
-  title,
-  subtitle,
-  value,
-}: {
-  rank: number;
-  title: string;
-  subtitle: string;
-  value: string;
-}) {
-  return (
-    <div style={rowCardStyle}>
-      <div style={rankBadgeStyle}>#{rank}</div>
-      <div style={{ flex: 1 }}>
-        <div style={rowTitleStyle}>{title}</div>
-        <div style={rowSubtitleStyle}>{subtitle}</div>
+    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, boxShadow: C.shadow }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}80` }} />
+        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{title}</div>
+        <div style={{ marginLeft: 'auto', padding: '3px 8px', borderRadius: '999px', background: `${color}18`, border: `1px solid ${color}30`, fontSize: '10px', fontWeight: 700, color }}>{items.length} agents</div>
       </div>
-      <div style={pillStyle}>{value}</div>
+
+      {items.length === 0 ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, fontSize: '13px', borderRadius: '10px', border: `1px dashed ${C.border}` }}>No data for period</div>
+      ) : (
+        <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '340px', overflowY: 'auto' }}>
+          {items.map((item, i) => {
+            const val = type === 'quality' ? item.averageQuality : type === 'hybrid' ? item.combinedScore : item.quantity;
+            const barPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+            const displayVal = type === 'quality' ? `${item.averageQuality.toFixed(1)}%` : type === 'hybrid' ? `${item.combinedScore.toFixed(2)}` : unit === 'usd' ? `$${item.quantity >= 1000 ? (item.quantity / 1000).toFixed(1) + 'k' : item.quantity}` : String(item.quantity);
+            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+
+            return (
+              <div key={item.label} className="dash-rank-row" style={{ padding: '12px 14px', borderRadius: '12px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', cursor: 'default' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '8px', background: i < 3 ? `${medalColors[i]}22` : C.accentSoft, border: `1px solid ${i < 3 ? medalColors[i] + '40' : C.borderAccent}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <span className="dash-mono" style={{ fontSize: '10px', fontWeight: 700, color: i < 3 ? medalColors[i] : C.accent }}>#{i + 1}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+                    {type === 'hybrid' && <div style={{ fontSize: '10px', color: C.textMuted }}>Quality {item.averageQuality?.toFixed(1)}% · RSD {item.rsd?.toFixed(3)}</div>}
+                    {type === 'quality' && <div style={{ fontSize: '10px', color: C.textMuted }}>{item.auditsCount} audit{item.auditsCount !== 1 ? 's' : ''}</div>}
+                  </div>
+                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color, flexShrink: 0 }}>{displayVal}</div>
+                </div>
+                {/* Mini bar */}
+                <div style={{ height: '3px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${barPct}%`, background: `linear-gradient(90deg, ${color}, ${color}90)`, borderRadius: '999px', transition: 'width 600ms cubic-bezier(.22,1,.36,1)' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function InsightCard({
-  title,
-  headline,
-  body,
-}: {
-  title: string;
-  headline: string;
-  body: string;
-}) {
+// ─── InsightsSection ─────────────────────────────────────────────────────────
+function InsightsSection({ C, light, lowestAgent, mostConsistent, coachTarget, allSummaries, avgQuality, releasedRate, totalAudits }: any) {
   return (
-    <div style={insightCardStyle}>
-      <div style={insightTitleStyle}>{title}</div>
-      <div style={insightHeadlineStyle}>{headline}</div>
-      <div style={insightBodyStyle}>{body}</div>
+    <div>
+      {/* Top 3 insight cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+        <InsightCard C={C} light={light} tone="warning" icon="◎" title="Needs Attention"
+          agent={lowestAgent?.label || 'No data'}
+          detail={lowestAgent ? `${lowestAgent.averageQuality.toFixed(1)}% avg quality across ${lowestAgent.auditsCount} audit${lowestAgent.auditsCount !== 1 ? 's' : ''}` : 'No quality insight available.'}
+          badge="Lowest Quality"
+        />
+        <InsightCard C={C} light={light} tone="success" icon="◈" title="Most Consistent"
+          agent={mostConsistent?.label || 'No combined data'}
+          detail={mostConsistent ? `RSD ${mostConsistent.rsd.toFixed(3)} · Score ${mostConsistent.combinedScore.toFixed(3)}` : 'No consistency signal.'}
+          badge="Top Stability"
+        />
+        <InsightCard C={C} light={light} tone="info" icon="▲" title="Coaching Opportunity"
+          agent={coachTarget?.label || 'No target'}
+          detail={coachTarget ? `${coachTarget.averageQuality.toFixed(1)}% avg · ${coachTarget.auditsCount} audits` : 'Need 2+ audits per agent.'}
+          badge="Action Required"
+        />
+      </div>
+
+      {/* Distribution */}
+      <div style={{ padding: '24px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, marginBottom: '20px' }}>
+        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>Quality Distribution</div>
+        <div style={{ fontSize: '12px', color: C.textMuted, marginBottom: '18px' }}>All agents ranked by average audit score</div>
+
+        {allSummaries.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, borderRadius: '10px', border: `1px dashed ${C.border}` }}>No audit data for period</div>
+        ) : (
+          <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+            {allSummaries.map((a: RankedAuditSummary, i: number) => {
+              const qualColor = a.averageQuality >= 90 ? C.salesColor : a.averageQuality >= 75 ? C.accent : a.averageQuality >= 60 ? C.warningColor : C.criticalColor;
+              return (
+                <div key={a.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)' }}>
+                  <div className="dash-mono" style={{ width: '24px', fontSize: '11px', fontWeight: 700, color: C.textMuted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
+                    <div style={{ fontSize: '10px', color: C.textMuted }}>{a.auditsCount} audit{a.auditsCount !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div style={{ width: '120px', height: '4px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden', flexShrink: 0 }}>
+                    <div style={{ height: '100%', width: `${a.averageQuality}%`, background: qualColor, borderRadius: '999px' }} />
+                  </div>
+                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color: qualColor, minWidth: '46px', textAlign: 'right', flexShrink: 0 }}>{a.averageQuality.toFixed(1)}%</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Summary metrics */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        {[
+          { label: 'Period Audits', value: String(totalAudits), detail: 'Total in range' },
+          { label: 'Avg Quality', value: `${avgQuality.toFixed(1)}%`, detail: 'Cross-team' },
+          { label: 'Release Rate', value: `${releasedRate.toFixed(0)}%`, detail: 'Shared with agents' },
+          { label: 'Agents Tracked', value: String(allSummaries.length), detail: 'With audit data' },
+        ].map(m => (
+          <div key={m.label} style={{ padding: '16px 18px', borderRadius: '14px', border: `1px solid ${C.border}`, background: C.surface }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '4px' }}>{m.label}</div>
+            <div className="dash-display" style={{ fontSize: '24px', fontWeight: 800, color: C.text }}>{m.value}</div>
+            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{m.detail}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
-function ActionListRow({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function InsightCard({ C, light, tone, icon, title, agent, detail, badge }: any) {
+  const toneColor = tone === 'warning' ? C.warningColor : tone === 'success' ? C.salesColor : C.accent;
+  const toneBg = tone === 'warning' ? 'rgba(245,158,11,.08)' : tone === 'success' ? 'rgba(16,185,129,.08)' : C.accentSoft;
+  const toneBorder = tone === 'warning' ? 'rgba(245,158,11,.25)' : tone === 'success' ? 'rgba(16,185,129,.25)' : C.borderAccent;
   return (
-    <div style={actionListRowStyle}>
-      <div style={actionListLabelStyle}>{label}</div>
-      <div style={actionListValueStyle}>{value}</div>
+    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '18px', border: `1px solid ${toneBorder}`, background: toneBg, boxShadow: C.shadow }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+        <span style={{ fontSize: '22px', color: toneColor }}>{icon}</span>
+        <span className={`dash-tag dash-tag-${tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'info'}${light ? ' light' : ''}`}>{badge}</span>
+      </div>
+      <div style={{ fontSize: '11px', fontWeight: 700, color: toneColor, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '6px' }}>{title}</div>
+      <div className="dash-display" style={{ fontSize: '17px', fontWeight: 800, color: C.text, marginBottom: '8px', lineHeight: 1.3 }}>{agent}</div>
+      <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.6 }}>{detail}</div>
     </div>
   );
 }
-
-function EmptyState({ text }: { text: string }) {
-  return <div style={emptyStateStyle}>{text}</div>;
-}
-
-function getStandardDeviation(values: number[]) {
-  if (values.length <= 1) return 0;
-
-  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
-  const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
-
-  return Math.sqrt(variance);
-}
-
-function getTeamAverage(audits: AuditItem[]) {
-  if (audits.length === 0) return 0;
-  return (
-    audits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
-    audits.length
-  );
-}
-
-const heroStyle = {
-  marginTop: '8px',
-  padding: '6px 2px 2px 2px',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  flexWrap: 'wrap' as const,
-  gap: '16px',
-  marginBottom: '22px',
-};
-
-const heroTitleStyle = {
-  margin: 0,
-  fontSize: '32px',
-  color: 'var(--da-title, #f8fafc)',
-};
-
-const heroSubtitleStyle = {
-  display: 'block',
-  margin: '10px 0 0 0',
-  color: 'var(--da-subtitle, #94a3b8)',
-  fontSize: '15px',
-};
-
-const infoPillRowStyle = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-  marginTop: '16px',
-};
-
-const metaPillStyle = {
-  padding: '10px 12px',
-  borderRadius: '999px',
-  background: 'var(--da-meta-bg, rgba(15, 23, 42, 0.62))',
-  border: 'var(--da-meta-border, 1px solid rgba(148, 163, 184, 0.14))',
-  color: 'var(--da-meta-text, #cbd5e1)',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-
-const heroActionWrapStyle = {
-  display: 'flex',
-  gap: '12px',
-  flexWrap: 'wrap' as const,
-  alignItems: 'flex-end',
-  justifyContent: 'flex-end',
-};
-
-const dateRangeWrapStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(150px, 1fr))',
-  gap: '12px',
-  alignItems: 'end',
-};
-
-const dateFieldWrapStyle = {
-  display: 'grid',
-  gap: '6px',
-  minWidth: '150px',
-};
-
-const dateFieldLabelStyle = {
-  color: 'var(--da-muted-text, #475569)',
-  fontSize: '12px',
-  fontWeight: 700,
-};
-
-const eyebrowStyle = {
-  color: 'var(--da-eyebrow, #60a5fa)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.16em',
-  marginBottom: '12px',
-};
-
-const sectionHeaderStyle = {
-  marginTop: '34px',
-  marginBottom: '16px',
-};
-
-const sectionEyebrowStyle = {
-  color: 'var(--da-section-eyebrow, #93c5fd)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.14em',
-  marginBottom: '8px',
-};
-
-const sectionSubtitleStyle = {
-  margin: 0,
-  color: 'var(--da-subtle-text, #64748b)',
-  fontWeight: 500,
-};
-
-const panelSectionTitleStyle = {
-  marginTop: 0,
-  marginBottom: '8px',
-  color: 'var(--screen-heading, #0f172a)',
-  fontSize: '24px',
-  fontWeight: 900,
-};
-
-const fieldStyle = {
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: 'var(--da-field-border, 1px solid rgba(148, 163, 184, 0.18))',
-  background: 'var(--da-field-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--da-field-text, #e5eefb)',
-  minHeight: '48px',
-  cursor: 'pointer',
-};
-
-const primaryButton = {
-  padding: '12px 16px',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: 'white',
-  border: '1px solid rgba(96, 165, 250, 0.24)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  minHeight: '48px',
-};
-
-const secondaryButton = {
-  padding: '12px 16px',
-  background: 'var(--da-secondary-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--da-secondary-text, #e5eefb)',
-  border: 'var(--da-secondary-border, 1px solid rgba(148, 163, 184, 0.18))',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-  minHeight: '48px',
-};
-
-const kpiGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '16px',
-};
-
-const summaryCardStyle = {
-  background: 'var(--da-panel-bg, linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148, 163, 184, 0.14))',
-  borderRadius: '20px',
-  padding: '20px',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2, 6, 23, 0.35))',
-  backdropFilter: 'blur(14px)',
-};
-
-const summaryCardLabelStyle = {
-  color: 'var(--da-card-label, #94a3b8)',
-  fontSize: '13px',
-  fontWeight: 700,
-  marginBottom: '10px',
-};
-
-const summaryCardValueStyle = {
-  fontSize: '30px',
-  fontWeight: 800,
-  color: 'var(--da-card-value, #f8fafc)',
-  marginBottom: '8px',
-};
-
-const summaryCardSubtitleStyle = {
-  color: 'var(--da-card-subtitle, #64748b)',
-  fontSize: '12px',
-};
-
-const teamCardGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-  gap: '18px',
-  marginTop: '18px',
-};
-
-const teamCardStyle = {
-  position: 'relative' as const,
-  background: 'var(--da-panel-bg, linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148, 163, 184, 0.14))',
-  borderRadius: '22px',
-  padding: '22px',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2, 6, 23, 0.35))',
-  backdropFilter: 'blur(14px)',
-  overflow: 'hidden' as const,
-};
-
-const teamAccentStyle = {
-  position: 'absolute' as const,
-  top: 0,
-  left: 0,
-  width: '100%',
-  height: '4px',
-};
-
-const teamTitleStyle = {
-  color: 'var(--da-card-value, #f8fafc)',
-  fontSize: '20px',
-  fontWeight: 800,
-  marginBottom: '18px',
-};
-
-const teamMetricGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '16px',
-};
-
-const teamMetricLabelStyle = {
-  color: 'var(--da-card-label, #94a3b8)',
-  fontSize: '12px',
-  fontWeight: 700,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-  marginBottom: '8px',
-};
-
-const teamMetricValueStyle = {
-  color: 'var(--da-card-value, #f8fafc)',
-  fontSize: '24px',
-  fontWeight: 800,
-};
-
-const teamMetaRowStyle = {
-  display: 'grid',
-  gap: '8px',
-  marginTop: '18px',
-  color: 'var(--da-team-meta, #cbd5e1)',
-  fontSize: '13px',
-};
-
-const rankingGroupsStyle = {
-  display: 'grid',
-  gap: '18px',
-};
-
-const rankingGroupStyle = {
-  display: 'grid',
-  gap: '12px',
-};
-
-const miniSectionEyebrowStyle = {
-  color: 'var(--da-section-eyebrow, #3b82f6)',
-  fontSize: '11px',
-  fontWeight: 800,
-  letterSpacing: '0.12em',
-  textTransform: 'uppercase' as const,
-};
-
-const rankingGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-  gap: '14px',
-};
-
-const panelStyle = {
-  background: 'var(--da-panel-bg, linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148, 163, 184, 0.14))',
-  borderRadius: '20px',
-  padding: '20px',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2, 6, 23, 0.35))',
-  backdropFilter: 'blur(14px)',
-};
-
-const panelTitleStyle = {
-  marginTop: 0,
-  marginBottom: '8px',
-  color: 'var(--da-title, #0f172a)',
-  fontSize: '18px',
-  fontWeight: 800,
-};
-
-const panelSubtitleStyle = {
-  marginTop: 0,
-  color: 'var(--da-subtle-text, #64748b)',
-  fontSize: '14px',
-  fontWeight: 500,
-};
-
-const rankingListStyle = {
-  display: 'grid',
-  gap: '10px',
-  marginTop: '14px',
-};
-
-const rowCardStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'center',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: 'var(--da-row-border, 1px solid rgba(148, 163, 184, 0.16))',
-  background: 'var(--da-card-bg, rgba(255, 255, 255, 0.88))',
-};
-
-const rankBadgeStyle = {
-  width: '36px',
-  height: '36px',
-  borderRadius: '999px',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  background: 'var(--da-rank-badge-bg, rgba(37, 99, 235, 0.14))',
-  color: 'var(--da-rank-badge-text, #2563eb)',
-  fontWeight: 800,
-  flexShrink: 0,
-};
-
-const rowTitleStyle = {
-  fontWeight: 700,
-  color: 'var(--da-title, #0f172a)',
-  lineHeight: 1.35,
-  fontSize: '14px',
-};
-
-const rowSubtitleStyle = {
-  fontSize: '12px',
-  color: 'var(--da-subtle-text, #64748b)',
-  marginTop: '4px',
-  fontWeight: 600,
-};
-
-const pillStyle = {
-  padding: '7px 10px',
-  borderRadius: '999px',
-  background: 'var(--da-pill-bg, rgba(37, 99, 235, 0.14))',
-  color: 'var(--da-pill-text, #2563eb)',
-  border: '1px solid rgba(96, 165, 250, 0.28)',
-  fontWeight: 800,
-  minWidth: '82px',
-  textAlign: 'center' as const,
-  flexShrink: 0,
-};
-
-const insightGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-  gap: '18px',
-};
-
-const insightCardStyle = {
-  background: 'var(--da-panel-bg, linear-gradient(180deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.68) 100%))',
-  border: 'var(--da-panel-border, 1px solid rgba(148, 163, 184, 0.14))',
-  borderRadius: '22px',
-  padding: '22px',
-  boxShadow: 'var(--da-panel-shadow, 0 18px 40px rgba(2, 6, 23, 0.35))',
-  backdropFilter: 'blur(14px)',
-};
-
-const insightTitleStyle = {
-  color: 'var(--da-accent-text, #2563eb)',
-  fontSize: '12px',
-  fontWeight: 800,
-  textTransform: 'uppercase' as const,
-  letterSpacing: '0.12em',
-  marginBottom: '10px',
-};
-
-const insightHeadlineStyle = {
-  color: 'var(--da-title, #0f172a)',
-  fontSize: '20px',
-  fontWeight: 800,
-  marginBottom: '10px',
-};
-
-const insightBodyStyle = {
-  color: 'var(--da-page-text, #334155)',
-  lineHeight: 1.6,
-};
-
-const emptyStateStyle = {
-  marginTop: '16px',
-  padding: '18px',
-  borderRadius: '16px',
-  border: 'var(--da-empty-border, 1px dashed rgba(148, 163, 184, 0.24))',
-  backgroundColor: 'var(--da-card-bg, rgba(255, 255, 255, 0.88))',
-  color: 'var(--da-subtle-text, #64748b)',
-  textAlign: 'center' as const,
-  fontWeight: 500,
-};
-
-function formatDateTime(value?: string | null) {
-  if (!value) return '-';
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  return date.toLocaleString();
-}
-
-const errorBannerStyle = {
-  marginBottom: '18px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'var(--da-error-bg, rgba(127, 29, 29, 0.24))',
-  border: 'var(--da-error-border, 1px solid rgba(248, 113, 113, 0.22))',
-  color: 'var(--da-error-text, #fecaca)',
-};
-
-const statusRowStyle = {
-  display: 'none',
-  gap: '10px',
-  flexWrap: 'wrap' as const,
-  marginBottom: '20px',
-};
-
-const statusPillStyle = {
-  padding: '10px 12px',
-  borderRadius: '999px',
-  background: 'var(--da-meta-bg, rgba(15, 23, 42, 0.62))',
-  border: 'var(--da-meta-border, 1px solid rgba(148, 163, 184, 0.14))',
-  color: 'var(--da-meta-text, #cbd5e1)',
-  fontWeight: 700,
-  fontSize: '12px',
-};
-
-const spotlightPanelStyle = {
-  marginBottom: '28px',
-  borderRadius: '30px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-panel-bg, rgba(15,23,42,0.78))',
-  boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
-  padding: '20px',
-};
-
-
-const spotlightGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-  gap: '18px',
-  alignItems: 'stretch',
-};
-
-const spotlightCardStyle = {
-  borderRadius: '24px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
-  padding: '18px',
-  display: 'flex',
-  flexDirection: 'column' as const,
-  minHeight: '100%',
-};
-
-const spotlightCardTitleStyle = {
-  color: 'var(--screen-heading, #f8fafc)',
-  fontWeight: 900,
-  fontSize: '22px',
-  marginBottom: '8px',
-};
-
-const spotlightCardTextStyle = {
-  color: 'var(--screen-text, #e5eefb)',
-  lineHeight: 1.6,
-  fontSize: '14px',
-  minHeight: '48px',
-};
-
-
-const spotlightStatGridStyle = {
-  display: 'grid',
-  gap: '10px',
-  marginTop: 'auto',
-  paddingTop: '16px',
-};
-
-const spotlightStatRowStyle = {
-  display: 'grid',
-  gridTemplateColumns: '132px minmax(0, 1fr)',
-  alignItems: 'start',
-  gap: '14px',
-  padding: '14px 16px',
-  minHeight: '84px',
-  borderRadius: '14px',
-  border: '1px solid var(--screen-field-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-field-bg, rgba(255,255,255,0.92))',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.32)',
-};
-
-const spotlightStatLabelStyle = {
-  color: 'var(--screen-muted, #64748b)',
-  fontSize: '12px',
-  fontWeight: 800,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase' as const,
-  whiteSpace: 'nowrap' as const,
-};
-
-const spotlightStatValueStyle = {
-  color: 'var(--screen-heading, #0f172a)',
-  fontSize: '14px',
-  fontWeight: 800,
-  lineHeight: 1.6,
-  wordBreak: 'break-word' as const,
-  whiteSpace: 'pre-line' as const,
-  textAlign: 'left' as const,
-};
-
-const actionCenterPanelStyle = {
-  marginBottom: '28px',
-  borderRadius: '30px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-panel-bg, rgba(15,23,42,0.78))',
-  boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
-  padding: '20px',
-};
-
-const actionCenterHeaderStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  gap: '16px',
-  flexWrap: 'wrap' as const,
-  marginBottom: '18px',
-};
-
-const actionCenterHeadlineStyle = {
-  minWidth: '280px',
-  maxWidth: '420px',
-  borderRadius: '18px',
-  padding: '16px',
-  background: 'var(--screen-emphasis-bg, rgba(30,41,59,0.72))',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-};
-
-const actionHeadlineTitleStyle = {
-  color: 'var(--screen-heading, #f8fafc)',
-  fontSize: '18px',
-  fontWeight: 900,
-  marginBottom: '6px',
-};
-
-const actionHeadlineDetailStyle = {
-  color: 'var(--screen-heading-soft, #e2e8f0)',
-  lineHeight: 1.55,
-  fontSize: '13px',
-};
-
-const actionCenterGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '14px',
-  marginBottom: '18px',
-};
-
-const actionCardStyle = {
-  borderRadius: '22px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
-  padding: '18px',
-  display: 'grid',
-  gap: '12px',
-};
-
-const actionCardTopRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '10px',
-  alignItems: 'center',
-};
-
-const actionToneBadgeStyle = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  borderRadius: '999px',
-  padding: '8px 12px',
-  minHeight: '28px',
-  fontSize: '11px',
-  fontWeight: 900,
-  letterSpacing: '0.08em',
-  textTransform: 'uppercase' as const,
-  borderWidth: '1px',
-  borderStyle: 'solid' as const,
-};
-
-const actionToneCriticalStyle = {
-  background: 'var(--screen-tone-critical-bg, rgba(220,38,38,0.16))',
-  color: 'var(--screen-tone-critical-text, #fecaca)',
-  borderColor: 'var(--screen-tone-critical-border, rgba(248,113,113,0.22))',
-};
-
-const actionToneWarningStyle = {
-  background: 'var(--screen-tone-warning-bg, rgba(245,158,11,0.16))',
-  color: 'var(--screen-tone-warning-text, #fde68a)',
-  borderColor: 'var(--screen-tone-warning-border, rgba(251,191,36,0.22))',
-};
-
-const actionToneInfoStyle = {
-  background: 'var(--screen-tone-info-bg, rgba(37,99,235,0.14))',
-  color: 'var(--screen-tone-info-text, #bfdbfe)',
-  borderColor: 'var(--screen-tone-info-border, rgba(96,165,250,0.22))',
-};
-
-const actionCountStyle = {
-  color: 'var(--screen-heading, #f8fafc)',
-  fontSize: '28px',
-  fontWeight: 900,
-};
-
-const actionCardTitleStyle = {
-  color: 'var(--screen-heading, #f8fafc)',
-  fontSize: '18px',
-  fontWeight: 800,
-};
-
-const actionCardDetailStyle = {
-  color: 'var(--screen-text, #e5eefb)',
-  lineHeight: 1.6,
-  fontSize: '13px',
-  minHeight: '42px',
-};
-
-const actionCardButtonStyle = {
-  padding: '11px 14px',
-  borderRadius: '14px',
-  background: 'var(--screen-button-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--screen-button-text, #e5eefb)',
-  border: '1px solid var(--screen-button-border, rgba(148, 163, 184, 0.18))',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const actionFooterGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-  gap: '14px',
-};
-
-const actionSubpanelStyle = {
-  borderRadius: '22px',
-  border: '1px solid var(--screen-border, rgba(148,163,184,0.14))',
-  background: 'var(--screen-card-soft-bg, rgba(15,23,42,0.52))',
-  padding: '18px',
-};
-
-const actionListStyle = {
-  display: 'grid',
-  gap: '10px',
-  marginTop: '12px',
-};
-
-const actionListRowStyle = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  gap: '10px',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  background: 'var(--screen-field-bg, rgba(255,255,255,0.92))',
-  border: '1px solid var(--screen-field-border, rgba(148,163,184,0.14))',
-};
-
-const actionListLabelStyle = {
-  color: 'var(--screen-heading-soft, #e2e8f0)',
-  fontSize: '13px',
-  fontWeight: 700,
-};
-
-const actionListValueStyle = {
-  color: 'var(--screen-heading, #f8fafc)',
-  fontSize: '16px',
-  fontWeight: 900,
-  minWidth: '26px',
-  textAlign: 'right' as const,
-};
-
-const quickLinkGridStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-  gap: '10px',
-  marginTop: '12px',
-};
-
-const quickLinkButtonStyle = {
-  padding: '12px 14px',
-  borderRadius: '14px',
-  background: 'var(--screen-button-bg, rgba(15, 23, 42, 0.74))',
-  color: 'var(--screen-button-text, #e5eefb)',
-  border: '1px solid var(--screen-button-border, rgba(148, 163, 184, 0.18))',
-  cursor: 'pointer',
-  fontWeight: 700,
-  textAlign: 'left' as const,
-};
 
 export default Dashboard;
