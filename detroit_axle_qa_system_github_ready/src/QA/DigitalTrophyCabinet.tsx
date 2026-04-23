@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { supabase } from '../lib/supabase';
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
@@ -50,6 +50,78 @@ type DigitalTrophyCabinetProps = {
   title?: string;
 };
 
+
+function useThemeRefresh() {
+  const [themeRefreshKey, setThemeRefreshKey] = useState(0);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return;
+    }
+
+    const refreshTheme = () => setThemeRefreshKey((value) => value + 1);
+    const observer = new MutationObserver(refreshTheme);
+    const observerConfig = {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-theme-mode'],
+    };
+
+    observer.observe(document.documentElement, observerConfig);
+
+    if (document.body) {
+      observer.observe(document.body, observerConfig);
+    }
+
+    window.addEventListener('storage', refreshTheme);
+    window.addEventListener('detroit-axle-theme-change', refreshTheme as EventListener);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', refreshTheme);
+      window.removeEventListener(
+        'detroit-axle-theme-change',
+        refreshTheme as EventListener
+      );
+    };
+  }, []);
+
+  return themeRefreshKey;
+}
+
+function getTrophyThemeVars(): Record<string, string> {
+  const themeMode =
+    typeof document !== 'undefined'
+      ? (
+          document.body.dataset.theme ||
+          document.documentElement.dataset.theme ||
+          document.documentElement.getAttribute('data-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme-mode') ||
+          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
+          window.localStorage.getItem('detroit-axle-theme') ||
+          window.sessionStorage.getItem('detroit-axle-theme') ||
+          ''
+        ).toLowerCase()
+      : '';
+
+  const isLight = themeMode === 'light' || themeMode === 'white';
+
+  return {
+    '--screen-accent': isLight ? '#3b82f6' : '#60a5fa',
+    '--screen-border': isLight ? 'rgba(203, 213, 225, 0.9)' : 'rgba(148,163,184,0.16)',
+    '--screen-card-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.7)',
+    '--screen-shadow': isLight ? '0 14px 32px rgba(15,23,42,0.08)' : '0 18px 40px rgba(2,6,23,0.35)',
+    '--screen-heading': isLight ? '#0f172a' : '#f8fafc',
+    '--screen-text': isLight ? '#475569' : '#e5eefb',
+    '--screen-muted': isLight ? '#64748b' : '#94a3b8',
+    '--cabinet-locked-pill-bg': isLight ? '#334155' : '#475569',
+    '--cabinet-unlocked-pill-bg': isLight ? '#166534' : '#166534',
+    '--cabinet-unlocked-card-bg': isLight
+      ? 'linear-gradient(180deg, rgba(34,197,94,0.14) 0%, rgba(255,255,255,0.98) 100%)'
+      : 'linear-gradient(180deg, rgba(34,197,94,0.12) 0%, rgba(15,23,42,0.7) 100%)',
+    '--cabinet-locked-card-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.7)',
+  };
+}
+
 function DigitalTrophyCabinet({
   scope,
   currentUser,
@@ -62,6 +134,8 @@ function DigitalTrophyCabinet({
   const [ticketsRecords, setTicketsRecords] = useState<TicketsRecord[]>([]);
   const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const themeRefreshKey = useThemeRefresh();
+  const themeVars = useMemo(() => getTrophyThemeVars(), [themeRefreshKey]);
 
   useEffect(() => {
     void loadCabinetData();
@@ -162,7 +236,7 @@ function DigitalTrophyCabinet({
   }, [scopedData]);
 
   return (
-    <div style={{ marginTop: '30px' }}>
+    <div data-no-theme-invert="true" style={{ ...(themeVars as CSSProperties), marginTop: '30px' }}>
       <div style={eyebrowStyle}>Achievements</div>
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       {loading ? (
@@ -225,8 +299,8 @@ const cardStyle = (unlocked: boolean) => ({
     ? '1px solid rgba(34,197,94,0.28)'
     : '1px solid var(--screen-border, rgba(148,163,184,0.16))',
   background: unlocked
-    ? 'linear-gradient(180deg, rgba(34,197,94,0.12) 0%, var(--screen-card-bg, rgba(15,23,42,0.7)) 100%)'
-    : 'var(--screen-card-bg, rgba(15,23,42,0.7))',
+    ? 'var(--cabinet-unlocked-card-bg, linear-gradient(180deg, rgba(34,197,94,0.12) 0%, rgba(15,23,42,0.7) 100%))'
+    : 'var(--cabinet-locked-card-bg, var(--screen-card-bg, rgba(15,23,42,0.7)))',
   boxShadow: 'var(--screen-shadow, 0 18px 40px rgba(2,6,23,0.35))',
   padding: '18px',
 });
@@ -236,7 +310,9 @@ const statusPill = (unlocked: boolean) => ({
   marginBottom: '12px',
   padding: '6px 10px',
   borderRadius: '999px',
-  backgroundColor: unlocked ? '#166534' : '#475569',
+  backgroundColor: unlocked
+    ? 'var(--cabinet-unlocked-pill-bg, #166534)'
+    : 'var(--cabinet-locked-pill-bg, #475569)',
   color: '#ffffff',
   fontSize: '12px',
   fontWeight: 800,
