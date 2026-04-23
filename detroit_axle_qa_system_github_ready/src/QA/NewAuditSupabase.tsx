@@ -66,6 +66,7 @@ type AuditDraft = {
   metricComments: Record<string, string>;
 };
 
+const LOCKED_NA_METRICS = new Set(['Active Listening']);
 const AUTO_FAIL_METRICS = new Set(['Hold (≤3 mins)', 'Procedure']);
 const ISSUE_WAS_RESOLVED_METRIC = 'Issue was resolved';
 
@@ -88,13 +89,13 @@ const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
 
 const callsMetrics: Metric[] = [
   { name: 'Greeting', pass: 2, borderline: 1 },
-  { name: 'Friendliness', pass: 5, borderline: 3 },
-  { name: 'Hold (≤3 mins)', pass: 8, borderline: 4 },
-  { name: 'Call Managing', pass: 8, borderline: 4 },
-  { name: 'Procedure', pass: 12, borderline: 6 },
-  { name: 'Notes', pass: 12, borderline: 6 },
-  { name: 'Creating REF Order', pass: 12, borderline: 6 },
-  { name: 'Accuracy', pass: 12, borderline: 6 },
+  { name: 'Friendliness', pass: 6, borderline: 4 },
+  { name: 'Hold (≤3 mins)', pass: 9, borderline: 5 },
+  { name: 'Call Managing', pass: 9, borderline: 5 },
+  { name: 'Procedure', pass: 13, borderline: 7 },
+  { name: 'Notes', pass: 13, borderline: 7 },
+  { name: 'Creating REF Order', pass: 13, borderline: 6 },
+  { name: 'Accuracy', pass: 13, borderline: 7 },
   { name: 'A-form', pass: 6, borderline: 3 },
   { name: 'Refund Form', pass: 11, borderline: 5 },
   { name: 'Providing RL', pass: 5, borderline: 3 },
@@ -148,6 +149,9 @@ function getMetricsForTeam(teamValue: TeamType): Metric[] {
   return [];
 }
 
+function isLockedToNA(metricName: string) {
+  return LOCKED_NA_METRICS.has(metricName);
+}
 
 function canAutoFail(metricName: string) {
   return AUTO_FAIL_METRICS.has(metricName);
