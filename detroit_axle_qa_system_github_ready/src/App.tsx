@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
@@ -552,11 +552,9 @@ function SupervisorRoutes({
 // LoadingScreen — orbital ring design
 // ─────────────────────────────────────────────────────────────
 function LoadingScreen({
-  styles,
   theme,
   message = 'Preparing your workspace…',
 }: {
-  styles: ReturnType<typeof createStyles>;
   theme: ReturnType<typeof getThemePalette>;
   message?: string;
 }) {
@@ -891,7 +889,7 @@ function AppShell() {
     return Object.entries(groups) as [string, NavItem[]][];
   }, [profile]);
 
-  if (loading) return <LoadingScreen styles={styles} theme={theme} />;
+  if (loading) return <LoadingScreen theme={theme} />;
   if (recoveryMode) return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
   if (!auth.session) return <Login />;
 
@@ -1274,7 +1272,6 @@ function AppShell() {
                   fontWeight: 700,
                   color: isDark ? '#e2e8f0' : '#1e293b',
                   animation: 'da-fade-in 200ms ease',
-                  key: activeRouteLabel,
                 }}>{activeRouteLabel}</span>
               </div>
               <div style={{
