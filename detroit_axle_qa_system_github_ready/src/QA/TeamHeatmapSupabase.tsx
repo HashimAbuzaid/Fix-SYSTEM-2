@@ -298,10 +298,10 @@ export default function TeamHeatmapSupabase({ currentUser }: TeamHeatmapSupabase
               <div className="da-themed-loader__glow" />
               <div className="da-themed-loader__rotor">
                 <div className="da-themed-loader__rotor-face" />
-                <div className="da-themed-loader__caliper" />
                 <div className="da-themed-loader__hub" />
-                <div className="da-themed-loader__spark" />
               </div>
+              <div className="da-themed-loader__caliper" />
+              <div className="da-themed-loader__spark" />
             </div>
             <div className="da-themed-loader__copy">
               <div className="da-themed-loader__eyebrow">Detroit Axle</div>

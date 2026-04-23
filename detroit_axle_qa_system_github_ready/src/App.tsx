@@ -140,6 +140,14 @@ function useGlobalStyles() {
         0% { transform: rotate(0deg); opacity: 0.38; }
         100% { transform: rotate(360deg); opacity: 0.9; }
       }
+      @keyframes da-loader-caliper-breathe {
+        0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 8px 20px rgba(37,99,235,0.2); }
+        50% { transform: translateY(-1px) scale(1.03); box-shadow: 0 10px 24px rgba(37,99,235,0.28); }
+      }
+      @keyframes da-loader-spark-float {
+        0%, 100% { transform: translate3d(0, 0, 0) scale(0.92); opacity: 0.7; }
+        50% { transform: translate3d(2px, -3px, 0) scale(1.08); opacity: 1; }
+      }
 
       :root {
         --da-loader-shell-bg: linear-gradient(180deg, rgba(6,12,26,0.98) 0%, rgba(10,18,40,0.94) 100%);
@@ -247,6 +255,7 @@ function useGlobalStyles() {
         width: 100%;
         height: 100%;
         animation: da-loader-rotate 1.35s linear infinite;
+        z-index: 1;
       }
       .da-themed-loader__rotor-face {
         position: absolute;
@@ -299,14 +308,16 @@ function useGlobalStyles() {
       }
       .da-themed-loader__caliper {
         position: absolute;
-        top: 16px;
-        right: 3px;
-        width: 22px;
-        height: 34px;
-        border-radius: 12px 14px 14px 12px;
+        top: 15px;
+        left: 4px;
+        width: 24px;
+        height: 38px;
+        border-radius: 14px 12px 12px 14px;
         background: linear-gradient(180deg, var(--da-loader-caliper-top) 0%, var(--da-loader-caliper-bottom) 100%);
         border: 1px solid rgba(255,255,255,0.18);
         box-shadow: 0 8px 20px rgba(37,99,235,0.2);
+        animation: da-loader-caliper-breathe 1.8s ease-in-out infinite;
+        z-index: 2;
       }
       .da-themed-loader__caliper::before,
       .da-themed-loader__caliper::after {
@@ -324,11 +335,13 @@ function useGlobalStyles() {
         position: absolute;
         width: 8px;
         height: 8px;
-        top: 8px;
-        left: 10px;
+        right: 11px;
+        bottom: 9px;
         border-radius: 999px;
         background: var(--da-loader-accent);
         box-shadow: 0 0 14px rgba(96,165,250,0.65);
+        animation: da-loader-spark-float 1.5s ease-in-out infinite;
+        z-index: 3;
       }
       .da-themed-loader__copy {
         display: grid;
@@ -828,10 +841,10 @@ function LoadingScreen({
             <div className="da-themed-loader__glow" />
             <div className="da-themed-loader__rotor">
               <div className="da-themed-loader__rotor-face" />
-              <div className="da-themed-loader__caliper" />
               <div className="da-themed-loader__hub" />
-              <div className="da-themed-loader__spark" />
             </div>
+            <div className="da-themed-loader__caliper" />
+            <div className="da-themed-loader__spark" />
           </div>
 
           <div className="da-themed-loader__copy">
