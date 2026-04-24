@@ -94,11 +94,11 @@ const callsMetrics: Metric[] = [
   { name: 'Call Managing', pass: 9, borderline: 5 },
   { name: 'Procedure', pass: 13, borderline: 7 },
   { name: 'Notes', pass: 13, borderline: 7 },
-  { name: 'Creating REF Order', pass: 13, borderline: 6 },
+  { name: 'Creating REF Order', pass: 12, borderline: 6 },
   { name: 'Accuracy', pass: 13, borderline: 7 },
   { name: 'A-form', pass: 6, borderline: 3 },
   { name: 'Refund Form', pass: 11, borderline: 5 },
-  { name: 'Providing RL', pass: 5, borderline: 3 },
+  { name: 'Providing RL', pass: 4, borderline: 2 },
   { name: 'Ending', pass: 2, borderline: 1 },
   ISSUE_WAS_RESOLVED_QUESTION,
 ];

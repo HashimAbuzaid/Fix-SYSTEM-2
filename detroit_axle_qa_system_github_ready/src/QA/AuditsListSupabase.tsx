@@ -118,17 +118,16 @@ const ISSUE_WAS_RESOLVED_QUESTION: Metric = {
 
 const callsMetrics: Metric[] = [
   { name: 'Greeting', pass: 2, borderline: 1 },
-  { name: 'Friendliness', pass: 5, borderline: 3 },
-  { name: 'Hold (≤3 mins)', pass: 8, borderline: 4 },
-  { name: 'Call Managing', pass: 8, borderline: 4 },
-  { name: 'Active Listening', pass: 5, borderline: 3 },
-  { name: 'Procedure', pass: 12, borderline: 6 },
-  { name: 'Notes', pass: 12, borderline: 6 },
+  { name: 'Friendliness', pass: 6, borderline: 4 },
+  { name: 'Hold (≤3 mins)', pass: 9, borderline: 5 },
+  { name: 'Call Managing', pass: 9, borderline: 5 },
+  { name: 'Procedure', pass: 13, borderline: 7 },
+  { name: 'Notes', pass: 13, borderline: 7 },
   { name: 'Creating REF Order', pass: 12, borderline: 6 },
-  { name: 'Accuracy', pass: 12, borderline: 6 },
+  { name: 'Accuracy', pass: 13, borderline: 7 },
   { name: 'A-form', pass: 6, borderline: 3 },
   { name: 'Refund Form', pass: 11, borderline: 5 },
-  { name: 'Providing RL', pass: 5, borderline: 3 },
+  { name: 'Providing RL', pass: 4, borderline: 2 },
   { name: 'Ending', pass: 2, borderline: 1 },
   ISSUE_WAS_RESOLVED_QUESTION,
 ];
@@ -192,12 +191,16 @@ function getTodayDateValue() { return new Date().toISOString().slice(0, 10); }
 function normalizeText(v?: string | null) { return String(v || '').replace(/\u00a0/g, ' ').trim(); }
 function normalizeHeader(v?: string | null) { return normalizeText(v).toLowerCase().replace(/[^a-z0-9]+/g, ''); }
 function normalizeAgentId(v?: string | null) { return normalizeText(v).replace(/\.0+$/, ''); }
+function clampScoreValue(score: number | null | undefined) {
+  if (score === null || score === undefined || !Number.isFinite(score)) return null;
+  return Math.min(100, Math.max(0, score));
+}
 
 function parsePercentLike(v?: string | null) {
   const raw = normalizeText(v).replace('%', '').replace(/,/g, '');
   if (!raw || raw === '-' || raw.toLowerCase() === '#div/0!' || raw.toLowerCase() === 'off') return null;
   const p = Number(raw);
-  return Number.isFinite(p) ? p : null;
+  return clampScoreValue(p);
 }
 
 function parseCsv(text: string) {
@@ -525,7 +528,8 @@ function AuditsListSupabase() {
       };
     });
     const hasAutoFail = details.some(d => d.counts_toward_score !== false && AUTO_FAIL_METRICS.has(d.metric) && d.result === 'Auto-Fail');
-    const qualityScore = hasAutoFail ? '0.00' : details.filter(d => d.counts_toward_score !== false).reduce((s, d) => s + d.earned, 0).toFixed(2);
+    const rawQualityScore = hasAutoFail ? 0 : details.filter(d => d.counts_toward_score !== false).reduce((s, d) => s + d.earned, 0);
+    const qualityScore = (clampScoreValue(rawQualityScore) ?? 0).toFixed(2);
     return { scoreDetails: details, qualityScore, hasAutoFail };
   }
   function getAgentLabel(p: AgentProfile) {
@@ -616,14 +620,14 @@ function AuditsListSupabase() {
     const rows = Array.from(grouped.values()).map(row => {
       const k = agentKey(row.agent_id, row.team);
       const imp = importedProgressByAgent[k] || null;
-      const dbEvals = [...row.evaluations].sort((a, b) => a.audit_date.localeCompare(b.audit_date)).slice(-MAX_PROGRESS_EVALS).map(e => ({ score: Number.isFinite(e.quality_score) ? e.quality_score : null, label: e.audit_date ? `${formatDateOnly(e.audit_date)} · ${e.case_type}` : '' }));
+      const dbEvals = [...row.evaluations].sort((a, b) => a.audit_date.localeCompare(b.audit_date)).slice(-MAX_PROGRESS_EVALS).map(e => ({ score: clampScoreValue(e.quality_score), label: e.audit_date ? `${formatDateOnly(e.audit_date)} · ${e.case_type}` : '' }));
       const evals = imp?.evaluations?.length ? imp.evaluations.slice(0, MAX_PROGRESS_EVALS) : dbEvals;
       const offToday = imp?.offToday === true || !!offTodayByAgent[k];
       const offIdx = getEffectiveOffIndexes(row.agent_id, row.team);
       const shifted = buildShiftedEvaluations(evals, offIdx);
       const scored = evals.filter(e => e.score !== null);
-      const avg = imp?.averageScore ?? (scored.length > 0 ? scored.reduce((s, e) => s + (e.score ?? 0), 0) / scored.length : null);
-      const latest = imp?.latestScore ?? (scored.length > 0 ? scored[scored.length - 1]?.score ?? null : null);
+      const avg = clampScoreValue(imp?.averageScore ?? (scored.length > 0 ? scored.reduce((s, e) => s + (e.score ?? 0), 0) / scored.length : null));
+      const latest = clampScoreValue(imp?.latestScore ?? (scored.length > 0 ? scored[scored.length - 1]?.score ?? null : null));
       const latestDate = row.evaluations.length > 0 ? [...row.evaluations].sort((a, b) => a.audit_date.localeCompare(b.audit_date)).slice(-1)[0]?.audit_date ?? null : null;
       return { agent_id: row.agent_id, agent_name: imp?.agent_name || row.agent_name, display_name: imp?.display_name ?? row.display_name, team: row.team, evaluations: evals, shiftedEvaluations: shifted, offIndexes: offIdx, averageScore: avg !== null && Number.isFinite(avg) ? avg : null, latestScore: latest !== null && Number.isFinite(latest) ? latest : null, latestAuditDate: latestDate, offToday };
     }).sort((a, b) => a.agent_name.localeCompare(b.agent_name));
@@ -1058,12 +1062,13 @@ function AuditsListSupabase() {
                       </div>
                       {visibleCols.map(col => {
                         const ev = row.shiftedEvaluations?.[col.index] || row.evaluations[col.index] || { score: null, label: '' };
-                        const has = ev.score !== null && Number.isFinite(ev.score);
+                        const displayScore = clampScoreValue(ev.score);
+                        const has = displayScore !== null;
                         const isOff = offIdx.includes(col.index);
                         const isSel = selectedOffEvalIndexes.includes(col.index);
                         if (isOff) return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...s.evalOff, ...(isSel ? s.evalSelected : {}) }} title={`OFF – ${col.label}`}>OFF</div>;
-                        const band = getScoreBand(ev.score);
-                        return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...getEvalBandStyle(band), ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${ev.score}%` : 'No eval'}>{has ? `${Number(ev.score).toFixed(0)}%` : '—'}</div>;
+                        const band = getScoreBand(displayScore);
+                        return <div key={`${row.agent_id}-${col.index}`} style={{ ...s.evalCell, ...getEvalBandStyle(band), ...(isSel ? s.evalSelected : {}) }} title={has ? ev.label || `${displayScore}%` : 'No eval'}>{has ? `${displayScore.toFixed(0)}%` : '—'}</div>;
                       })}
                       <div style={s.metaCell}>
                         {row.latestAuditDate ? <div style={s.agentName}>{formatDateOnly(row.latestAuditDate)}</div> : hasOff ? <span style={s.offPill}>{offIdx.length === 1 ? `Eval ${offIdx[0] + 1}` : `${offIdx.length} OFF`}</span> : <span style={s.agentSub}>—</span>}
@@ -1097,7 +1102,7 @@ function AuditsListSupabase() {
               const isEditing = editingAuditId === audit.id;
               const isExpanded = expandedId === audit.id || isEditing;
               const adjEdit = isEditing ? getAdjustedScoreData(editForm.team, editScores, editMetricComments) : null;
-              const score = Number(audit.quality_score);
+              const score = clampScoreValue(Number(audit.quality_score)) ?? 0;
               const band = getScoreBand(score);
               return (
                 <div key={audit.id} style={s.auditEntry}>
