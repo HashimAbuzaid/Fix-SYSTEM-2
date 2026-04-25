@@ -1568,6 +1568,12 @@ function AppShell() {
     setSidebarExpandedAttribute(isSidebarPinned);
   }, [isSidebarPinned, setSidebarExpandedAttribute]);
 
+  const desktopShellStyle = useMemo(() => ({
+    '--da-sidebar-collapsed-width': `${SIDEBAR_COLLAPSED_WIDTH}px`,
+    '--da-sidebar-expanded-width': `${SIDEBAR_EXPANDED_WIDTH}px`,
+    '--da-expand-ease': reducedMotion ? '0ms' : EXPAND_EASE,
+  }) as CSSProperties, [reducedMotion]);
+
   // ── Derived values ────────────────────────────────────────
 
   if (loading) return <LoadingScreen theme={theme} />;
@@ -1615,12 +1621,6 @@ function AppShell() {
     zIndex: 101,
     animation: reducedMotion ? undefined : 'da-top-bar-glow 3s ease-in-out infinite',
   };
-
-  const desktopShellStyle = useMemo(() => ({
-    '--da-sidebar-collapsed-width': `${SIDEBAR_COLLAPSED_WIDTH}px`,
-    '--da-sidebar-expanded-width': `${SIDEBAR_EXPANDED_WIDTH}px`,
-    '--da-expand-ease': reducedMotion ? '0ms' : EXPAND_EASE,
-  }) as CSSProperties, [reducedMotion]);
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
