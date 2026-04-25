@@ -128,73 +128,10 @@ const ROLE_COLORS: Readonly<Record<string, string>> = {
 // Module-level style factories  (no closure capture → stable)
 // ═════════════════════════════════════════════════════════════
 
-function makeNavButtonStyle(
-  active: boolean,
-  hovered: boolean,
-  expanded: boolean,
-  isDark: boolean,
-  reducedMotion: boolean,
-  activeGroupColor: string,
-): CSSProperties {
+function makeNavButtonStyle(activeGroupColor: string): CSSProperties {
   return {
-    position: 'relative',
-    display: 'flex',
-    alignItems: 'center',
-    gap: expanded ? '10px' : '0',
-    height: `${SIDEBAR_ITEM_HEIGHT}px`,
-    minHeight: `${SIDEBAR_ITEM_HEIGHT}px`,
-    marginBottom: `${SIDEBAR_ITEM_GAP}px`,
-    textAlign: 'left',
-    borderRadius: '14px',
-    padding: expanded ? '0 12px' : '0',
-    justifyContent: expanded ? 'flex-start' : 'center',
-    border: active ? `1px solid ${activeGroupColor}33` : '1px solid transparent',
-    background: active
-      ? `linear-gradient(135deg, ${activeGroupColor}22 0%, ${activeGroupColor}15 100%)`
-      : hovered
-      ? isDark ? 'rgba(255,255,255,0.05)' : 'rgba(37,99,235,0.05)'
-      : 'transparent',
-    color: active
-      ? activeGroupColor
-      : hovered
-      ? isDark ? '#93c5fd' : '#2563eb'
-      : isDark ? '#94a3b8' : '#64748b',
-    overflow: 'hidden',
-    whiteSpace: 'nowrap',
-    cursor: 'pointer',
-    transition: reducedMotion
-      ? undefined
-      : `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, border-color 160ms ease`,
-    width: '100%',
-    fontFamily: "'DM Sans', sans-serif",
-  };
-}
-
-function makeNavIconBubbleStyle(
-  active: boolean,
-  hovered: boolean,
-  isDark: boolean,
-  activeGroupColor: string,
-): CSSProperties {
-  return {
-    width: '30px',
-    height: '30px',
-    borderRadius: '9px',
-    display: 'grid',
-    placeItems: 'center',
-    flexShrink: 0,
-    color: active
-      ? activeGroupColor
-      : hovered
-      ? isDark ? '#93c5fd' : '#2563eb'
-      : isDark ? '#64748b' : '#94a3b8',
-    background: active
-      ? `${activeGroupColor}18`
-      : hovered
-      ? isDark ? 'rgba(255,255,255,0.07)' : 'rgba(37,99,235,0.08)'
-      : 'transparent',
-    transition: 'background 140ms ease, color 140ms ease',
-  };
+    '--nav-accent': activeGroupColor,
+  } as CSSProperties;
 }
 
 function makeActiveIndicatorStyle(
@@ -216,22 +153,6 @@ function makeActiveIndicatorStyle(
   };
 }
 
-function makeNavLabelStyle(active: boolean, expanded: boolean, reducedMotion: boolean): CSSProperties {
-  return {
-    fontSize: '13px',
-    fontWeight: active ? 700 : 600,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    opacity: expanded ? 1 : 0,
-    maxWidth: expanded ? '160px' : '0',
-    transition: reducedMotion
-      ? undefined
-      : `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
-    color: 'currentColor',
-    fontFamily: "'DM Sans', sans-serif",
-  };
-}
 
 // ═════════════════════════════════════════════════════════════
 // Hooks
@@ -398,6 +319,287 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.65) bri
 input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 button { -webkit-tap-highlight-color: transparent; }
 button:focus-visible { outline: 2px solid rgba(59,130,246,0.7); outline-offset: 2px; border-radius: 10px; }
+
+.da-desktop-shell {
+  display: grid;
+  grid-template-columns: var(--da-sidebar-collapsed-width, 72px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  transition: grid-template-columns var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+}
+.da-desktop-shell[data-expanded="true"] {
+  grid-template-columns: var(--da-sidebar-expanded-width, 272px) minmax(0, 1fr);
+}
+.da-sidebar-dock {
+  position: sticky;
+  top: 80px;
+  align-self: start;
+  width: var(--da-sidebar-collapsed-width, 72px);
+  height: calc(100vh - 96px);
+  max-height: calc(100vh - 96px);
+  min-height: 380px;
+  z-index: 10;
+  transition: width var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-dock {
+  width: var(--da-sidebar-expanded-width, 272px);
+}
+.da-sidebar-panel {
+  position: relative;
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  padding: 8px 8px 0 8px;
+  border-radius: 22px;
+  border: var(--da-sidebar-border);
+  background: var(--da-sidebar-bg);
+  box-shadow: var(--da-sidebar-shadow-collapsed);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transition: box-shadow 200ms ease;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-panel {
+  box-shadow: var(--da-sidebar-shadow-expanded);
+}
+.da-sidebar-rail-header {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 10px 4px 14px 4px;
+  justify-content: center;
+  border-bottom: var(--da-sidebar-header-border);
+  overflow: hidden;
+  transition: gap var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1)), padding var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-rail-header {
+  gap: 10px;
+  padding: 10px 8px 14px 8px;
+  justify-content: flex-start;
+}
+.da-sidebar-logo-wrap {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  padding: 5px;
+  background: var(--da-sidebar-logo-bg);
+  border: var(--da-sidebar-logo-border);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.da-sidebar-brand-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-10px);
+  transition: opacity 140ms ease, transform 180ms ease;
+  pointer-events: none;
+  overflow: hidden;
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-brand-text {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.da-nav-rail {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+  scrollbar-width: thin;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+.da-nav-group-label {
+  padding: 8px 0 4px 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  overflow: hidden;
+  max-width: 0;
+  opacity: 0;
+  transition: max-width var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1)), opacity 120ms ease, padding var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+  white-space: nowrap;
+  font-family: 'DM Sans', sans-serif;
+}
+.da-desktop-shell[data-expanded="true"] .da-nav-group-label {
+  padding: 8px 12px 4px 12px;
+  max-width: 200px;
+  opacity: 1;
+}
+.da-nav-divider {
+  height: 1px;
+  margin: 6px 8px;
+  background: var(--da-sidebar-divider-bg);
+  transition: margin var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+}
+.da-desktop-shell[data-expanded="true"] .da-nav-divider {
+  margin: 6px 12px;
+}
+.da-nav-button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 46px;
+  min-height: 46px;
+  margin-bottom: 3px;
+  text-align: left;
+  border-radius: 14px;
+  padding: 0;
+  justify-content: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--da-nav-muted);
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 140ms ease, background 120ms ease, gap var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1)), padding var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1)), border-color 160ms ease;
+  width: 100%;
+  font-family: 'DM Sans', sans-serif;
+}
+.da-desktop-shell[data-expanded="true"] .da-nav-button {
+  gap: 10px;
+  padding: 0 12px;
+  justify-content: flex-start;
+}
+.da-nav-button:hover {
+  background: var(--da-nav-hover-bg);
+  color: var(--da-nav-hover-color);
+}
+.da-nav-button[data-active="true"] {
+  border-color: color-mix(in srgb, var(--nav-accent) 20%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--nav-accent) 13%, transparent) 0%, color-mix(in srgb, var(--nav-accent) 8%, transparent) 100%);
+  color: var(--nav-accent);
+}
+.da-nav-icon-bubble {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: var(--da-nav-icon-muted);
+  background: transparent;
+  transition: background 140ms ease, color 140ms ease;
+}
+.da-nav-button:hover .da-nav-icon-bubble {
+  color: var(--da-nav-hover-color);
+  background: var(--da-nav-icon-hover-bg);
+}
+.da-nav-button[data-active="true"] .da-nav-icon-bubble {
+  color: var(--nav-accent);
+  background: color-mix(in srgb, var(--nav-accent) 10%, transparent);
+}
+.da-nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  max-width: 0;
+  transition: max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease;
+  color: currentColor;
+  font-family: 'DM Sans', sans-serif;
+}
+.da-nav-button[data-active="true"] .da-nav-label { font-weight: 700; }
+.da-desktop-shell[data-expanded="true"] .da-nav-label {
+  opacity: 1;
+  max-width: 160px;
+}
+.da-sidebar-user-shell {
+  margin-top: auto;
+  padding: 8px;
+  border-top: var(--da-sidebar-user-border);
+}
+.da-sidebar-user-card {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 6px;
+  border-radius: 14px;
+  background: var(--da-sidebar-user-bg);
+  justify-content: center;
+  transition: all var(--da-expand-ease, 240ms cubic-bezier(0.22, 1, 0.36, 1));
+  overflow: hidden;
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-user-card {
+  gap: 10px;
+  padding: 10px;
+  justify-content: flex-start;
+}
+.da-sidebar-user-copy {
+  flex: 1;
+  min-width: 0;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 160ms ease, transform 200ms ease;
+  pointer-events: none;
+  overflow: hidden;
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-user-copy {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+.da-sidebar-user-logout {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: var(--da-sidebar-user-logout-border);
+  background: transparent;
+  color: var(--da-sidebar-user-logout-color);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  opacity: 0;
+  width: 0;
+  padding: 0;
+  border-width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 160ms ease, width 180ms ease, color 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.da-desktop-shell[data-expanded="true"] .da-sidebar-user-logout {
+  opacity: 1;
+  width: 28px;
+  padding: initial;
+  border-width: 1px;
+  pointer-events: auto;
+}
+.da-sidebar-user-logout:hover {
+  color: #ef4444;
+  border-color: rgba(239,68,68,0.4);
+  background: rgba(239,68,68,0.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .da-desktop-shell,
+  .da-sidebar-dock,
+  .da-sidebar-panel,
+  .da-sidebar-rail-header,
+  .da-sidebar-brand-text,
+  .da-nav-group-label,
+  .da-nav-divider,
+  .da-nav-button,
+  .da-nav-label,
+  .da-sidebar-user-card,
+  .da-sidebar-user-copy,
+  .da-sidebar-user-logout {
+    transition: none !important;
+  }
+}
+
 `;
 
 function useGlobalStyles() {
@@ -581,9 +783,6 @@ const NavIconSvg = memo(function NavIconSvg({ label, size = 17 }: { label: strin
 interface NavButtonProps {
   item: NavItem;
   isActive: boolean;
-  expanded: boolean;
-  isDark: boolean;
-  reducedMotion: boolean;
   activeGroupColor: string;
   onNavigate: (path: RoutePath) => void;
 }
@@ -591,57 +790,35 @@ interface NavButtonProps {
 const NavButton = memo(function NavButton({
   item,
   isActive,
-  expanded,
-  isDark,
-  reducedMotion,
   activeGroupColor,
   onNavigate,
 }: NavButtonProps) {
-  const [hovered, setHovered] = useState(false);
-
   const handleClick = useCallback(() => onNavigate(item.path), [onNavigate, item.path]);
-  const handleEnter = useCallback(() => setHovered(true), []);
-  const handleLeave = useCallback(() => setHovered(false), []);
-
-  const buttonStyle = useMemo(
-    () => makeNavButtonStyle(isActive, hovered, expanded, isDark, reducedMotion, activeGroupColor),
-    [isActive, hovered, expanded, isDark, reducedMotion, activeGroupColor],
-  );
-  const iconBubbleStyle = useMemo(
-    () => makeNavIconBubbleStyle(isActive, hovered, isDark, activeGroupColor),
-    [isActive, hovered, isDark, activeGroupColor],
-  );
+  const buttonStyle = useMemo(() => makeNavButtonStyle(activeGroupColor), [activeGroupColor]);
   const indicatorStyle = useMemo(
-    () => makeActiveIndicatorStyle(isActive, reducedMotion, activeGroupColor),
-    [isActive, reducedMotion, activeGroupColor],
-  );
-  const labelStyle = useMemo(
-    () => makeNavLabelStyle(isActive, expanded, reducedMotion),
-    [isActive, expanded, reducedMotion],
+    () => makeActiveIndicatorStyle(isActive, false, activeGroupColor),
+    [isActive, activeGroupColor],
   );
 
   return (
     <button
       type="button"
+      className="da-nav-button"
+      data-active={isActive ? 'true' : 'false'}
       onClick={handleClick}
-      onMouseEnter={handleEnter}
-      onMouseLeave={handleLeave}
       aria-current={isActive ? 'page' : undefined}
-      title={!expanded ? item.label : undefined}
+      title={item.label}
       style={buttonStyle}
     >
       <div style={indicatorStyle} />
-      <span style={iconBubbleStyle}>
+      <span className="da-nav-icon-bubble">
         <NavIconSvg label={item.label} size={15} />
       </span>
-      <span style={labelStyle}>{item.label}</span>
+      <span className="da-nav-label">{item.label}</span>
     </button>
   );
 }, (prev, next) =>
   prev.isActive === next.isActive &&
-  prev.expanded === next.expanded &&
-  prev.isDark === next.isDark &&
-  prev.reducedMotion === next.reducedMotion &&
   prev.activeGroupColor === next.activeGroupColor &&
   prev.item === next.item &&
   prev.onNavigate === next.onNavigate
@@ -652,12 +829,10 @@ const NavButton = memo(function NavButton({
 // ═════════════════════════════════════════════════════════════
 
 interface SidebarPanelProps {
-  navItems: readonly NavItem[];
   navGroupsOrdered: [string, NavItem[]][];
   activePath: string;
-  expanded: boolean;
+  isPinned: boolean;
   isDark: boolean;
-  reducedMotion: boolean;
   activeGroupColor: string;
   profile: UserProfile;
   userInitials: string;
@@ -668,12 +843,10 @@ interface SidebarPanelProps {
 }
 
 const SidebarPanel = memo(function SidebarPanel({
-  navItems,
   navGroupsOrdered,
   activePath,
-  expanded,
+  isPinned,
   isDark,
-  reducedMotion,
   activeGroupColor,
   profile,
   userInitials,
@@ -682,127 +855,46 @@ const SidebarPanel = memo(function SidebarPanel({
   onMouseLeave,
   onLogout,
 }: SidebarPanelProps) {
-  const sidebarDockStyle = useMemo<CSSProperties>(() => ({
-    position: 'sticky',
-    top: '80px',
-    alignSelf: 'start',
-    width: `${expanded ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH}px`,
-    height: 'calc(100vh - 96px)',
-    maxHeight: 'calc(100vh - 96px)',
-    minHeight: '380px',
-    zIndex: 10,
-    transition: reducedMotion ? undefined : `width ${EXPAND_EASE}`,
-  }), [expanded, reducedMotion]);
-
-  const sidebarPanelStyle = useMemo<CSSProperties>(() => ({
-    position: 'relative',
-    width: '100%',
-    minHeight: '100%',
-    height: '100%',
-    padding: '8px 8px 0 8px',
-    borderRadius: '22px',
-    border: isDark ? '1px solid rgba(148,163,184,0.1)' : '1px solid rgba(203,213,225,0.7)',
-    background: isDark ? 'rgba(8,14,32,0.92)' : 'rgba(255,255,255,0.93)',
-    boxShadow: expanded
-      ? isDark ? '0 32px 64px rgba(0,0,0,0.5)' : '0 32px 64px rgba(15,23,42,0.12)'
-      : isDark ? '0 8px 24px rgba(0,0,0,0.3)' : '0 8px 24px rgba(15,23,42,0.06)',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    backdropFilter: 'blur(24px)',
-    WebkitBackdropFilter: 'blur(24px)',
-    transition: reducedMotion ? undefined : `width ${EXPAND_EASE}, box-shadow 200ms ease`,
-    willChange: 'width',
-    transform: 'translateZ(0)',
-    backfaceVisibility: 'hidden',
-  }), [expanded, isDark, reducedMotion]);
-
-  const railHeaderStyle = useMemo<CSSProperties>(() => ({
-    display: 'flex',
-    alignItems: 'center',
-    gap: expanded ? '10px' : '0',
-    padding: expanded ? '10px 8px 14px 8px' : '10px 4px 14px 4px',
-    justifyContent: expanded ? 'flex-start' : 'center',
-    borderBottom: isDark ? '1px solid rgba(148,163,184,0.07)' : '1px solid rgba(203,213,225,0.3)',
-    overflow: 'hidden',
-    transition: reducedMotion ? undefined : `gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
-  }), [expanded, isDark, reducedMotion]);
-
-  const railLogoWrapStyle = useMemo<CSSProperties>(() => ({
-    width: '38px',
-    height: '38px',
-    borderRadius: '12px',
-    padding: '5px',
-    background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
-    border: isDark ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(59,130,246,0.15)',
-    display: 'grid',
-    placeItems: 'center',
-    overflow: 'hidden',
-    flexShrink: 0,
-  }), [isDark]);
-
-  const railBrandTextStyle = useMemo<CSSProperties>(() => ({
-    display: 'grid',
-    gap: '1px',
-    minWidth: 0,
-    opacity: expanded ? 1 : 0,
-    transform: expanded ? 'translateX(0)' : 'translateX(-10px)',
-    transition: reducedMotion ? undefined : 'opacity 140ms ease, transform 180ms ease',
-    pointerEvents: expanded ? 'auto' : 'none',
-    overflow: 'hidden',
-  }), [expanded, reducedMotion]);
-
-  const navGroupLabelBaseStyle = useMemo<CSSProperties>(() => ({
-    padding: expanded ? '8px 12px 4px 12px' : '8px 0 4px 0',
-    fontSize: '10px',
-    fontWeight: 800,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    overflow: 'hidden',
-    maxWidth: expanded ? '200px' : '0',
-    opacity: expanded ? 1 : 0,
-    transition: reducedMotion ? undefined : `max-width ${EXPAND_EASE}, opacity 120ms ease`,
-    whiteSpace: 'nowrap',
-    fontFamily: "'DM Sans', sans-serif",
-  }), [expanded, reducedMotion]);
-
-  const navDividerStyle = useMemo<CSSProperties>(() => ({
-    height: '1px',
-    margin: expanded ? '6px 12px' : '6px 8px',
-    background: isDark ? 'rgba(148,163,184,0.06)' : 'rgba(203,213,225,0.4)',
-    transition: reducedMotion ? undefined : `margin ${EXPAND_EASE}`,
-  }), [expanded, isDark, reducedMotion]);
-
-  const navRailStyle: CSSProperties = {
-    flex: 1,
-    minHeight: 0,
-    overflowY: 'auto',
-    overflowX: 'hidden',
-    padding: '8px 0',
-    scrollbarWidth: 'thin',
-    scrollBehavior: 'smooth',
-    WebkitOverflowScrolling: 'touch',
-  };
+  const sidebarVars = useMemo(() => ({
+    '--da-sidebar-border': isDark ? '1px solid rgba(148,163,184,0.1)' : '1px solid rgba(203,213,225,0.7)',
+    '--da-sidebar-bg': isDark ? 'rgba(8,14,32,0.92)' : 'rgba(255,255,255,0.93)',
+    '--da-sidebar-shadow-collapsed': isDark ? '0 8px 24px rgba(0,0,0,0.3)' : '0 8px 24px rgba(15,23,42,0.06)',
+    '--da-sidebar-shadow-expanded': isDark ? '0 32px 64px rgba(0,0,0,0.5)' : '0 32px 64px rgba(15,23,42,0.12)',
+    '--da-sidebar-header-border': isDark ? '1px solid rgba(148,163,184,0.07)' : '1px solid rgba(203,213,225,0.3)',
+    '--da-sidebar-logo-bg': isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
+    '--da-sidebar-logo-border': isDark ? '1px solid rgba(59,130,246,0.2)' : '1px solid rgba(59,130,246,0.15)',
+    '--da-sidebar-divider-bg': isDark ? 'rgba(148,163,184,0.06)' : 'rgba(203,213,225,0.4)',
+    '--da-sidebar-user-border': isDark ? '1px solid rgba(148,163,184,0.08)' : '1px solid rgba(203,213,225,0.25)',
+    '--da-sidebar-user-bg': isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+    '--da-sidebar-user-logout-border': isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.6)',
+    '--da-sidebar-user-logout-color': isDark ? '#64748b' : '#94a3b8',
+    '--da-nav-muted': isDark ? '#94a3b8' : '#64748b',
+    '--da-nav-icon-muted': isDark ? '#64748b' : '#94a3b8',
+    '--da-nav-hover-bg': isDark ? 'rgba(255,255,255,0.05)' : 'rgba(37,99,235,0.05)',
+    '--da-nav-hover-color': isDark ? '#93c5fd' : '#2563eb',
+    '--da-nav-icon-hover-bg': isDark ? 'rgba(255,255,255,0.07)' : 'rgba(37,99,235,0.08)',
+  }) as CSSProperties, [isDark]);
 
   return (
     <aside
-      style={sidebarDockStyle}
+      className="da-sidebar-dock"
+      data-expanded={isPinned ? 'true' : 'false'}
+      style={sidebarVars}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       role="navigation"
       aria-label="Sidebar navigation"
     >
-      <div style={sidebarPanelStyle}>
-        {/* Logo header */}
-        <div style={railHeaderStyle}>
-          <div style={railLogoWrapStyle}>
+      <div className="da-sidebar-panel">
+        <div className="da-sidebar-rail-header">
+          <div className="da-sidebar-logo-wrap">
             <img
               src={LOGO_MARK_SRC}
               alt="Detroit Axle"
               style={{ width: '26px', height: '26px', objectFit: 'contain' }}
             />
           </div>
-          <div style={railBrandTextStyle}>
+          <div className="da-sidebar-brand-text">
             <div style={{
               fontFamily: "'Bricolage Grotesque', sans-serif",
               fontSize: '14px',
@@ -826,48 +918,29 @@ const SidebarPanel = memo(function SidebarPanel({
           </div>
         </div>
 
-        {/* Nav items */}
-        <div style={navRailStyle}>
-          {expanded
-            ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
-                <div key={groupName}>
-                  {gi > 0 && <div style={navDividerStyle} />}
-                  <div style={{ ...navGroupLabelBaseStyle, color: GROUP_COLORS[groupName] || '#6b7280' }}>
-                    {groupName}
-                  </div>
-                  {groupItems.map((item) => (
-                    <NavButton
-                      key={item.path}
-                      item={item}
-                      isActive={activePath === item.path}
-                      expanded={expanded}
-                      isDark={isDark}
-                      reducedMotion={reducedMotion}
-                      activeGroupColor={activeGroupColor}
-                      onNavigate={onNavigate}
-                    />
-                  ))}
-                </div>
-              ))
-            : navItems.map((item) => (
+        <div className="da-nav-rail">
+          {navGroupsOrdered.map(([groupName, groupItems], gi) => (
+            <div key={groupName}>
+              {gi > 0 && <div className="da-nav-divider" />}
+              <div className="da-nav-group-label" style={{ color: GROUP_COLORS[groupName] || '#6b7280' }}>
+                {groupName}
+              </div>
+              {groupItems.map((item) => (
                 <NavButton
                   key={item.path}
                   item={item}
                   isActive={activePath === item.path}
-                  expanded={expanded}
-                  isDark={isDark}
-                  reducedMotion={reducedMotion}
                   activeGroupColor={activeGroupColor}
                   onNavigate={onNavigate}
                 />
               ))}
+            </div>
+          ))}
         </div>
 
-        {/* User card */}
         <SidebarUserCard
           profile={profile}
           initials={userInitials}
-          expanded={expanded}
           isDark={isDark}
           onLogout={onLogout}
         />
@@ -876,11 +949,9 @@ const SidebarPanel = memo(function SidebarPanel({
   );
 }, (prev, next) =>
   prev.activePath === next.activePath &&
-  prev.expanded === next.expanded &&
+  prev.isPinned === next.isPinned &&
   prev.isDark === next.isDark &&
-  prev.reducedMotion === next.reducedMotion &&
   prev.activeGroupColor === next.activeGroupColor &&
-  prev.navItems === next.navItems &&
   prev.navGroupsOrdered === next.navGroupsOrdered &&
   prev.profile === next.profile &&
   prev.userInitials === next.userInitials &&
@@ -1281,13 +1352,11 @@ const LoadingScreen = memo(function LoadingScreen({
 const SidebarUserCard = memo(function SidebarUserCard({
   profile,
   initials,
-  expanded,
   isDark,
   onLogout,
 }: {
   profile: UserProfile;
   initials: string;
-  expanded: boolean;
   isDark: boolean;
   onLogout: () => void;
 }) {
@@ -1295,22 +1364,8 @@ const SidebarUserCard = memo(function SidebarUserCard({
   const roleColor = ROLE_COLORS[profile.role || 'qa'] || '#6b7280';
 
   return (
-    <div style={{
-      marginTop: 'auto',
-      padding: '8px',
-      borderTop: isDark ? '1px solid rgba(148,163,184,0.08)' : '1px solid rgba(203,213,225,0.25)',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: expanded ? '10px' : '0',
-        padding: expanded ? '10px' : '6px',
-        borderRadius: '14px',
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-        justifyContent: expanded ? 'flex-start' : 'center',
-        transition: `all ${EXPAND_EASE}`,
-        overflow: 'hidden',
-      }}>
+    <div className="da-sidebar-user-shell">
+      <div className="da-sidebar-user-card">
         <div style={{
           width: '32px',
           height: '32px',
@@ -1340,15 +1395,7 @@ const SidebarUserCard = memo(function SidebarUserCard({
           }} />
         </div>
 
-        <div style={{
-          flex: 1,
-          minWidth: 0,
-          opacity: expanded ? 1 : 0,
-          transform: expanded ? 'translateX(0)' : 'translateX(-8px)',
-          transition: 'opacity 160ms ease, transform 200ms ease',
-          pointerEvents: expanded ? 'auto' : 'none',
-          overflow: 'hidden',
-        }}>
+        <div className="da-sidebar-user-copy">
           <div style={{ fontSize: '12px', fontWeight: 700, color: isDark ? '#e2e8f0' : '#1e293b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: "'DM Sans', sans-serif" }}>
             {name}
           </div>
@@ -1357,41 +1404,15 @@ const SidebarUserCard = memo(function SidebarUserCard({
           </div>
         </div>
 
-        {expanded && (
-          <button
-            type="button"
-            onClick={onLogout}
-            title="Sign out"
-            aria-label="Sign out"
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              border: isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.6)',
-              background: 'transparent',
-              color: isDark ? '#64748b' : '#94a3b8',
-              cursor: 'pointer',
-              display: 'grid',
-              placeItems: 'center',
-              flexShrink: 0,
-              transition: 'all 140ms ease',
-            }}
-            onMouseEnter={(e) => {
-              const t = e.currentTarget;
-              t.style.color = '#ef4444';
-              t.style.borderColor = 'rgba(239,68,68,0.4)';
-              t.style.background = 'rgba(239,68,68,0.08)';
-            }}
-            onMouseLeave={(e) => {
-              const t = e.currentTarget;
-              t.style.color = isDark ? '#64748b' : '#94a3b8';
-              t.style.borderColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(203,213,225,0.6)';
-              t.style.background = 'transparent';
-            }}
-          >
-            <LogoutIcon size={13} />
-          </button>
-        )}
+        <button
+          type="button"
+          className="da-sidebar-user-logout"
+          onClick={onLogout}
+          title="Sign out"
+          aria-label="Sign out"
+        >
+          <LogoutIcon size={13} />
+        </button>
       </div>
     </div>
   );
@@ -1478,7 +1499,8 @@ function AppShell() {
   useGlobalStyles();
 
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
-  const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+  const desktopShellRef = useRef<HTMLDivElement | null>(null);
+  const sidebarPinnedRef = useRef(false);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
@@ -1497,8 +1519,9 @@ function AppShell() {
   // Reset sidebar state when entering compact mode
   useEffect(() => {
     if (isCompactLayout) {
+      sidebarPinnedRef.current = false;
+      desktopShellRef.current?.setAttribute('data-expanded', 'false');
       setIsSidebarPinned(false);
-      setIsSidebarHovered(false);
     }
   }, [isCompactLayout]);
 
@@ -1525,10 +1548,25 @@ function AppShell() {
   // ── Stable callbacks ──────────────────────────────────────
 
   const handleNavigate = useCallback((path: RoutePath) => navigate(path), [navigate]);
-  const handleToggleSidebar = useCallback(() => setIsSidebarPinned((p) => !p), []);
+  const setSidebarExpandedAttribute = useCallback((expanded: boolean) => {
+    desktopShellRef.current?.setAttribute('data-expanded', expanded ? 'true' : 'false');
+  }, []);
+  const handleToggleSidebar = useCallback(() => {
+    setIsSidebarPinned((previous) => {
+      const next = !previous;
+      sidebarPinnedRef.current = next;
+      setSidebarExpandedAttribute(next);
+      return next;
+    });
+  }, [setSidebarExpandedAttribute]);
+  const handleSidebarEnter = useCallback(() => setSidebarExpandedAttribute(true), [setSidebarExpandedAttribute]);
+  const handleSidebarLeave = useCallback(() => setSidebarExpandedAttribute(sidebarPinnedRef.current), [setSidebarExpandedAttribute]);
   const handleLogout = useCallback(() => logout(), [logout]);
-  const handleSidebarEnter = useCallback(() => setIsSidebarHovered(true), []);
-  const handleSidebarLeave = useCallback(() => setIsSidebarHovered(false), []);
+
+  useEffect(() => {
+    sidebarPinnedRef.current = isSidebarPinned;
+    setSidebarExpandedAttribute(isSidebarPinned);
+  }, [isSidebarPinned, setSidebarExpandedAttribute]);
 
   // ── Derived values ────────────────────────────────────────
 
@@ -1560,7 +1598,6 @@ function AppShell() {
   const hasSidebarRail = isStaff || isSupervisor;
 
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
-  const expandedSidebar = !isCompactLayout && (isSidebarPinned || isSidebarHovered);
   const userInitials = getUserInitials(profile);
 
   const activeItem = navItems.find((item) => item.path === location.pathname);
@@ -1579,15 +1616,11 @@ function AppShell() {
     animation: reducedMotion ? undefined : 'da-top-bar-glow 3s ease-in-out infinite',
   };
 
-  const desktopShellStyle: CSSProperties = {
-    display: 'grid',
-    gridTemplateColumns: hasSidebarRail
-      ? `${expandedSidebar ? SIDEBAR_EXPANDED_WIDTH : SIDEBAR_COLLAPSED_WIDTH}px minmax(0, 1fr)`
-      : 'minmax(0, 1fr)',
-    gap: hasSidebarRail ? '16px' : '0',
-    alignItems: 'start',
-    transition: reducedMotion ? undefined : `grid-template-columns ${EXPAND_EASE}`,
-  };
+  const desktopShellStyle = useMemo(() => ({
+    '--da-sidebar-collapsed-width': `${SIDEBAR_COLLAPSED_WIDTH}px`,
+    '--da-sidebar-expanded-width': `${SIDEBAR_EXPANDED_WIDTH}px`,
+    '--da-expand-ease': reducedMotion ? '0ms' : EXPAND_EASE,
+  }) as CSSProperties, [reducedMotion]);
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
@@ -1650,14 +1683,16 @@ function AppShell() {
                 </div>
               </>
             ) : (
-              <div style={desktopShellStyle}>
+              <div
+                ref={desktopShellRef}
+                className="da-desktop-shell"
+                style={desktopShellStyle}
+              >
                 <SidebarPanel
-                  navItems={navItems}
                   navGroupsOrdered={navGroupsOrdered}
                   activePath={location.pathname}
-                  expanded={expandedSidebar}
+                  isPinned={isSidebarPinned}
                   isDark={isDark}
-                  reducedMotion={reducedMotion}
                   activeGroupColor={activeGroupColor}
                   profile={profile}
                   userInitials={userInitials}
