@@ -571,7 +571,7 @@ const NavIconSvg = memo(function NavIconSvg({ label, size = 17 }: { label: strin
 
   return (map[label] ?? (
     <svg {...p}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
-  )) as JSX.Element;
+  ));
 });
 
 // ═════════════════════════════════════════════════════════════
