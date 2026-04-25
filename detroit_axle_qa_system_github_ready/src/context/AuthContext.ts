@@ -1,8 +1,10 @@
 import { createContext, useContext } from 'react';
 
+export type UserRole = 'admin' | 'qa' | 'agent' | 'supervisor';
+
 export type UserProfile = {
   id: string;
-  role: 'admin' | 'qa' | 'agent' | 'supervisor';
+  role: UserRole;
   agent_id: string | null;
   agent_name: string;
   display_name: string | null;
@@ -22,6 +24,10 @@ export const AuthContext = createContext<AuthContextValue>({
   logout: async () => {},
 });
 
-export function useAuth() {
-  return useContext(AuthContext);
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthContext.Provider');
+  }
+  return ctx;
 }

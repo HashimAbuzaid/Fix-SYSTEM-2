@@ -51,7 +51,6 @@ export type ThemePalette = {
   errorCardBorder: string;
   errorText: string;
   contentText: string;
-  // ── Compact header tokens ──
   compactHeaderBg: string;
   compactHeaderBorder: string;
   compactHeaderShadow: string;
@@ -70,10 +69,8 @@ export type ThemePalette = {
   headerSignOutBg: string;
   headerSignOutBorder: string;
   headerSignOutColor: string;
-  // ── Nav group labels ──
   navGroupLabelColor: string;
   navDividerColor: string;
-  // ── Avatar / profile panel ──
   avatarRingColor: string;
   profileStatBg: string;
   profileStatBorder: string;
@@ -81,11 +78,29 @@ export type ThemePalette = {
   profileStatValue: string;
 };
 
-export function readStoredTheme(): ThemeMode {
-  if (typeof window === 'undefined') return 'dark';
-  const stored = window.localStorage.getItem('detroit-axle-theme-mode');
-  return stored === 'light' ? 'light' : 'dark';
+/* ── Theme detection ── */
+
+export function isThemeMode(value: string): value is ThemeMode {
+  return value === 'dark' || value === 'light';
 }
+
+export function readStoredTheme(): ThemeMode {
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = window.localStorage.getItem('detroit-axle-theme-mode');
+      if (stored && isThemeMode(stored)) return stored;
+    } catch {
+      /* ignore */
+    }
+
+    if (window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+  }
+  return 'dark';
+}
+
+/* ── Palettes ── */
 
 export function getThemePalette(mode: ThemeMode): ThemePalette {
   if (mode === 'light') {
@@ -143,7 +158,6 @@ export function getThemePalette(mode: ThemeMode): ThemePalette {
       errorCardBorder: '1px solid rgba(248,113,113,0.24)',
       errorText: '#0f172a',
       contentText: '#334155',
-      // compact header
       compactHeaderBg: 'rgba(255,255,255,0.88)',
       compactHeaderBorder: '1px solid rgba(148,163,184,0.18)',
       compactHeaderShadow: '0 2px 20px rgba(15,23,42,0.07)',
@@ -226,7 +240,6 @@ export function getThemePalette(mode: ThemeMode): ThemePalette {
     errorCardBorder: '1px solid rgba(248,113,113,0.20)',
     errorText: '#f8fafc',
     contentText: '#e5eefb',
-    // compact header
     compactHeaderBg: 'rgba(6, 12, 26, 0.86)',
     compactHeaderBorder: '1px solid rgba(148,163,184,0.10)',
     compactHeaderShadow: '0 2px 24px rgba(0,0,0,0.40)',
@@ -255,11 +268,9 @@ export function getThemePalette(mode: ThemeMode): ThemePalette {
   };
 }
 
-// ─────────────────────────────────────────────────────────────
-// CSS variable maps (consumed by child components via var())
-// ─────────────────────────────────────────────────────────────
+/* ── CSS Variables ── */
 
-const LIGHT_CSS_VARS: Record<string, string> = {
+const LIGHT_CSS_VARS = {
   '--da-page-text': '#334155',
   '--da-title': '#0f172a',
   '--da-muted-text': '#475569',
@@ -324,9 +335,9 @@ const LIGHT_CSS_VARS: Record<string, string> = {
   '--screen-muted': '#64748b',
   '--screen-select-option-bg': '#ffffff',
   '--screen-select-option-text': '#0f172a',
-};
+} as const;
 
-const DARK_CSS_VARS: Record<string, string> = {
+const DARK_CSS_VARS = {
   '--da-page-text': '#e5eefb',
   '--da-title': '#f8fafc',
   '--da-muted-text': '#cbd5e1',
@@ -391,19 +402,21 @@ const DARK_CSS_VARS: Record<string, string> = {
   '--screen-muted': '#94a3b8',
   '--screen-select-option-bg': '#0d1a30',
   '--screen-select-option-text': '#e5eefb',
-};
+} as const;
 
-export function applyThemeCssVariables(mode: ThemeMode) {
+export type CssVarName = keyof typeof LIGHT_CSS_VARS;
+
+export function applyThemeCssVariables(mode: ThemeMode): void {
   if (typeof document === 'undefined') return;
   const vars = mode === 'light' ? LIGHT_CSS_VARS : DARK_CSS_VARS;
+  const style = document.documentElement.style;
   Object.entries(vars).forEach(([key, value]) => {
-    document.documentElement.style.setProperty(key, value);
+    style.setProperty(key, value);
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// createStyles — returns inline style objects used by App.tsx
-// ─────────────────────────────────────────────────────────────
+/* ── createStyles ── */
+
 export function createStyles(theme: ThemePalette, mode: ThemeMode) {
   const isLight = mode === 'light';
 
@@ -437,7 +450,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
   };
 
   return {
-    // ── Shell ──
     appShell: {
       minHeight: '100vh',
       background: theme.shellBackground,
@@ -467,7 +479,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       zIndex: 0,
     } as CSSProperties,
 
-    // ── Compact sticky header ──
     headerShell: {
       position: 'sticky',
       top: 0,
@@ -625,7 +636,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       fontWeight: 700,
     } as CSSProperties,
 
-    // ── Breadcrumb meta pills (kept for backward compat) ──
     metaStrip: { display: 'flex', gap: '8px', flexWrap: 'wrap' as const } as CSSProperties,
     metaPill: {
       padding: '6px 12px',
@@ -641,7 +651,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
     themeButton: { ...secondaryButtonBase } as CSSProperties,
     logoutButton: { ...primaryButtonBase } as CSSProperties,
 
-    // ── Content layout ──
     contentShell: {
       position: 'relative',
       zIndex: 1,
@@ -661,7 +670,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       color: theme.contentText,
     } as CSSProperties,
 
-    // ── Desktop shell ──
     workspaceShell: {
       display: 'grid',
       gridTemplateColumns: '300px minmax(0, 1fr)',
@@ -669,7 +677,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       alignItems: 'start',
     } as CSSProperties,
 
-    // ── Sidebar ──
     sidebarPanel: {
       position: 'sticky',
       top: '80px',
@@ -700,7 +707,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       margin: 0,
     } as CSSProperties,
 
-    // ── Nav group label (shown when sidebar expanded) ──
     navGroupLabel: {
       fontSize: '10px',
       fontWeight: 800,
@@ -716,7 +722,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       margin: '4px 0',
     } as CSSProperties,
 
-    // ── Mobile nav scroller ──
     navShell: {
       position: 'relative',
       zIndex: 1,
@@ -754,7 +759,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       boxShadow: theme.navButtonActiveShadow,
     } as CSSProperties,
 
-    // ── Profile panel ──
     profilePanel: {
       borderRadius: '20px',
       border: theme.panelBorder,
@@ -802,7 +806,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       fontFamily: "'JetBrains Mono', monospace",
     } as CSSProperties,
 
-    // ── Brand wrap (kept for compat) ──
     brandWrap: { display: 'flex', gap: '14px', alignItems: 'center', minWidth: 0 } as CSSProperties,
 
     brandLogoWrap: {
@@ -851,7 +854,6 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       fontFamily: "'Syne', sans-serif",
     } as CSSProperties,
 
-    // ── Loading screen ──
     loadingShell: {
       minHeight: '100vh',
       display: 'flex',
