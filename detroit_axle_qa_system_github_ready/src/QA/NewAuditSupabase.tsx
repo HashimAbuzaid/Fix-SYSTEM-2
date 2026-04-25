@@ -6,7 +6,6 @@ import {
   useCallback,
   memo,
   type CSSProperties,
-  type ChangeEvent,
 } from 'react';
 import { supabase } from '../lib/supabase';
 import {
@@ -1769,7 +1768,6 @@ const styles: Record<string, CSSProperties> = {
     border: '1px solid var(--na-border-strong)',
     background: 'var(--na-field-bg)',
     color: 'var(--na-field-text)',
-    fontSize: '14px',
     outline: 'none',
     boxSizing: 'border-box',
     resize: 'vertical',

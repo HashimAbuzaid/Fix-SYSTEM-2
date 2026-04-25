@@ -310,21 +310,6 @@ function formatDateTime(v?: string | null) {
   const d = new Date(v);
   return isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
-function getDaysOld(v?: string | null) {
-  const raw = String(v || '').slice(0, 10);
-  if (!raw) return 0;
-  const base = new Date(`${raw}T00:00:00`);
-  if (isNaN(base.getTime())) return 0;
-  const now = new Date();
-  return Math.max(
-    0,
-    Math.floor(
-      (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() -
-        base.getTime()) /
-        86400000
-    )
-  );
-}
 
 /* ═════════════════════════════════════════════════════════════
    Theme
@@ -442,39 +427,115 @@ function getAuditsListThemeVars(): Record<string, string> {
   };
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Sub-components
-   ═════════════════════════════════════════════════════════════ */
+function getMetricsForTeam(t: EditFormState['team']) {
+  if (t === 'Calls') return callsMetrics;
+  if (t === 'Tickets') return ticketsMetrics;
+  if (t === 'Sales') return salesMetrics;
+  return [];
+}
+function getMetricOptions(m: Metric) {
+  if (m.options?.length) return m.options;
+  if (LOCKED_NA_METRICS.has(m.name)) return ['N/A'];
+  const opts = ['N/A', 'Pass', 'Borderline', 'Fail'];
+  if (AUTO_FAIL_METRICS.has(m.name)) opts.push('Auto-Fail');
+  return opts;
+}
+function getMetricStoredValue(m: Metric, scores: Record<string, string>) {
+  if (LOCKED_NA_METRICS.has(m.name)) return 'N/A';
+  return scores[m.name] ?? m.defaultValue ?? 'N/A';
+}
+function createDefaultScores(t: EditFormState['team']) {
+  const d: Record<string, string> = {};
+  getMetricsForTeam(t).forEach((m) => {
+    d[m.name] = m.defaultValue ?? 'N/A';
+  });
+  return d;
+}
+function getMissingRequired(
+  t: EditFormState['team'],
+  scores: Record<string, string>
+) {
+  return getMetricsForTeam(t)
+    .filter((m) => Array.isArray(m.options) && m.defaultValue === '')
+    .filter((m) => !getMetricStoredValue(m, scores))
+    .map((m) => m.name);
+}
+function buildScoreMap(audit: AuditItem) {
+  const d = createDefaultScores(audit.team);
+  (audit.score_details || []).forEach((s) => {
+    d[s.metric] = s.result || 'N/A';
+  });
+  getMetricsForTeam(audit.team).forEach((m) => {
+    if (LOCKED_NA_METRICS.has(m.name)) d[m.name] = 'N/A';
+  });
+  return d;
+}
+function buildMetricComments(audit: AuditItem) {
+  const d: Record<string, string> = {};
+  (audit.score_details || []).forEach((s) => {
+    d[s.metric] = s.metric_comment || '';
+  });
+  return d;
+}
+function getAdjustedScoreData(
+  t: EditFormState['team'],
+  scores: Record<string, string>,
+  comments: Record<string, string>
+) {
+  const metrics = getMetricsForTeam(t);
+  const scored = metrics.filter(countsTowardScore);
+  const active = scored.filter((m) => {
+    const r = getMetricStoredValue(m, scores);
+    return r !== 'N/A' && r !== '';
+  });
+  const activeW = active.reduce((s, m) => s + m.pass, 0);
+  const fullW = scored.reduce((s, m) => s + m.pass, 0);
+  const details = metrics.map((m) => {
+    const result = getMetricStoredValue(m, scores);
+    const sc = countsTowardScore(m);
+    const aw =
+      !sc || result === 'N/A' || result === '' || activeW === 0
+        ? 0
+        : (m.pass / activeW) * fullW;
+    let earned = 0;
+    if (sc && result === 'Pass') earned = aw;
+    else if (sc && result === 'Borderline')
+      earned = m.pass > 0 ? aw * (m.borderline / m.pass) : 0;
+    return {
+      metric: m.name,
+      result,
+      pass: m.pass,
+      borderline: m.borderline,
+      adjustedWeight: aw,
+      earned,
+      counts_toward_score: sc,
+      metric_comment:
+        sc && shouldShowMetricComment(result)
+          ? (comments[m.name] || '').trim() || null
+          : null,
+    };
+  });
+  const hasAutoFail = details.some(
+    (d) =>
+      d.counts_toward_score !== false &&
+      AUTO_FAIL_METRICS.has(d.metric) &&
+      d.result === 'Auto-Fail'
+  );
+  const rawQualityScore = hasAutoFail
+    ? 0
+    : details
+        .filter((d) => d.counts_toward_score !== false)
+        .reduce((s, d) => s + d.earned, 0);
+  const qualityScore = (clampScoreValue(rawQualityScore) ?? 0).toFixed(2);
+  return { scoreDetails: details, qualityScore, hasAutoFail };
+}
 
-const EvalBandBadge = memo(function EvalBandBadge({
-  band,
-}: {
-  band: ReturnType<typeof getScoreBand>;
-}) {
-  const map: Record<string, CSSProperties> = {
-    strong: {
-      background: 'var(--al-progress-strong-bg)',
-      color: 'var(--al-progress-strong-text)',
-      borderColor: 'var(--al-progress-strong-border)',
-    },
-    medium: {
-      background: 'var(--al-progress-medium-bg)',
-      color: 'var(--al-progress-medium-text)',
-      borderColor: 'var(--al-progress-medium-border)',
-    },
-    weak: {
-      background: 'var(--al-progress-weak-bg)',
-      color: 'var(--al-progress-weak-text)',
-      borderColor: 'var(--al-progress-weak-border)',
-    },
-    empty: {
-      background: 'var(--al-surface-muted)',
-      color: 'var(--al-chip-muted-text)',
-      borderColor: 'var(--al-progress-empty-border)',
-    },
-  };
-  return <span style={map[band] || map.empty} />;
-});
+function getTeamAccent(team: string): string {
+  if (team === 'Calls') return '#3b82f6';
+  if (team === 'Tickets') return '#8b5cf6';
+  if (team === 'Sales') return '#10b981';
+  return 'var(--al-subtle)';
+}
 
 /* ═════════════════════════════════════════════════════════════
    Main Component
@@ -677,108 +738,6 @@ function AuditsListSupabase() {
     if (!m) return null;
     const p = Number(m[1]) - 1;
     return Number.isInteger(p) && p >= 0 && p < MAX_PROGRESS_EVALS ? p : null;
-  }
-  function getMetricsForTeam(t: EditFormState['team']) {
-    if (t === 'Calls') return callsMetrics;
-    if (t === 'Tickets') return ticketsMetrics;
-    if (t === 'Sales') return salesMetrics;
-    return [];
-  }
-  function getMetricOptions(m: Metric) {
-    if (m.options?.length) return m.options;
-    if (LOCKED_NA_METRICS.has(m.name)) return ['N/A'];
-    const opts = ['N/A', 'Pass', 'Borderline', 'Fail'];
-    if (AUTO_FAIL_METRICS.has(m.name)) opts.push('Auto-Fail');
-    return opts;
-  }
-  function getMetricStoredValue(m: Metric, scores: Record<string, string>) {
-    if (LOCKED_NA_METRICS.has(m.name)) return 'N/A';
-    return scores[m.name] ?? m.defaultValue ?? 'N/A';
-  }
-  function createDefaultScores(t: EditFormState['team']) {
-    const d: Record<string, string> = {};
-    getMetricsForTeam(t).forEach((m) => {
-      d[m.name] = m.defaultValue ?? 'N/A';
-    });
-    return d;
-  }
-  function getMissingRequired(
-    t: EditFormState['team'],
-    scores: Record<string, string>
-  ) {
-    return getMetricsForTeam(t)
-      .filter((m) => Array.isArray(m.options) && m.defaultValue === '')
-      .filter((m) => !getMetricStoredValue(m, scores))
-      .map((m) => m.name);
-  }
-  function buildScoreMap(audit: AuditItem) {
-    const d = createDefaultScores(audit.team);
-    (audit.score_details || []).forEach((s) => {
-      d[s.metric] = s.result || 'N/A';
-    });
-    getMetricsForTeam(audit.team).forEach((m) => {
-      if (LOCKED_NA_METRICS.has(m.name)) d[m.name] = 'N/A';
-    });
-    return d;
-  }
-  function buildMetricComments(audit: AuditItem) {
-    const d: Record<string, string> = {};
-    (audit.score_details || []).forEach((s) => {
-      d[s.metric] = s.metric_comment || '';
-    });
-    return d;
-  }
-  function getAdjustedScoreData(
-    t: EditFormState['team'],
-    scores: Record<string, string>,
-    comments: Record<string, string>
-  ) {
-    const metrics = getMetricsForTeam(t);
-    const scored = metrics.filter(countsTowardScore);
-    const active = scored.filter((m) => {
-      const r = getMetricStoredValue(m, scores);
-      return r !== 'N/A' && r !== '';
-    });
-    const activeW = active.reduce((s, m) => s + m.pass, 0);
-    const fullW = scored.reduce((s, m) => s + m.pass, 0);
-    const details = metrics.map((m) => {
-      const result = getMetricStoredValue(m, scores);
-      const sc = countsTowardScore(m);
-      const aw =
-        !sc || result === 'N/A' || result === '' || activeW === 0
-          ? 0
-          : (m.pass / activeW) * fullW;
-      let earned = 0;
-      if (sc && result === 'Pass') earned = aw;
-      else if (sc && result === 'Borderline')
-        earned = m.pass > 0 ? aw * (m.borderline / m.pass) : 0;
-      return {
-        metric: m.name,
-        result,
-        pass: m.pass,
-        borderline: m.borderline,
-        adjustedWeight: aw,
-        earned,
-        counts_toward_score: sc,
-        metric_comment:
-          sc && shouldShowMetricComment(result)
-            ? (comments[m.name] || '').trim() || null
-            : null,
-      };
-    });
-    const hasAutoFail = details.some(
-      (d) =>
-        d.counts_toward_score !== false &&
-        AUTO_FAIL_METRICS.has(d.metric) &&
-        d.result === 'Auto-Fail'
-    );
-    const rawQualityScore = hasAutoFail
-      ? 0
-      : details
-          .filter((d) => d.counts_toward_score !== false)
-          .reduce((s, d) => s + d.earned, 0);
-    const qualityScore = (clampScoreValue(rawQualityScore) ?? 0).toFixed(2);
-    return { scoreDetails: details, qualityScore, hasAutoFail };
   }
   function getAgentLabel(p: AgentProfile) {
     return p.display_name
@@ -1638,12 +1597,6 @@ function AuditsListSupabase() {
     return 'var(--al-subtle)';
   }
 
-  function getTeamAccent(team: string): string {
-    if (team === 'Calls') return '#3b82f6';
-    if (team === 'Tickets') return '#8b5cf6';
-    if (team === 'Sales') return '#10b981';
-    return 'var(--al-subtle)';
-  }
 
   /* ═════════════════════════════════════════════════════════
      Render
@@ -2292,11 +2245,9 @@ function AuditsListSupabase() {
               >
                 {editingAuditId === audit.id && isAdmin && (
                   <EditAuditForm
-                    audit={audit}
                     editForm={editForm}
                     setEditForm={setEditForm}
                     editScores={editScores}
-                    setEditScores={setEditScores}
                     editMetricComments={editMetricComments}
                     setEditMetricComments={setEditMetricComments}
                     selectedAgentProfileId={selectedAgentProfileId}
@@ -2479,11 +2430,9 @@ function AuditTableRow({
 }
 
 function EditAuditForm({
-  audit,
   editForm,
   setEditForm,
   editScores,
-  setEditScores,
   editMetricComments,
   setEditMetricComments,
   selectedAgentProfileId,
@@ -2502,11 +2451,9 @@ function EditAuditForm({
   onCancel,
   saving,
 }: {
-  audit: AuditItem;
   editForm: EditFormState;
   setEditForm: React.Dispatch<React.SetStateAction<EditFormState>>;
   editScores: Record<string, string>;
-  setEditScores: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   editMetricComments: Record<string, string>;
   setEditMetricComments: React.Dispatch<
     React.SetStateAction<Record<string, string>>
@@ -2516,7 +2463,7 @@ function EditAuditForm({
   agentSearch: string;
   setAgentSearch: (v: string) => void;
   isAgentPickerOpen: boolean;
-  setIsAgentPickerOpen: (v: boolean) => void;
+  setIsAgentPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
   agentPickerRef: React.RefObject<HTMLDivElement | null>;
   visibleAgents: AgentProfile[];
   selectedAgent: AgentProfile | null;

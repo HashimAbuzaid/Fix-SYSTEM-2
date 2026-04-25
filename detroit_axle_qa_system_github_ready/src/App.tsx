@@ -450,9 +450,9 @@ button:focus-visible { outline: 2px solid rgba(59,130,246,0.7); outline-offset: 
   display: flex;
   align-items: center;
   gap: 0;
-  height: 46px;
-  min-height: 46px;
-  margin-bottom: 3px;
+  height: ${SIDEBAR_ITEM_HEIGHT}px;
+  min-height: ${SIDEBAR_ITEM_HEIGHT}px;
+  margin-bottom: ${SIDEBAR_ITEM_GAP}px;
   text-align: left;
   border-radius: 14px;
   padding: 0;
