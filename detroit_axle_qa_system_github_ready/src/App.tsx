@@ -1,10 +1,37 @@
-import { useMemo, useState, useEffect, type CSSProperties, type ReactNode } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+/**
+ * App.tsx — Detroit Axle QA System
+ * Improved: Performance, a11y, type-safety, and maintainability
+ */
+
+import {
+  useMemo,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  memo,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  useNavigate,
+  useLocation,
+  Navigate,
+} from 'react-router-dom';
 import { AuthContext } from './context/AuthContext';
 import { useAuthState } from './hooks/useAuthState';
-import { getThemePalette, applyThemeCssVariables, createStyles, readStoredTheme } from './lib/theme';
+import {
+  getThemePalette,
+  applyThemeCssVariables,
+  createStyles,
+  readStoredTheme,
+} from './lib/theme';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import type { ThemeMode } from './lib/theme';
+import type { UserProfile } from './context/AuthContext';
 
 import Login from './QA/Login';
 import ResetPassword from './QA/ResetPassword';
@@ -25,11 +52,11 @@ import AgentFeedbackSupabase from './QA/AgentFeedbackSupabase';
 import ReportsSupabase from './QA/ReportsSupabase';
 import MonitoringSupabase from './QA/MonitoringSupabase';
 import TeamHeatmapSupabase from './QA/TeamHeatmapSupabase';
-import type { UserProfile } from './context/AuthContext';
 
-// ─────────────────────────────────────────────────────────────
-// Routes & constants
-// ─────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+// Constants & Types
+// ═════════════════════════════════════════════════════════════
+
 const ROUTES = {
   dashboard: '/',
   newAudit: '/new-audit',
@@ -53,8 +80,13 @@ const ROUTES = {
   supervisorProfile: '/supervisor/profile',
 } as const;
 
-type RoutePath = typeof ROUTES[keyof typeof ROUTES];
-type NavItem = { path: RoutePath; label: string; group: string };
+type RoutePath = (typeof ROUTES)[keyof typeof ROUTES];
+
+interface NavItem {
+  readonly path: RoutePath;
+  readonly label: string;
+  readonly group: string;
+}
 
 const LOGO_MARK_SRC = '/detroit-axle-mark.png';
 const LOGO_WORDMARK_SRC = '/detroit-axle-wordmark.svg';
@@ -63,14 +95,114 @@ const SIDEBAR_EXPANDED_WIDTH = 272;
 const SIDEBAR_ITEM_HEIGHT = 46;
 const SIDEBAR_ITEM_GAP = 3;
 const EXPAND_EASE = '240ms cubic-bezier(0.22, 1, 0.36, 1)';
+const COMPACT_BREAKPOINT = 1100;
 
-// ─────────────────────────────────────────────────────────────
-// Global style injection
-// ─────────────────────────────────────────────────────────────
-function useGlobalStyles() {
+const NAV_GROUPS: Readonly<Record<string, readonly string[]>> = {
+  Core: ['Dashboard', 'Overview', 'Team Dashboard'],
+  Audits: ['New Audit', 'Audits Upload', 'Audits List'],
+  Data: ['Calls Upload', 'Tickets Upload', 'Ticket Evidence', 'Ticket AI Review', 'Sales Upload'],
+  Analytics: ['Agent Feedback', 'Monitoring', 'Team Heatmap'],
+  Management: ['Accounts', 'Supervisor Requests', 'Reports'],
+  Account: ['My Admin Profile', 'My QA Profile', 'My Supervisor Profile', 'Supervisor Requests'],
+};
+
+const GROUP_COLORS: Readonly<Record<string, string>> = {
+  Core: '#3b82f6',
+  Audits: '#8b5cf6',
+  Data: '#06b6d4',
+  Analytics: '#f59e0b',
+  Management: '#ef4444',
+  Account: '#10b981',
+  Other: '#6b7280',
+};
+
+const ROLE_COLORS: Readonly<Record<string, string>> = {
+  admin: '#ef4444',
+  qa: '#3b82f6',
+  supervisor: '#8b5cf6',
+  agent: '#10b981',
+};
+
+// ═════════════════════════════════════════════════════════════
+// Hooks
+// ═════════════════════════════════════════════════════════════
+
+/** Detect user preference for reduced motion */
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
   useEffect(() => {
+    const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setReduced(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+  return reduced;
+}
+
+/** Responsive viewport width with debounce */
+function useViewportWidth(): number {
+  const [width, setWidth] = useState(() =>
+    typeof window === 'undefined' ? 1440 : window.innerWidth
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let raf: number;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setWidth(window.innerWidth));
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  return width;
+}
+
+/** Theme manager with system preference fallback */
+function useThemeManager() {
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
+    try {
+      return readStoredTheme();
+    } catch {
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      return prefersDark ? 'dark' : 'light';
+    }
+  });
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('detroit-axle-theme-mode', themeMode);
+    } catch {
+      /* ignore quota errors */
+    }
+    document.documentElement.setAttribute('data-theme-mode', themeMode);
+    document.documentElement.style.colorScheme = themeMode === 'light' ? 'light' : 'dark';
+  }, [themeMode]);
+
+  const toggleTheme = useCallback(
+    () => setThemeMode((prev) => (prev === 'light' ? 'dark' : 'light')),
+    []
+  );
+
+  return { themeMode, setThemeMode, toggleTheme } as const;
+}
+
+// ═════════════════════════════════════════════════════════════
+// Global Styles
+// ═════════════════════════════════════════════════════════════
+
+function useGlobalStyles() {
+  const injected = useRef(false);
+
+  useEffect(() => {
+    if (injected.current) return;
     const id = 'da-global-v3';
     if (document.getElementById(id)) return;
+
     const el = document.createElement('style');
     el.id = id;
     el.textContent = `
@@ -397,67 +529,18 @@ function useGlobalStyles() {
       button:focus-visible { outline: 2px solid rgba(59,130,246,0.7); outline-offset: 2px; border-radius: 10px; }
     `;
     document.head.appendChild(el);
-    return () => { document.getElementById(id)?.remove(); };
+    injected.current = true;
+
+    return () => {
+      document.getElementById(id)?.remove();
+      injected.current = false;
+    };
   }, []);
 }
 
-// ─────────────────────────────────────────────────────────────
-// Live Clock
-// ─────────────────────────────────────────────────────────────
-function LiveClock({ isDark }: { isDark: boolean }) {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const hh = now.getHours().toString().padStart(2, '0');
-  const mm = now.getMinutes().toString().padStart(2, '0');
-  const ss = now.getSeconds().toString().padStart(2, '0');
-  const textColor = isDark ? 'rgba(148,163,184,0.9)' : 'rgba(100,116,139,0.9)';
-
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: '1px',
-      fontFamily: "'DM Mono', monospace",
-      fontSize: '12px',
-      fontWeight: 500,
-      color: textColor,
-      letterSpacing: '0.04em',
-      userSelect: 'none',
-    }}>
-      <span>{hh}</span>
-      <span style={{ animation: 'da-clock-blink 1s step-end infinite', opacity: 1 }}>:</span>
-      <span>{mm}</span>
-      <span style={{ animation: 'da-clock-blink 1s step-end infinite 0.5s', opacity: 1 }}>:</span>
-      <span style={{ opacity: 0.6 }}>{ss}</span>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Nav group definitions
-// ─────────────────────────────────────────────────────────────
-const NAV_GROUPS: Record<string, string[]> = {
-  Core:       ['Dashboard', 'Overview', 'Team Dashboard'],
-  Audits:     ['New Audit', 'Audits Upload', 'Audits List'],
-  Data:       ['Calls Upload', 'Tickets Upload', 'Ticket Evidence', 'Ticket AI Review', 'Sales Upload'],
-  Analytics:  ['Agent Feedback', 'Monitoring', 'Team Heatmap'],
-  Management: ['Accounts', 'Supervisor Requests', 'Reports'],
-  Account:    ['My Admin Profile', 'My QA Profile', 'My Supervisor Profile', 'Supervisor Requests'],
-};
-
-const GROUP_COLORS: Record<string, string> = {
-  Core:       '#3b82f6',
-  Audits:     '#8b5cf6',
-  Data:       '#06b6d4',
-  Analytics:  '#f59e0b',
-  Management: '#ef4444',
-  Account:    '#10b981',
-  Other:      '#6b7280',
-};
+// ═════════════════════════════════════════════════════════════
+// Helpers
+// ═════════════════════════════════════════════════════════════
 
 function getNavGroup(label: string): string {
   for (const [group, labels] of Object.entries(NAV_GROUPS)) {
@@ -466,10 +549,114 @@ function getNavGroup(label: string): string {
   return 'Other';
 }
 
-// ─────────────────────────────────────────────────────────────
-// SVG icons
-// ─────────────────────────────────────────────────────────────
-function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
+function getActiveRouteLabel(pathname: string, items: readonly NavItem[]): string {
+  return items.find((item) => item.path === pathname)?.label ?? 'Workspace';
+}
+
+function getUserInitials(profile: UserProfile): string {
+  const name = profile.display_name || profile.agent_name || profile.email || '?';
+  const parts = name.split(/[\s_-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function buildNavItems(profile: UserProfile): NavItem[] {
+  const isAdmin = profile.role === 'admin';
+  const isStaff = isAdmin || profile.role === 'qa';
+  const isSupervisor = profile.role === 'supervisor';
+
+  const withGroup = (path: RoutePath, label: string): NavItem => ({
+    path,
+    label,
+    group: getNavGroup(label),
+  });
+
+  if (isSupervisor) {
+    return [
+      withGroup(ROUTES.supervisorOverview, 'Overview'),
+      withGroup(ROUTES.supervisorTeamDashboard, 'Team Dashboard'),
+      withGroup(ROUTES.supervisorRequestsView, 'Supervisor Requests'),
+      withGroup(ROUTES.supervisorProfile, 'My Supervisor Profile'),
+    ];
+  }
+
+  if (!isStaff) return [];
+
+  const items: NavItem[] = [
+    withGroup(ROUTES.dashboard, 'Dashboard'),
+    withGroup(ROUTES.newAudit, 'New Audit'),
+    withGroup(ROUTES.auditsUpload, 'Audits Upload'),
+    withGroup(ROUTES.auditsList, 'Audits List'),
+    withGroup(ROUTES.callsUpload, 'Calls Upload'),
+    withGroup(ROUTES.ticketsUpload, 'Tickets Upload'),
+    withGroup(ROUTES.ticketEvidence, 'Ticket Evidence'),
+    withGroup(ROUTES.ticketAiReview, 'Ticket AI Review'),
+    withGroup(ROUTES.salesUpload, 'Sales Upload'),
+    withGroup(ROUTES.agentFeedback, 'Agent Feedback'),
+    withGroup(ROUTES.monitoring, 'Monitoring'),
+    withGroup(ROUTES.teamHeatmap, 'Team Heatmap'),
+  ];
+
+  if (isAdmin) {
+    items.push(
+      withGroup(ROUTES.accounts, 'Accounts'),
+      withGroup(ROUTES.supervisorRequests, 'Supervisor Requests')
+    );
+  }
+
+  items.push(
+    withGroup(ROUTES.reports, 'Reports'),
+    withGroup(ROUTES.profile, isAdmin ? 'My Admin Profile' : 'My QA Profile')
+  );
+
+  return items;
+}
+
+// ═════════════════════════════════════════════════════════════
+// Icons
+// ═════════════════════════════════════════════════════════════
+
+const SunIcon = memo(function SunIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="5"/>
+      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+    </svg>
+  );
+});
+
+const MoonIcon = memo(function MoonIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+    </svg>
+  );
+});
+
+const LogoutIcon = memo(function LogoutIcon({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+      <polyline points="16 17 21 12 16 7"/>
+      <line x1="21" y1="12" x2="9" y2="12"/>
+    </svg>
+  );
+});
+
+const MenuIcon = memo(function MenuIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="17" x2="20" y2="17" />
+    </svg>
+  );
+});
+
+const NavIconSvg = memo(function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
   const p = {
     width: size,
     height: size,
@@ -480,6 +667,7 @@ function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
   };
+
   const map: Record<string, ReactNode> = {
     Dashboard: (
       <svg {...p}><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/></svg>
@@ -542,102 +730,54 @@ function NavIconSvg({ label, size = 17 }: { label: string; size?: number }) {
       <svg {...p}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
     ),
   };
+
   return map[label] ?? (
     <svg {...p}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/></svg>
   );
-}
+});
 
-// ─────────────────────────────────────────────────────────────
-// Theme toggle icons
-// ─────────────────────────────────────────────────────────────
-function SunIcon() {
+// ═════════════════════════════════════════════════════════════
+// Sub-Components
+// ═════════════════════════════════════════════════════════════
+
+const LiveClock = memo(function LiveClock({ isDark }: { isDark: boolean }) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const hh = now.getHours().toString().padStart(2, '0');
+  const mm = now.getMinutes().toString().padStart(2, '0');
+  const ss = now.getSeconds().toString().padStart(2, '0');
+  const textColor = isDark ? 'rgba(148,163,184,0.9)' : 'rgba(100,116,139,0.9)';
+
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="5"/>
-      <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-    </svg>
+    <div
+      aria-label={`Current time ${hh}:${mm}:${ss}`}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '1px',
+        fontFamily: "'DM Mono', monospace",
+        fontSize: '12px',
+        fontWeight: 500,
+        color: textColor,
+        letterSpacing: '0.04em',
+        userSelect: 'none',
+      }}
+    >
+      <span>{hh}</span>
+      <span style={{ animation: 'da-clock-blink 1s step-end infinite', opacity: 1 }}>:</span>
+      <span>{mm}</span>
+      <span style={{ animation: 'da-clock-blink 1s step-end infinite 0.5s', opacity: 1 }}>:</span>
+      <span style={{ opacity: 0.6 }}>{ss}</span>
+    </div>
   );
-}
+});
 
-function MoonIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-    </svg>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────
-function getActiveRouteLabel(pathname: string, items: NavItem[]) {
-  return items.find((item) => item.path === pathname)?.label ?? 'Workspace';
-}
-
-function getUserInitials(profile: UserProfile): string {
-  const name = profile.display_name || profile.agent_name || profile.email || '?';
-  const parts = name.split(/[\s_-]+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
-function buildNavItems(profile: UserProfile): NavItem[] {
-  const isAdmin = profile.role === 'admin';
-  const isStaff = isAdmin || profile.role === 'qa';
-  const isSupervisor = profile.role === 'supervisor';
-
-  const withGroup = (path: RoutePath, label: string): NavItem => ({
-    path, label, group: getNavGroup(label),
-  });
-
-  if (isSupervisor) {
-    return [
-      withGroup(ROUTES.supervisorOverview, 'Overview'),
-      withGroup(ROUTES.supervisorTeamDashboard, 'Team Dashboard'),
-      withGroup(ROUTES.supervisorRequestsView, 'Supervisor Requests'),
-      withGroup(ROUTES.supervisorProfile, 'My Supervisor Profile'),
-    ];
-  }
-
-  if (!isStaff) return [];
-
-  const items: NavItem[] = [
-    withGroup(ROUTES.dashboard, 'Dashboard'),
-    withGroup(ROUTES.newAudit, 'New Audit'),
-    withGroup(ROUTES.auditsUpload, 'Audits Upload'),
-    withGroup(ROUTES.auditsList, 'Audits List'),
-    withGroup(ROUTES.callsUpload, 'Calls Upload'),
-    withGroup(ROUTES.ticketsUpload, 'Tickets Upload'),
-    withGroup(ROUTES.ticketEvidence, 'Ticket Evidence'),
-    withGroup(ROUTES.ticketAiReview, 'Ticket AI Review'),
-    withGroup(ROUTES.salesUpload, 'Sales Upload'),
-    withGroup(ROUTES.agentFeedback, 'Agent Feedback'),
-    withGroup(ROUTES.monitoring, 'Monitoring'),
-    withGroup(ROUTES.teamHeatmap, 'Team Heatmap'),
-  ];
-
-  if (isAdmin) {
-    items.push(
-      withGroup(ROUTES.accounts, 'Accounts'),
-      withGroup(ROUTES.supervisorRequests, 'Supervisor Requests'),
-    );
-  }
-
-  items.push(
-    withGroup(ROUTES.reports, 'Reports'),
-    withGroup(ROUTES.profile, isAdmin ? 'My Admin Profile' : 'My QA Profile'),
-  );
-
-  return items;
-}
-
-// ─────────────────────────────────────────────────────────────
-// ProfileInfoCard
-// ─────────────────────────────────────────────────────────────
-function ProfileInfoCard({
+const ProfileInfoCard = memo(function ProfileInfoCard({
   label,
   value,
   styles,
@@ -652,12 +792,9 @@ function ProfileInfoCard({
       <div style={styles.profileInfoValue}>{value}</div>
     </div>
   );
-}
+});
 
-// ─────────────────────────────────────────────────────────────
-// ProfilePanel
-// ─────────────────────────────────────────────────────────────
-function ProfilePanel({
+const ProfilePanel = memo(function ProfilePanel({
   title,
   profile,
   styles,
@@ -672,41 +809,49 @@ function ProfilePanel({
   return (
     <div style={styles.profilePanel}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '28px' }}>
-        <div style={{
-          width: '60px',
-          height: '60px',
-          borderRadius: '18px',
-          background: `linear-gradient(135deg, ${theme.headerUserAvatarBg} 0%, rgba(37,99,235,0.6) 100%)`,
-          color: '#fff',
-          display: 'grid',
-          placeItems: 'center',
-          fontSize: '20px',
-          fontWeight: 800,
-          fontFamily: "'Bricolage Grotesque', sans-serif",
-          boxShadow: `0 0 0 2px rgba(59,130,246,0.3), 0 8px 24px rgba(37,99,235,0.25)`,
-          flexShrink: 0,
-          letterSpacing: '-0.02em',
-        }}>
+        <div
+          style={{
+            width: '60px',
+            height: '60px',
+            borderRadius: '18px',
+            background: `linear-gradient(135deg, ${theme.headerUserAvatarBg} 0%, rgba(37,99,235,0.6) 100%)`,
+            color: '#fff',
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '20px',
+            fontWeight: 800,
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+            boxShadow: `0 0 0 2px rgba(59,130,246,0.3), 0 8px 24px rgba(37,99,235,0.25)`,
+            flexShrink: 0,
+            letterSpacing: '-0.02em',
+          }}
+        >
           {initials}
         </div>
         <div>
-          <div style={{
-            fontSize: '11px',
-            fontWeight: 800,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: theme.brandAccent,
-            marginBottom: '4px',
-            fontFamily: "'DM Sans', sans-serif",
-          }}>Profile</div>
-          <h2 style={{
-            margin: 0,
-            color: theme.brandTitle,
-            fontFamily: "'Bricolage Grotesque', sans-serif",
-            fontSize: '24px',
-            fontWeight: 800,
-            letterSpacing: '-0.02em',
-          }}>
+          <div
+            style={{
+              fontSize: '11px',
+              fontWeight: 800,
+              letterSpacing: '0.12em',
+              textTransform: 'uppercase',
+              color: theme.brandAccent,
+              marginBottom: '4px',
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            Profile
+          </div>
+          <h2
+            style={{
+              margin: 0,
+              color: theme.brandTitle,
+              fontFamily: "'Bricolage Grotesque', sans-serif",
+              fontSize: '24px',
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+            }}
+          >
             {title}
           </h2>
         </div>
@@ -722,11 +867,228 @@ function ProfilePanel({
       </div>
     </div>
   );
-}
+});
 
-// ─────────────────────────────────────────────────────────────
-// StaffRoutes
-// ─────────────────────────────────────────────────────────────
+const LoadingScreen = memo(function LoadingScreen({
+  theme,
+  message = 'Preparing your workspace…',
+}: {
+  theme: ReturnType<typeof getThemePalette>;
+  message?: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={message}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'var(--da-loader-shell-bg)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 9999,
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          top: '18%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'min(720px, 78vw)',
+          height: '320px',
+          background: 'radial-gradient(ellipse, var(--da-loader-glow) 0%, transparent 72%)',
+          pointerEvents: 'none',
+          opacity: theme.bodyBackground.includes('241,245,249') ? 0.9 : 1,
+        }}
+      />
+
+      <div
+        className="da-themed-loader-card da-themed-loader-card--overlay"
+        style={{ animation: 'da-fade-up 0.4s ease both' }}
+      >
+        <div className="da-themed-loader">
+          <div className="da-themed-loader__art" aria-hidden="true">
+            <div className="da-themed-loader__glow" />
+            <div className="da-themed-loader__rotor">
+              <div className="da-themed-loader__rotor-face" />
+              <div className="da-themed-loader__hub" />
+            </div>
+            <div className="da-themed-loader__caliper" />
+            <div className="da-themed-loader__spark" />
+          </div>
+
+          <div className="da-themed-loader__copy">
+            <div className="da-themed-loader__eyebrow">Detroit Axle</div>
+            <div className="da-themed-loader__label">{message}</div>
+            <div className="da-themed-loader__sub">Brake-ready workspace loading</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+});
+
+const SidebarUserCard = memo(function SidebarUserCard({
+  profile,
+  initials,
+  expanded,
+  isDark,
+  onLogout,
+}: {
+  profile: UserProfile;
+  initials: string;
+  expanded: boolean;
+  isDark: boolean;
+  onLogout: () => void;
+}) {
+  const name = profile.display_name || profile.agent_name || profile.email || '';
+  const roleColor = ROLE_COLORS[profile.role || 'qa'] || '#6b7280';
+
+  return (
+    <div
+      style={{
+        marginTop: 'auto',
+        padding: '8px',
+        borderTop: isDark
+          ? '1px solid rgba(148,163,184,0.08)'
+          : '1px solid rgba(203,213,225,0.25)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: expanded ? '10px' : '0',
+          padding: expanded ? '10px' : '6px',
+          borderRadius: '14px',
+          background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
+          justifyContent: expanded ? 'flex-start' : 'center',
+          transition: `all ${EXPAND_EASE}`,
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '10px',
+            background: `linear-gradient(135deg, ${roleColor}33 0%, ${roleColor}55 100%)`,
+            border: `1.5px solid ${roleColor}55`,
+            display: 'grid',
+            placeItems: 'center',
+            fontSize: '11px',
+            fontWeight: 800,
+            color: roleColor,
+            fontFamily: "'Bricolage Grotesque', sans-serif",
+            flexShrink: 0,
+            position: 'relative',
+          }}
+        >
+          {initials}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '-2px',
+              right: '-2px',
+              width: '8px',
+              height: '8px',
+              borderRadius: '50%',
+              background: '#10b981',
+              border: isDark ? '1.5px solid #0a1628' : '1.5px solid #f8fafc',
+              animation: 'da-status-ring 2s ease-in-out infinite',
+            }}
+          />
+        </div>
+
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            opacity: expanded ? 1 : 0,
+            transform: expanded ? 'translateX(0)' : 'translateX(-8px)',
+            transition: 'opacity 160ms ease, transform 200ms ease',
+            pointerEvents: expanded ? 'auto' : 'none',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              fontSize: '12px',
+              fontWeight: 700,
+              color: isDark ? '#e2e8f0' : '#1e293b',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            {name}
+          </div>
+          <div
+            style={{
+              fontSize: '10px',
+              fontWeight: 600,
+              color: roleColor,
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+              marginTop: '1px',
+              fontFamily: "'DM Sans', sans-serif",
+            }}
+          >
+            {profile.role}
+          </div>
+        </div>
+
+        {expanded && (
+          <button
+            type="button"
+            onClick={onLogout}
+            title="Sign out"
+            aria-label="Sign out"
+            style={{
+              width: '28px',
+              height: '28px',
+              borderRadius: '8px',
+              border: isDark
+                ? '1px solid rgba(148,163,184,0.12)'
+                : '1px solid rgba(203,213,225,0.6)',
+              background: 'transparent',
+              color: isDark ? '#64748b' : '#94a3b8',
+              cursor: 'pointer',
+              display: 'grid',
+              placeItems: 'center',
+              flexShrink: 0,
+              transition: 'all 140ms ease',
+            }}
+            onMouseEnter={(e) => {
+              const t = e.currentTarget;
+              t.style.color = '#ef4444';
+              t.style.borderColor = 'rgba(239,68,68,0.4)';
+              t.style.background = 'rgba(239,68,68,0.08)';
+            }}
+            onMouseLeave={(e) => {
+              const t = e.currentTarget;
+              t.style.color = isDark ? '#64748b' : '#94a3b8';
+              t.style.borderColor = isDark
+                ? 'rgba(148,163,184,0.12)'
+                : 'rgba(203,213,225,0.6)';
+              t.style.background = 'transparent';
+            }}
+          >
+            <LogoutIcon size={13} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+});
+
+// ═════════════════════════════════════════════════════════════
+// Route Components
+// ═════════════════════════════════════════════════════════════
+
 function StaffRoutes({
   profile,
   styles,
@@ -777,9 +1139,6 @@ function StaffRoutes({
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// SupervisorRoutes
-// ─────────────────────────────────────────────────────────────
 function SupervisorRoutes({
   profile,
   styles,
@@ -791,260 +1150,60 @@ function SupervisorRoutes({
 }) {
   return (
     <Routes>
-      <Route path={ROUTES.supervisorOverview} element={<SupervisorPortal currentUser={profile} initialTab="overview" hideInternalTabs />} />
-      <Route path={ROUTES.supervisorTeamDashboard} element={<SupervisorPortal currentUser={profile} initialTab="team-dashboard" hideInternalTabs />} />
-      <Route path={ROUTES.supervisorRequestsView} element={<SupervisorPortal currentUser={profile} initialTab="requests" hideInternalTabs />} />
-      <Route path={ROUTES.supervisorProfile} element={<ProfilePanel title="My Supervisor Profile" profile={profile} styles={styles} theme={theme} />} />
+      <Route
+        path={ROUTES.supervisorOverview}
+        element={<SupervisorPortal currentUser={profile} initialTab="overview" hideInternalTabs />}
+      />
+      <Route
+        path={ROUTES.supervisorTeamDashboard}
+        element={<SupervisorPortal currentUser={profile} initialTab="team-dashboard" hideInternalTabs />}
+      />
+      <Route
+        path={ROUTES.supervisorRequestsView}
+        element={<SupervisorPortal currentUser={profile} initialTab="requests" hideInternalTabs />}
+      />
+      <Route
+        path={ROUTES.supervisorProfile}
+        element={<ProfilePanel title="My Supervisor Profile" profile={profile} styles={styles} theme={theme} />}
+      />
       <Route path="*" element={<Navigate to={ROUTES.supervisorOverview} replace />} />
     </Routes>
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// LoadingScreen — orbital ring design
-// ─────────────────────────────────────────────────────────────
-function LoadingScreen({
-  theme,
-  message = 'Preparing your workspace…',
-}: {
-  theme: ReturnType<typeof getThemePalette>;
-  message?: string;
-}) {
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--da-loader-shell-bg)',
-        display: 'grid',
-        placeItems: 'center',
-        zIndex: 9999,
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: '18%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: 'min(720px, 78vw)',
-          height: '320px',
-          background: 'radial-gradient(ellipse, var(--da-loader-glow) 0%, transparent 72%)',
-          pointerEvents: 'none',
-          opacity: theme.bodyBackground.includes('241,245,249') ? 0.9 : 1,
-        }}
-      />
+// ═════════════════════════════════════════════════════════════
+// Main Layout
+// ═════════════════════════════════════════════════════════════
 
-      <div className="da-themed-loader-card da-themed-loader-card--overlay" style={{ animation: 'da-fade-up 0.4s ease both' }}>
-        <div className="da-themed-loader">
-          <div className="da-themed-loader__art" aria-hidden="true">
-            <div className="da-themed-loader__glow" />
-            <div className="da-themed-loader__rotor">
-              <div className="da-themed-loader__rotor-face" />
-              <div className="da-themed-loader__hub" />
-            </div>
-            <div className="da-themed-loader__caliper" />
-            <div className="da-themed-loader__spark" />
-          </div>
-
-          <div className="da-themed-loader__copy">
-            <div className="da-themed-loader__eyebrow">Detroit Axle</div>
-            <div className="da-themed-loader__label">{message}</div>
-            <div className="da-themed-loader__sub">Brake-ready workspace loading</div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// SidebarUserCard — shown at bottom of sidebar
-// ─────────────────────────────────────────────────────────────
-function SidebarUserCard({
-  profile,
-  initials,
-  expanded,
-  isDark,
-  onLogout,
-}: {
-  profile: UserProfile;
-  initials: string;
-  expanded: boolean;
-  isDark: boolean;
-  onLogout: () => void;
-}) {
-  const name = profile.display_name || profile.agent_name || profile.email || '';
-  const roleColors: Record<string, string> = {
-    admin: '#ef4444',
-    qa: '#3b82f6',
-    supervisor: '#8b5cf6',
-    agent: '#10b981',
-  };
-  const roleColor = roleColors[profile.role || 'qa'] || '#6b7280';
-
-  return (
-    <div style={{
-      marginTop: 'auto',
-      padding: '8px',
-      borderTop: isDark ? '1px solid rgba(148,163,184,0.08)' : '1px solid rgba(203,213,225,0.25)',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: expanded ? '10px' : '0',
-        padding: expanded ? '10px' : '6px',
-        borderRadius: '14px',
-        background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.03)',
-        justifyContent: expanded ? 'flex-start' : 'center',
-        transition: `all ${EXPAND_EASE}`,
-        overflow: 'hidden',
-      }}>
-        {/* Avatar */}
-        <div style={{
-          width: '32px',
-          height: '32px',
-          borderRadius: '10px',
-          background: `linear-gradient(135deg, ${roleColor}33 0%, ${roleColor}55 100%)`,
-          border: `1.5px solid ${roleColor}55`,
-          display: 'grid',
-          placeItems: 'center',
-          fontSize: '11px',
-          fontWeight: 800,
-          color: roleColor,
-          fontFamily: "'Bricolage Grotesque', sans-serif",
-          flexShrink: 0,
-          position: 'relative',
-        }}>
-          {initials}
-          {/* Online dot */}
-          <div style={{
-            position: 'absolute',
-            bottom: '-2px',
-            right: '-2px',
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: '#10b981',
-            border: isDark ? '1.5px solid #0a1628' : '1.5px solid #f8fafc',
-            animation: 'da-status-ring 2s ease-in-out infinite',
-          }} />
-        </div>
-
-        {/* Name + role */}
-        <div style={{
-          flex: 1,
-          minWidth: 0,
-          opacity: expanded ? 1 : 0,
-          transform: expanded ? 'translateX(0)' : 'translateX(-8px)',
-          transition: 'opacity 160ms ease, transform 200ms ease',
-          pointerEvents: expanded ? 'auto' : 'none',
-          overflow: 'hidden',
-        }}>
-          <div style={{
-            fontSize: '12px',
-            fontWeight: 700,
-            color: isDark ? '#e2e8f0' : '#1e293b',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            fontFamily: "'DM Sans', sans-serif",
-          }}>{name}</div>
-          <div style={{
-            fontSize: '10px',
-            fontWeight: 600,
-            color: roleColor,
-            textTransform: 'uppercase',
-            letterSpacing: '0.08em',
-            marginTop: '1px',
-            fontFamily: "'DM Sans', sans-serif",
-          }}>{profile.role}</div>
-        </div>
-
-        {/* Logout mini button */}
-        {expanded && (
-          <button
-            type="button"
-            onClick={onLogout}
-            title="Sign out"
-            style={{
-              width: '28px',
-              height: '28px',
-              borderRadius: '8px',
-              border: isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.6)',
-              background: 'transparent',
-              color: isDark ? '#64748b' : '#94a3b8',
-              cursor: 'pointer',
-              display: 'grid',
-              placeItems: 'center',
-              flexShrink: 0,
-              transition: 'all 140ms ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-              (e.currentTarget as HTMLElement).style.borderColor = 'rgba(239,68,68,0.4)';
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239,68,68,0.08)';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.color = isDark ? '#64748b' : '#94a3b8';
-              (e.currentTarget as HTMLElement).style.borderColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(203,213,225,0.6)';
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-            }}
-          >
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────
-// AppShell — main layout
-// ─────────────────────────────────────────────────────────────
 function AppShell() {
   const auth = useAuthState();
   const navigate = useNavigate();
   const location = useLocation();
+  const reducedMotion = useReducedMotion();
+  const viewportWidth = useViewportWidth();
+  const { themeMode, toggleTheme } = useThemeManager();
 
   useGlobalStyles();
 
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredTheme());
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window === 'undefined' ? 1440 : window.innerWidth
-  );
   const [isSidebarPinned, setIsSidebarPinned] = useState(false);
   const [isSidebarHovered, setIsSidebarHovered] = useState(false);
   const [hoveredPath, setHoveredPath] = useState<RoutePath | null>(null);
 
   const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
   const styles = useMemo(() => createStyles(theme, themeMode), [theme, themeMode]);
-  const isCompactLayout = viewportWidth < 1100;
+  const isCompactLayout = viewportWidth < COMPACT_BREAKPOINT;
   const isDark = themeMode === 'dark';
 
+  // Sync body styles
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const handleResize = () => setViewportWidth(window.innerWidth);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    window.localStorage.setItem('detroit-axle-theme-mode', themeMode);
-    document.documentElement.setAttribute('data-theme-mode', themeMode);
-    document.documentElement.style.colorScheme = themeMode === 'light' ? 'light' : 'dark';
+    if (typeof document === 'undefined') return;
     document.body.style.background = theme.bodyBackground;
     document.body.style.color = theme.bodyColor;
     document.body.style.fontFamily = "'DM Sans', sans-serif";
     applyThemeCssVariables(themeMode);
   }, [themeMode, theme.bodyBackground, theme.bodyColor]);
 
+  // Reset sidebar state when entering compact mode
   useEffect(() => {
     if (isCompactLayout) {
       setIsSidebarPinned(false);
@@ -1062,17 +1221,32 @@ function AppShell() {
       : profile.agent_name;
   }, [profile]);
 
+  const navItems = useMemo(() => (profile ? buildNavItems(profile) : []), [profile]);
+
   const navGroupsOrdered = useMemo(() => {
     const groups: Record<string, NavItem[]> = {};
-    if (!profile) return [] as [string, NavItem[]][];
-    const items = buildNavItems(profile);
-    items.forEach((item) => {
-      const g = item.group;
-      if (!groups[g]) groups[g] = [];
-      groups[g].push(item);
+    navItems.forEach((item) => {
+      if (!groups[item.group]) groups[item.group] = [];
+      groups[item.group].push(item);
     });
     return Object.entries(groups) as [string, NavItem[]][];
-  }, [profile]);
+  }, [navItems]);
+
+  const handleNavigate = useCallback(
+    (path: RoutePath) => {
+      navigate(path);
+    },
+    [navigate]
+  );
+
+  const handleToggleSidebar = useCallback(() => {
+    setIsSidebarPinned((prev) => !prev);
+    setHoveredPath(null);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    logout();
+  }, [logout]);
 
   if (loading) return <LoadingScreen theme={theme} />;
   if (recoveryMode) return <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />;
@@ -1083,13 +1257,22 @@ function AppShell() {
       <div style={styles.loadingShell}>
         <div style={styles.errorCard}>
           <div style={styles.sectionEyebrow}>Profile Error</div>
-          <h1 style={{ marginTop: 0, color: theme.errorText, fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+          <h1
+            style={{
+              marginTop: 0,
+              color: theme.errorText,
+              fontFamily: "'Bricolage Grotesque', sans-serif",
+            }}
+          >
             Profile not found
           </h1>
           <p style={{ color: theme.loadingSubtext, marginBottom: '20px' }}>
-            {auth.profileError || 'This user exists in Supabase Auth but does not have a profile row yet.'}
+            {auth.profileError ||
+              'This user exists in Supabase Auth but does not have a profile row yet.'}
           </p>
-          <button onClick={logout} style={styles.logoutButton}>Logout</button>
+          <button onClick={logout} style={styles.logoutButton}>
+            Logout
+          </button>
         </div>
       </div>
     );
@@ -1100,16 +1283,18 @@ function AppShell() {
   const isSupervisor = profile.role === 'supervisor';
   const isStaff = isAdmin || isQA;
   const hasSidebarRail = isStaff || isSupervisor;
-  const navItems = buildNavItems(profile);
+
   const activeRouteLabel = getActiveRouteLabel(location.pathname as RoutePath, navItems);
   const expandedSidebar = !isCompactLayout && (isSidebarPinned || isSidebarHovered);
   const userInitials = getUserInitials(profile);
 
-  // Active group color
-  const activeItem = navItems.find(item => item.path === location.pathname);
-  const activeGroupColor = activeItem ? (GROUP_COLORS[activeItem.group] || '#3b82f6') : '#3b82f6';
+  const activeItem = navItems.find((item) => item.path === location.pathname);
+  const activeGroupColor = activeItem
+    ? GROUP_COLORS[activeItem.group] || '#3b82f6'
+    : '#3b82f6';
 
-  // ─── Styles ───────────────────────────────────────────────
+  // ─── Derived Styles ───────────────────────────────────────
+
   const headerShellStyle: CSSProperties = {
     position: 'sticky',
     top: 0,
@@ -1119,9 +1304,7 @@ function AppShell() {
     justifyContent: 'space-between',
     padding: '0 20px',
     height: '64px',
-    background: isDark
-      ? 'rgba(5,9,26,0.88)'
-      : 'rgba(248,250,255,0.92)',
+    background: isDark ? 'rgba(5,9,26,0.88)' : 'rgba(248,250,255,0.92)',
     backdropFilter: 'blur(20px)',
     WebkitBackdropFilter: 'blur(20px)',
     borderBottom: isDark
@@ -1140,7 +1323,7 @@ function AppShell() {
     height: '3px',
     background: `linear-gradient(90deg, #1d4ed8 0%, #3b82f6 35%, #8b5cf6 65%, #06b6d4 100%)`,
     zIndex: 101,
-    animation: 'da-top-bar-glow 3s ease-in-out infinite',
+    animation: reducedMotion ? undefined : 'da-top-bar-glow 3s ease-in-out infinite',
   };
 
   const desktopShellStyle: CSSProperties = {
@@ -1150,7 +1333,7 @@ function AppShell() {
       : 'minmax(0, 1fr)',
     gap: hasSidebarRail ? '16px' : '0',
     alignItems: 'start',
-    transition: `grid-template-columns ${EXPAND_EASE}`,
+    transition: reducedMotion ? undefined : `grid-template-columns ${EXPAND_EASE}`,
   };
 
   const sidebarDockStyle: CSSProperties = {
@@ -1162,7 +1345,7 @@ function AppShell() {
     maxHeight: 'calc(100vh - 96px)',
     minHeight: '380px',
     zIndex: 10,
-    transition: `width ${EXPAND_EASE}`,
+    transition: reducedMotion ? undefined : `width ${EXPAND_EASE}`,
   };
 
   const sidebarPanelStyle: CSSProperties = {
@@ -1175,18 +1358,22 @@ function AppShell() {
     border: isDark
       ? '1px solid rgba(148,163,184,0.1)'
       : '1px solid rgba(203,213,225,0.7)',
-    background: isDark
-      ? 'rgba(8,14,32,0.92)'
-      : 'rgba(255,255,255,0.93)',
+    background: isDark ? 'rgba(8,14,32,0.92)' : 'rgba(255,255,255,0.93)',
     boxShadow: expandedSidebar
-      ? (isDark ? '0 32px 64px rgba(0,0,0,0.5)' : '0 32px 64px rgba(15,23,42,0.12)')
-      : (isDark ? '0 8px 24px rgba(0,0,0,0.3)' : '0 8px 24px rgba(15,23,42,0.06)'),
+      ? isDark
+        ? '0 32px 64px rgba(0,0,0,0.5)'
+        : '0 32px 64px rgba(15,23,42,0.12)'
+      : isDark
+      ? '0 8px 24px rgba(0,0,0,0.3)'
+      : '0 8px 24px rgba(15,23,42,0.06)',
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
     backdropFilter: 'blur(24px)',
     WebkitBackdropFilter: 'blur(24px)',
-    transition: `width ${EXPAND_EASE}, box-shadow 200ms ease`,
+    transition: reducedMotion
+      ? undefined
+      : `width ${EXPAND_EASE}, box-shadow 200ms ease`,
     willChange: 'width',
     transform: 'translateZ(0)',
     backfaceVisibility: 'hidden',
@@ -1202,7 +1389,7 @@ function AppShell() {
       ? '1px solid rgba(148,163,184,0.07)'
       : '1px solid rgba(203,213,225,0.3)',
     overflow: 'hidden',
-    transition: `gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
+    transition: reducedMotion ? undefined : `gap ${EXPAND_EASE}, padding ${EXPAND_EASE}`,
   };
 
   const railLogoWrapStyle: CSSProperties = {
@@ -1210,9 +1397,7 @@ function AppShell() {
     height: '38px',
     borderRadius: '12px',
     padding: '5px',
-    background: isDark
-      ? 'rgba(37,99,235,0.15)'
-      : 'rgba(37,99,235,0.08)',
+    background: isDark ? 'rgba(37,99,235,0.15)' : 'rgba(37,99,235,0.08)',
     border: isDark
       ? '1px solid rgba(59,130,246,0.2)'
       : '1px solid rgba(59,130,246,0.15)',
@@ -1228,7 +1413,7 @@ function AppShell() {
     minWidth: 0,
     opacity: expandedSidebar ? 1 : 0,
     transform: expandedSidebar ? 'translateX(0)' : 'translateX(-10px)',
-    transition: 'opacity 140ms ease, transform 180ms ease',
+    transition: reducedMotion ? undefined : 'opacity 140ms ease, transform 180ms ease',
     pointerEvents: expandedSidebar ? 'auto' : 'none',
     overflow: 'hidden',
   };
@@ -1244,7 +1429,7 @@ function AppShell() {
     WebkitOverflowScrolling: 'touch',
   };
 
-  const navButtonDesktopStyle = (active: boolean, hovered: boolean): CSSProperties => ({
+  const getNavButtonStyle = (active: boolean, hovered: boolean): CSSProperties => ({
     position: 'relative',
     display: 'flex',
     alignItems: 'center',
@@ -1256,28 +1441,34 @@ function AppShell() {
     borderRadius: '14px',
     padding: expandedSidebar ? '0 12px' : '0',
     justifyContent: expandedSidebar ? 'flex-start' : 'center',
-    border: active
-      ? `1px solid ${activeGroupColor}33`
-      : '1px solid transparent',
+    border: active ? `1px solid ${activeGroupColor}33` : '1px solid transparent',
     background: active
       ? `linear-gradient(135deg, ${activeGroupColor}22 0%, ${activeGroupColor}15 100%)`
       : hovered
-      ? (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(37,99,235,0.05)')
+      ? isDark
+        ? 'rgba(255,255,255,0.05)'
+        : 'rgba(37,99,235,0.05)'
       : 'transparent',
     color: active
       ? activeGroupColor
       : hovered
-      ? (isDark ? '#93c5fd' : '#2563eb')
-      : (isDark ? '#94a3b8' : '#64748b'),
+      ? isDark
+        ? '#93c5fd'
+        : '#2563eb'
+      : isDark
+      ? '#94a3b8'
+      : '#64748b',
     overflow: 'hidden',
     whiteSpace: 'nowrap',
     cursor: 'pointer',
-    transition: `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, border-color 160ms ease`,
+    transition: reducedMotion
+      ? undefined
+      : `color 140ms ease, background 120ms ease, gap ${EXPAND_EASE}, padding ${EXPAND_EASE}, border-color 160ms ease`,
     width: '100%',
     fontFamily: "'DM Sans', sans-serif",
   });
 
-  const navIconBubbleStyle = (active: boolean, hovered: boolean): CSSProperties => ({
+  const getNavIconBubbleStyle = (active: boolean, hovered: boolean): CSSProperties => ({
     width: '30px',
     height: '30px',
     borderRadius: '9px',
@@ -1287,17 +1478,23 @@ function AppShell() {
     color: active
       ? activeGroupColor
       : hovered
-      ? (isDark ? '#93c5fd' : '#2563eb')
-      : (isDark ? '#64748b' : '#94a3b8'),
+      ? isDark
+        ? '#93c5fd'
+        : '#2563eb'
+      : isDark
+      ? '#64748b'
+      : '#94a3b8',
     background: active
       ? `${activeGroupColor}18`
       : hovered
-      ? (isDark ? 'rgba(255,255,255,0.07)' : 'rgba(37,99,235,0.08)')
+      ? isDark
+        ? 'rgba(255,255,255,0.07)'
+        : 'rgba(37,99,235,0.08)'
       : 'transparent',
     transition: 'background 140ms ease, color 140ms ease',
   });
 
-  const activeIndicatorStyle = (active: boolean): CSSProperties => ({
+  const getActiveIndicatorStyle = (active: boolean): CSSProperties => ({
     position: 'absolute',
     left: 0,
     top: '50%',
@@ -1306,11 +1503,13 @@ function AppShell() {
     height: active ? '22px' : '0',
     borderRadius: '0 2px 2px 0',
     background: activeGroupColor,
-    transition: 'height 200ms cubic-bezier(0.22, 1, 0.36, 1)',
+    transition: reducedMotion
+      ? undefined
+      : 'height 200ms cubic-bezier(0.22, 1, 0.36, 1)',
     boxShadow: active ? `0 0 8px ${activeGroupColor}80` : 'none',
   });
 
-  const navLabelStyle = (active: boolean): CSSProperties => ({
+  const getNavLabelStyle = (active: boolean): CSSProperties => ({
     fontSize: '13px',
     fontWeight: active ? 700 : 600,
     overflow: 'hidden',
@@ -1318,7 +1517,9 @@ function AppShell() {
     whiteSpace: 'nowrap',
     opacity: expandedSidebar ? 1 : 0,
     maxWidth: expandedSidebar ? '160px' : '0',
-    transition: `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
+    transition: reducedMotion
+      ? undefined
+      : `max-width 220ms cubic-bezier(0.22,1,0.36,1), opacity 120ms ease`,
     color: 'currentColor',
     fontFamily: "'DM Sans', sans-serif",
   });
@@ -1333,7 +1534,9 @@ function AppShell() {
     overflow: 'hidden',
     maxWidth: expandedSidebar ? '200px' : '0',
     opacity: expandedSidebar ? 1 : 0,
-    transition: `max-width ${EXPAND_EASE}, opacity 120ms ease`,
+    transition: reducedMotion
+      ? undefined
+      : `max-width ${EXPAND_EASE}, opacity 120ms ease`,
     whiteSpace: 'nowrap',
     fontFamily: "'DM Sans', sans-serif",
   };
@@ -1342,10 +1545,9 @@ function AppShell() {
     height: '1px',
     margin: expandedSidebar ? '6px 12px' : '6px 8px',
     background: isDark ? 'rgba(148,163,184,0.06)' : 'rgba(203,213,225,0.4)',
-    transition: `margin ${EXPAND_EASE}`,
+    transition: reducedMotion ? undefined : `margin ${EXPAND_EASE}`,
   };
 
-  // Header right controls
   const headerUserBadge: CSSProperties = {
     display: 'flex',
     alignItems: 'center',
@@ -1379,11 +1581,15 @@ function AppShell() {
     borderRadius: '12px',
     border: isSidebarPinned
       ? `1px solid ${activeGroupColor}55`
-      : (isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.8)'),
+      : isDark
+      ? '1px solid rgba(148,163,184,0.12)'
+      : '1px solid rgba(203,213,225,0.8)',
     background: isSidebarPinned
       ? `${activeGroupColor}14`
-      : (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)'),
-    color: isSidebarPinned ? activeGroupColor : (isDark ? '#94a3b8' : '#64748b'),
+      : isDark
+      ? 'rgba(255,255,255,0.04)'
+      : 'rgba(255,255,255,0.8)',
+    color: isSidebarPinned ? activeGroupColor : isDark ? '#94a3b8' : '#64748b',
     cursor: 'pointer',
     flexShrink: 0,
     transition: 'all 160ms ease',
@@ -1395,7 +1601,9 @@ function AppShell() {
     gap: '6px',
     padding: '8px 12px',
     borderRadius: '12px',
-    border: isDark ? '1px solid rgba(148,163,184,0.12)' : '1px solid rgba(203,213,225,0.8)',
+    border: isDark
+      ? '1px solid rgba(148,163,184,0.12)'
+      : '1px solid rgba(203,213,225,0.8)',
     background: isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.8)',
     color: isDark ? '#94a3b8' : '#64748b',
     cursor: 'pointer',
@@ -1411,7 +1619,9 @@ function AppShell() {
     gap: '6px',
     padding: '8px 14px',
     borderRadius: '12px',
-    border: isDark ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(239,68,68,0.2)',
+    border: isDark
+      ? '1px solid rgba(239,68,68,0.25)'
+      : '1px solid rgba(239,68,68,0.2)',
     background: isDark ? 'rgba(239,68,68,0.08)' : 'rgba(254,242,242,0.8)',
     color: isDark ? '#fca5a5' : '#dc2626',
     cursor: 'pointer',
@@ -1423,43 +1633,43 @@ function AppShell() {
 
   return (
     <AuthContext.Provider value={{ profile, loading: false, logout }}>
-      {/* Top accent bar */}
-      <div style={topAccentBarStyle} />
+      <div style={topAccentBarStyle} role="presentation" />
 
-      <div style={{ ...styles.appShell, fontFamily: "'DM Sans', sans-serif", paddingTop: '3px' }}>
-        {/* Ambient glows */}
+      <div
+        style={{
+          ...styles.appShell,
+          fontFamily: "'DM Sans', sans-serif",
+          paddingTop: '3px',
+        }}
+      >
         <div style={styles.backgroundGlowTop} />
         <div style={styles.backgroundGlowBottom} />
 
         {/* ── Header ── */}
         <header style={headerShellStyle}>
-          {/* Left: Brand */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <button
               type="button"
-              onClick={() => {
-                setIsSidebarPinned((prev) => !prev);
-                setHoveredPath(null);
-              }}
+              onClick={handleToggleSidebar}
               aria-label={isSidebarPinned ? 'Unpin sidebar' : 'Pin sidebar open'}
               title={isSidebarPinned ? 'Unpin sidebar' : 'Pin sidebar open'}
               style={headerSidebarToggleBtnStyle}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round">
-                <line x1="4" y1="7" x2="20" y2="7" />
-                <line x1="4" y1="12" x2="20" y2="12" />
-                <line x1="4" y1="17" x2="20" y2="17" />
-              </svg>
+              <MenuIcon />
             </button>
-            <div style={{
-              width: '5px',
-              height: '40px',
-              borderRadius: '999px',
-              background: `linear-gradient(180deg, ${activeGroupColor} 0%, rgba(139,92,246,0.6) 100%)`,
-              boxShadow: `0 0 12px ${activeGroupColor}80`,
-              flexShrink: 0,
-              transition: 'background 400ms ease, box-shadow 400ms ease',
-            }} />
+
+            <div
+              style={{
+                width: '5px',
+                height: '40px',
+                borderRadius: '999px',
+                background: `linear-gradient(180deg, ${activeGroupColor} 0%, rgba(139,92,246,0.6) 100%)`,
+                boxShadow: `0 0 12px ${activeGroupColor}80`,
+                flexShrink: 0,
+                transition: 'background 400ms ease, box-shadow 400ms ease',
+              }}
+            />
+
             <img
               src={LOGO_WORDMARK_SRC}
               alt="Detroit Axle"
@@ -1473,65 +1683,80 @@ function AppShell() {
             />
           </div>
 
-          {/* Center: breadcrumb + clock */}
           {!isCompactLayout && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                fontFamily: "'DM Sans', sans-serif",
-              }}>
-                <span style={{
-                  fontSize: '13px',
-                  color: isDark ? '#475569' : '#94a3b8',
-                  fontWeight: 500,
-                }}>Workspace</span>
-                <span style={{ color: isDark ? '#334155' : '#cbd5e1', fontSize: '14px' }}>›</span>
-                <span style={{
-                  fontSize: '13px',
-                  fontWeight: 700,
-                  color: isDark ? '#e2e8f0' : '#1e293b',
-                  animation: 'da-fade-in 200ms ease',
-                }}>{activeRouteLabel}</span>
-              </div>
-              <div style={{
-                width: '1px',
-                height: '16px',
-                background: isDark ? 'rgba(148,163,184,0.15)' : 'rgba(203,213,225,0.6)',
-              }} />
+              <nav aria-label="Breadcrumb" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    color: isDark ? '#475569' : '#94a3b8',
+                    fontWeight: 500,
+                  }}
+                >
+                  Workspace
+                </span>
+                <span style={{ color: isDark ? '#334155' : '#cbd5e1', fontSize: '14px' }}>
+                  ›
+                </span>
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: isDark ? '#e2e8f0' : '#1e293b',
+                    animation: reducedMotion ? undefined : 'da-fade-in 200ms ease',
+                  }}
+                >
+                  {activeRouteLabel}
+                </span>
+              </nav>
+              <div
+                style={{
+                  width: '1px',
+                  height: '16px',
+                  background: isDark
+                    ? 'rgba(148,163,184,0.15)'
+                    : 'rgba(203,213,225,0.6)',
+                }}
+              />
               <LiveClock isDark={isDark} />
             </div>
           )}
 
-          {/* Right: user + actions */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             {!isCompactLayout && (
               <div style={headerUserBadge}>
                 <div style={headerAvatarStyle}>{userInitials}</div>
                 <div>
-                  <div style={{
-                    fontSize: '12px',
-                    fontWeight: 700,
-                    color: isDark ? '#e2e8f0' : '#1e293b',
-                    fontFamily: "'DM Sans', sans-serif",
-                    lineHeight: 1.2,
-                  }}>{profileLabel || profile.email}</div>
-                  <div style={{
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    color: activeGroupColor,
-                    fontFamily: "'DM Sans', sans-serif",
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                  }}>{profile.role}</div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 700,
+                      color: isDark ? '#e2e8f0' : '#1e293b',
+                      fontFamily: "'DM Sans', sans-serif",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {profileLabel || profile.email}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      color: activeGroupColor,
+                      fontFamily: "'DM Sans', sans-serif",
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.08em',
+                    }}
+                  >
+                    {profile.role}
+                  </div>
                 </div>
               </div>
             )}
 
             <button
               type="button"
-              onClick={() => setThemeMode(prev => prev === 'light' ? 'dark' : 'light')}
+              onClick={toggleTheme}
               style={headerThemeBtnStyle}
               title={themeMode === 'light' ? 'Dark mode' : 'Light mode'}
             >
@@ -1539,29 +1764,26 @@ function AppShell() {
               {!isCompactLayout && (themeMode === 'light' ? 'Dark' : 'Light')}
             </button>
 
-            <button type="button" onClick={logout} style={headerLogoutBtnStyle}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-                <polyline points="16 17 21 12 16 7"/>
-                <line x1="21" y1="12" x2="9" y2="12"/>
-              </svg>
+            <button type="button" onClick={handleLogout} style={headerLogoutBtnStyle}>
+              <LogoutIcon size={13} />
               {!isCompactLayout && 'Sign Out'}
             </button>
           </div>
         </header>
 
-        {/* ── Main content ── */}
+        {/* ── Main Content ── */}
         {hasSidebarRail ? (
           <main style={styles.contentShell}>
             {isCompactLayout ? (
               <>
-                <nav style={styles.navShell}>
+                <nav style={styles.navShell} aria-label="Main navigation">
                   <div style={styles.navScroller}>
                     {navItems.map((item) => (
                       <button
                         key={item.path}
                         type="button"
-                        onClick={(event) => { navigate(item.path); event.currentTarget.blur(); }}
+                        onClick={() => handleNavigate(item.path)}
+                        aria-current={location.pathname === item.path ? 'page' : undefined}
                         style={{
                           ...styles.navButton,
                           display: 'flex',
@@ -1595,96 +1817,112 @@ function AppShell() {
                     setIsSidebarHovered(false);
                     setHoveredPath(null);
                   }}
+                  role="navigation"
+                  aria-label="Sidebar navigation"
                 >
                   <div style={sidebarPanelStyle}>
-                    {/* Sidebar header */}
                     <div style={railHeaderStyle}>
                       <div style={railLogoWrapStyle}>
-                        <img src={LOGO_MARK_SRC} alt="Detroit Axle" style={{ width: '26px', height: '26px', objectFit: 'contain' }} />
+                        <img
+                          src={LOGO_MARK_SRC}
+                          alt="Detroit Axle"
+                          style={{ width: '26px', height: '26px', objectFit: 'contain' }}
+                        />
                       </div>
                       <div style={railBrandTextStyle}>
-                        <div style={{
-                          fontFamily: "'Bricolage Grotesque', sans-serif",
-                          fontSize: '14px',
-                          fontWeight: 800,
-                          letterSpacing: '-0.02em',
-                          color: isDark ? '#f1f5f9' : '#0f172a',
-                          whiteSpace: 'nowrap',
-                        }}>Detroit Axle</div>
-                        <div style={{
-                          fontSize: '10px',
-                          fontWeight: 600,
-                          letterSpacing: '0.1em',
-                          textTransform: 'uppercase',
-                          color: isDark ? '#475569' : '#94a3b8',
-                          fontFamily: "'DM Sans', sans-serif",
-                        }}>QA System</div>
+                        <div
+                          style={{
+                            fontFamily: "'Bricolage Grotesque', sans-serif",
+                            fontSize: '14px',
+                            fontWeight: 800,
+                            letterSpacing: '-0.02em',
+                            color: isDark ? '#f1f5f9' : '#0f172a',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Detroit Axle
+                        </div>
+                        <div
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 600,
+                            letterSpacing: '0.1em',
+                            textTransform: 'uppercase',
+                            color: isDark ? '#475569' : '#94a3b8',
+                            fontFamily: "'DM Sans', sans-serif",
+                          }}
+                        >
+                          QA System
+                        </div>
                       </div>
                     </div>
 
-                    {/* Nav items */}
                     <div style={navRailStyle}>
                       {expandedSidebar
                         ? navGroupsOrdered.map(([groupName, groupItems], gi) => (
-                          <div key={groupName}>
-                            {gi > 0 && <div style={navDividerStyle} />}
-                            <div style={{
-                              ...navGroupLabelStyle,
-                              color: GROUP_COLORS[groupName] || '#6b7280',
-                            }}>{groupName}</div>
-                            {groupItems.map((item) => {
-                              const active = location.pathname === item.path;
-                              const hovered = hoveredPath === item.path;
-                              return (
-                                <button
-                                  key={item.path}
-                                  type="button"
-                                  onClick={(event) => { navigate(item.path); event.currentTarget.blur(); }}
-                                  onMouseEnter={() => setHoveredPath(item.path)}
-                                  onMouseLeave={() => setHoveredPath(null)}
-                                  style={navButtonDesktopStyle(active, hovered)}
-                                >
-                                  <div style={activeIndicatorStyle(active)} />
-                                  <span style={navIconBubbleStyle(active, hovered)}>
-                                    <NavIconSvg label={item.label} size={15} />
-                                  </span>
-                                  <span style={navLabelStyle(active)}>{item.label}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))
+                            <div key={groupName}>
+                              {gi > 0 && <div style={navDividerStyle} />}
+                              <div
+                                style={{
+                                  ...navGroupLabelStyle,
+                                  color: GROUP_COLORS[groupName] || '#6b7280',
+                                }}
+                              >
+                                {groupName}
+                              </div>
+                              {groupItems.map((item) => {
+                                const active = location.pathname === item.path;
+                                const hovered = hoveredPath === item.path;
+                                return (
+                                  <button
+                                    key={item.path}
+                                    type="button"
+                                    onClick={() => handleNavigate(item.path)}
+                                    onMouseEnter={() => setHoveredPath(item.path)}
+                                    onMouseLeave={() => setHoveredPath(null)}
+                                    aria-current={active ? 'page' : undefined}
+                                    style={getNavButtonStyle(active, hovered)}
+                                  >
+                                    <div style={getActiveIndicatorStyle(active)} />
+                                    <span style={getNavIconBubbleStyle(active, hovered)}>
+                                      <NavIconSvg label={item.label} size={15} />
+                                    </span>
+                                    <span style={getNavLabelStyle(active)}>{item.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ))
                         : navItems.map((item) => {
-                          const active = location.pathname === item.path;
-                          const hovered = hoveredPath === item.path;
-                          return (
-                            <button
-                              key={item.path}
-                              type="button"
-                              onClick={(event) => { navigate(item.path); event.currentTarget.blur(); }}
-                              onMouseEnter={() => setHoveredPath(item.path)}
-                              onMouseLeave={() => setHoveredPath(null)}
-                              style={navButtonDesktopStyle(active, hovered)}
-                              title={item.label}
-                            >
-                              <div style={activeIndicatorStyle(active)} />
-                              <span style={navIconBubbleStyle(active, hovered)}>
-                                <NavIconSvg label={item.label} size={15} />
-                              </span>
-                              <span style={navLabelStyle(active)}>{item.label}</span>
-                            </button>
-                          );
-                        })
-                      }
+                            const active = location.pathname === item.path;
+                            const hovered = hoveredPath === item.path;
+                            return (
+                              <button
+                                key={item.path}
+                                type="button"
+                                onClick={() => handleNavigate(item.path)}
+                                onMouseEnter={() => setHoveredPath(item.path)}
+                                onMouseLeave={() => setHoveredPath(null)}
+                                aria-current={active ? 'page' : undefined}
+                                title={item.label}
+                                style={getNavButtonStyle(active, hovered)}
+                              >
+                                <div style={getActiveIndicatorStyle(active)} />
+                                <span style={getNavIconBubbleStyle(active, hovered)}>
+                                  <NavIconSvg label={item.label} size={15} />
+                                </span>
+                                <span style={getNavLabelStyle(active)}>{item.label}</span>
+                              </button>
+                            );
+                          })}
                     </div>
 
-                    {/* User card at bottom */}
                     <SidebarUserCard
                       profile={profile}
                       initials={userInitials}
                       expanded={expandedSidebar}
                       isDark={isDark}
-                      onLogout={logout}
+                      onLogout={handleLogout}
                     />
                   </div>
                 </aside>
@@ -1711,9 +1949,10 @@ function AppShell() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// App root
-// ─────────────────────────────────────────────────────────────
+// ═════════════════════════════════════════════════════════════
+// Root
+// ═════════════════════════════════════════════════════════════
+
 function App() {
   return (
     <ErrorBoundary>
