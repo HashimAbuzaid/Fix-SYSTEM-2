@@ -2302,143 +2302,269 @@ function TeamPerfCard({
   );
 }
 
-function ActionCenter({
-  C,
-  light,
-  items,
-  onNavigate,
-  agingReqs,
-  overdueFb,
-  agingMon,
-  agingHidden,
-}: any) {
-  const urgentCount = items.filter(
-    (i: ActionCenterItem) => i.tone === 'critical' && i.count > 0
-  ).length;
-  const watchCount = items.filter(
-    (i: ActionCenterItem) => i.tone === 'warning' && i.count > 0
-  ).length;
+function ActionCenter({ C, light, items, onNavigate, agingReqs, overdueFb, agingMon, agingHidden }: any) {
+  const urgentCount = items.filter((i: ActionCenterItem) => i.tone === 'critical' && i.count > 0).length;
+  const watchCount = items.filter((i: ActionCenterItem) => i.tone === 'warning' && i.count > 0).length;
 
   return (
     <div>
-      <div
-        style={{
-          padding: '20px 24px',
-          borderRadius: '16px',
-          border: `1px solid ${
-            urgentCount > 0
-              ? 'rgba(239,68,68,.3)'
-              : watchCount > 0
-              ? 'rgba(245,158,11,.3)'
-              : C.borderAccent
-          }`,
-          background:
-            urgentCount > 0
-              ? 'rgba(239,68,68,.06)'
-              : watchCount > 0
-              ? 'rgba(245,158,11,.06)'
-              : C.accentSoft,
-          marginBottom: '24px',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '16px',
-        }}
-      >
+      {/* Status banner */}
+      <div style={{ padding: '20px 24px', borderRadius: '16px', border: `1px solid ${urgentCount > 0 ? 'rgba(239,68,68,.3)' : watchCount > 0 ? 'rgba(245,158,11,.3)' : C.borderAccent}`, background: urgentCount > 0 ? 'rgba(239,68,68,.06)' : watchCount > 0 ? 'rgba(245,158,11,.06)' : C.accentSoft, marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <div
-            className="dash-display"
-            style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              color: C.text,
-              marginBottom: '4px',
-            }}
-          >
-            {urgentCount > 0
-              ? `${urgentCount} Urgent Item${urgentCount > 1 ? 's' : ''} Requiring Attention`
-              : watchCount > 0
-              ? `${watchCount} Item${watchCount > 1 ? 's' : ''} to Watch`
-              : 'All Queues Healthy'}
+          <div className="dash-display" style={{ fontSize: '20px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>
+            {urgentCount > 0 ? `${urgentCount} Urgent Item${urgentCount > 1 ? 's' : ''} Requiring Attention` : watchCount > 0 ? `${watchCount} Item${watchCount > 1 ? 's' : ''} to Watch` : 'All Queues Healthy'}
           </div>
           <div style={{ fontSize: '13px', color: C.textSub }}>
-            {urgentCount > 0
-              ? 'Act on critical items immediately to maintain SLA compliance.'
-              : watchCount > 0
-              ? 'Monitor these items and address before they escalate.'
-              : 'No urgent operational backlog in the selected period.'}
+            {urgentCount > 0 ? 'Act on critical items immediately to maintain SLA compliance.' : watchCount > 0 ? 'Monitor these items and address before they escalate.' : 'No urgent operational backlog in the selected period.'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {[
-            { label: 'Urgent', value: urgentCount, color: C.criticalColor },
-            { label: 'Watch', value: watchCount, color: C.warningColor },
-            {
-              label: 'Stable',
-              value: items.filter((i: ActionCenterItem) => i.tone === 'info')
-                .length,
-              color: C.accent,
-            },
-          ].map((s) => (
+          {[{ label: 'Urgent', value: urgentCount, color: C.criticalColor }, { label: 'Watch', value: watchCount, color: C.warningColor }, { label: 'Stable', value: items.filter((i: ActionCenterItem) => i.tone === 'info').length, color: C.accent }].map(s => (
             <div key={s.label} style={{ textAlign: 'center' }}>
-              <div
-                className="dash-display"
-                style={{ fontSize: '22px', fontWeight: 800, color: s.color }}
-              >
-                {s.value}
-              </div>
-              <div
-                style={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  color: C.textMuted,
-                  textTransform: 'uppercase',
-                  letterSpacing: '.08em',
-                }}
-              >
-                {s.label}
-              </div>
+              <div className="dash-display" style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value}</div>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
             </div>
           ))}
         </div>
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-          gap: '14px',
-          marginBottom: '24px',
-        }}
-      >
+      {/* Action cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '24px' }}>
         {items.map((item: ActionCenterItem, i: number) => (
-          <ActionCard
-            key={item.id}
-            item={item}
-            C={C}
-            light={light}
-            onNavigate={onNavigate}
-            index={i}
-          />
+          <ActionCard key={item.id} item={item} C={C} light={light} onNavigate={onNavigate} index={i} />
         ))}
       </div>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-          gap: '16px',
-        }}
-      >
-        <div
-          style={{
-            padding: '20px',
-            borderRadius: '16px',
-            border: `1px solid ${C.border}`,
-            background: C.surface,
-          }}
-        >
-          <div
-            className="dash-display"
-            style
+      {/* Aging detail table */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
+          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>⚠ Aging / Overdue</div>
+          {[
+            { label: 'Requests aging 3+ days', value: agingReqs, tone: agingReqs > 0 ? 'critical' : 'info' },
+            { label: 'Feedback overdue', value: overdueFb, tone: overdueFb > 0 ? 'critical' : 'info' },
+            { label: 'Monitoring aging 2+ days', value: agingMon, tone: agingMon > 0 ? 'warning' : 'info' },
+            { label: 'Unreleased audits 2+ days', value: agingHidden, tone: agingHidden > 0 ? 'warning' : 'info' },
+          ].map(row => (
+            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', marginBottom: '8px', background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', border: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: '13px', color: C.textSub, fontWeight: 500 }}>{row.label}</span>
+              <span className="dash-display" style={{ fontSize: '18px', fontWeight: 800, color: row.value > 0 ? (row.tone === 'critical' ? C.criticalColor : C.warningColor) : C.textMuted }}>{row.value}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
+          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>→ Quick Links</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+            {[
+              { label: 'Audits List', path: '/audits-list' },
+              { label: 'Feedback', path: '/agent-feedback' },
+              { label: 'Monitoring', path: '/monitoring' },
+              { label: 'Requests', path: '/supervisor-requests' },
+              { label: 'Reports', path: '/reports' },
+              { label: 'Heatmap', path: '/team-heatmap' },
+            ].map(l => (
+              <button key={l.path} className="dash-btn" onClick={() => onNavigate(l.path)} style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                {l.label} →
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ActionCard({ item, C, light, onNavigate, index }: { item: ActionCenterItem; C: any; light: boolean; onNavigate: (path: string) => void; index: number }) {
+  const toneColor = item.tone === 'critical' ? C.criticalColor : item.tone === 'warning' ? C.warningColor : C.accent;
+  const toneBg = item.tone === 'critical' ? 'rgba(239,68,68,.08)' : item.tone === 'warning' ? 'rgba(245,158,11,.08)' : C.accentSoft;
+  const toneBorder = item.tone === 'critical' ? 'rgba(239,68,68,.25)' : item.tone === 'warning' ? 'rgba(245,158,11,.25)' : C.borderAccent;
+
+  return (
+    <div className={`dash-action-card dash-stagger-${index + 1}`} style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${toneBorder}`, background: toneBg, display: 'grid', gap: '12px', animation: item.tone === 'critical' && item.count > 0 ? 'dash-border-glow 2s ease-in-out infinite' : 'none' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <span className={`dash-tag dash-tag-${item.tone}${light ? ' light' : ''}`}>{item.tone === 'critical' ? 'Urgent' : item.tone === 'warning' ? 'Watch' : 'Stable'}</span>
+        <div className="dash-display" style={{ fontSize: '36px', fontWeight: 800, color: toneColor, lineHeight: 1 }}>{item.count}</div>
+      </div>
+      <div>
+        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '4px' }}>{item.title}</div>
+        <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>{item.detail}</div>
+      </div>
+      <button className="dash-btn" onClick={() => onNavigate(item.path)} style={{ padding: '8px 14px', borderRadius: '10px', border: `1px solid ${toneBorder}`, background: light ? 'rgba(255,255,255,.8)' : 'rgba(13,18,36,.6)', color: toneColor, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center' }}>
+        Open →
+      </button>
+    </div>
+  );
+}
+
+// ─── RankingsSection ─────────────────────────────────────────────────────────
+function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, callsQualTop, ticketsQualTop, callsHybridTop, ticketsHybridTop }: any) {
+  const [boardType, setBoardType] = useState<'quantity' | 'quality' | 'combined'>('combined');
+
+  return (
+    <div>
+      {/* Board type switcher */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', padding: '4px', borderRadius: '12px', background: light ? 'rgba(241,245,249,.8)' : 'rgba(13,18,36,.8)', border: `1px solid ${C.border}`, width: 'fit-content' }}>
+        {(['combined', 'quantity', 'quality'] as const).map(t => (
+          <button key={t} className="dash-segment-tab" onClick={() => setBoardType(t)} style={{ padding: '7px 16px', borderRadius: '8px', border: boardType === t ? `1px solid ${C.borderAccent}` : '1px solid transparent', background: boardType === t ? C.surface : 'transparent', color: boardType === t ? C.accent : C.textMuted, fontSize: '12px', fontWeight: boardType === t ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {boardType === 'combined' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} light={light} type="hybrid" />
+          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} light={light} type="hybrid" />
+        </div>
+      )}
+      {boardType === 'quantity' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} light={light} type="quantity" unit="calls" />
+          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} light={light} type="quantity" unit="tickets" />
+          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} light={light} type="quantity" unit="usd" />
+        </div>
+      )}
+      {boardType === 'quality' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} light={light} type="quality" />
+          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} light={light} type="quality" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title: string; color: string; items: any[]; C: any; light: boolean; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
+  const maxVal = items.length ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity)) : 1;
+
+  return (
+    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, boxShadow: C.shadow }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
+        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}80` }} />
+        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{title}</div>
+        <div style={{ marginLeft: 'auto', padding: '3px 8px', borderRadius: '999px', background: `${color}18`, border: `1px solid ${color}30`, fontSize: '10px', fontWeight: 700, color }}>{items.length} agents</div>
+      </div>
+
+      {items.length === 0 ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, fontSize: '13px', borderRadius: '10px', border: `1px dashed ${C.border}` }}>No data for period</div>
+      ) : (
+        <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '340px', overflowY: 'auto' }}>
+          {items.map((item, i) => {
+            const val = type === 'quality' ? item.averageQuality : type === 'hybrid' ? item.combinedScore : item.quantity;
+            const barPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
+            const displayVal = type === 'quality' ? `${item.averageQuality.toFixed(1)}%` : type === 'hybrid' ? `${item.combinedScore.toFixed(2)}` : unit === 'usd' ? `$${item.quantity >= 1000 ? (item.quantity / 1000).toFixed(1) + 'k' : item.quantity}` : String(item.quantity);
+            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+
+            return (
+              <div key={item.label} className="dash-rank-row" style={{ padding: '12px 14px', borderRadius: '12px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', cursor: 'default' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                  <div style={{ width: '24px', height: '24px', borderRadius: '8px', background: i < 3 ? `${medalColors[i]}22` : C.accentSoft, border: `1px solid ${i < 3 ? medalColors[i] + '40' : C.borderAccent}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                    <span className="dash-mono" style={{ fontSize: '10px', fontWeight: 700, color: i < 3 ? medalColors[i] : C.accent }}>#{i + 1}</span>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+                    {type === 'hybrid' && <div style={{ fontSize: '10px', color: C.textMuted }}>Quality {item.averageQuality?.toFixed(1)}% · RSD {item.rsd?.toFixed(3)}</div>}
+                    {type === 'quality' && <div style={{ fontSize: '10px', color: C.textMuted }}>{item.auditsCount} audit{item.auditsCount !== 1 ? 's' : ''}</div>}
+                  </div>
+                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color, flexShrink: 0 }}>{displayVal}</div>
+                </div>
+                {/* Mini bar */}
+                <div style={{ height: '3px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${barPct}%`, background: `linear-gradient(90deg, ${color}, ${color}90)`, borderRadius: '999px', transition: 'width 600ms cubic-bezier(.22,1,.36,1)' }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── InsightsSection ─────────────────────────────────────────────────────────
+function InsightsSection({ C, light, lowestAgent, mostConsistent, coachTarget, allSummaries, avgQuality, releasedRate, totalAudits }: any) {
+  return (
+    <div>
+      {/* Top 3 insight cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
+        <InsightCard C={C} light={light} tone="warning" icon="◎" title="Needs Attention"
+          agent={lowestAgent?.label || 'No data'}
+          detail={lowestAgent ? `${lowestAgent.averageQuality.toFixed(1)}% avg quality across ${lowestAgent.auditsCount} audit${lowestAgent.auditsCount !== 1 ? 's' : ''}` : 'No quality insight available.'}
+          badge="Lowest Quality"
+        />
+        <InsightCard C={C} light={light} tone="success" icon="◈" title="Most Consistent"
+          agent={mostConsistent?.label || 'No combined data'}
+          detail={mostConsistent ? `RSD ${mostConsistent.rsd.toFixed(3)} · Score ${mostConsistent.combinedScore.toFixed(3)}` : 'No consistency signal.'}
+          badge="Top Stability"
+        />
+        <InsightCard C={C} light={light} tone="info" icon="▲" title="Coaching Opportunity"
+          agent={coachTarget?.label || 'No target'}
+          detail={coachTarget ? `${coachTarget.averageQuality.toFixed(1)}% avg · ${coachTarget.auditsCount} audits` : 'Need 2+ audits per agent.'}
+          badge="Action Required"
+        />
+      </div>
+
+      {/* Distribution */}
+      <div style={{ padding: '24px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, marginBottom: '20px' }}>
+        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>Quality Distribution</div>
+        <div style={{ fontSize: '12px', color: C.textMuted, marginBottom: '18px' }}>All agents ranked by average audit score</div>
+
+        {allSummaries.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, borderRadius: '10px', border: `1px dashed ${C.border}` }}>No audit data for period</div>
+        ) : (
+          <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+            {allSummaries.map((a: RankedAuditSummary, i: number) => {
+              const qualColor = a.averageQuality >= 90 ? C.salesColor : a.averageQuality >= 75 ? C.accent : a.averageQuality >= 60 ? C.warningColor : C.criticalColor;
+              return (
+                <div key={a.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)' }}>
+                  <div className="dash-mono" style={{ width: '24px', fontSize: '11px', fontWeight: 700, color: C.textMuted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
+                    <div style={{ fontSize: '10px', color: C.textMuted }}>{a.auditsCount} audit{a.auditsCount !== 1 ? 's' : ''}</div>
+                  </div>
+                  <div style={{ width: '120px', height: '4px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden', flexShrink: 0 }}>
+                    <div style={{ height: '100%', width: `${a.averageQuality}%`, background: qualColor, borderRadius: '999px' }} />
+                  </div>
+                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color: qualColor, minWidth: '46px', textAlign: 'right', flexShrink: 0 }}>{a.averageQuality.toFixed(1)}%</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Summary metrics */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+        {[
+          { label: 'Period Audits', value: String(totalAudits), detail: 'Total in range' },
+          { label: 'Avg Quality', value: `${avgQuality.toFixed(1)}%`, detail: 'Cross-team' },
+          { label: 'Release Rate', value: `${releasedRate.toFixed(0)}%`, detail: 'Shared with agents' },
+          { label: 'Agents Tracked', value: String(allSummaries.length), detail: 'With audit data' },
+        ].map(m => (
+          <div key={m.label} style={{ padding: '16px 18px', borderRadius: '14px', border: `1px solid ${C.border}`, background: C.surface }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '4px' }}>{m.label}</div>
+            <div className="dash-display" style={{ fontSize: '24px', fontWeight: 800, color: C.text }}>{m.value}</div>
+            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{m.detail}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InsightCard({ C, light, tone, icon, title, agent, detail, badge }: any) {
+  const toneColor = tone === 'warning' ? C.warningColor : tone === 'success' ? C.salesColor : C.accent;
+  const toneBg = tone === 'warning' ? 'rgba(245,158,11,.08)' : tone === 'success' ? 'rgba(16,185,129,.08)' : C.accentSoft;
+  const toneBorder = tone === 'warning' ? 'rgba(245,158,11,.25)' : tone === 'success' ? 'rgba(16,185,129,.25)' : C.borderAccent;
+  return (
+    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '18px', border: `1px solid ${toneBorder}`, background: toneBg, boxShadow: C.shadow }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+        <span style={{ fontSize: '22px', color: toneColor }}>{icon}</span>
+        <span className={`dash-tag dash-tag-${tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'info'}${light ? ' light' : ''}`}>{badge}</span>
+      </div>
+      <div style={{ fontSize: '11px', fontWeight: 700, color: toneColor, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '6px' }}>{title}</div>
+      <div className="dash-display" style={{ fontSize: '17px', fontWeight: 800, color: C.text, marginBottom: '8px', lineHeight: 1.3 }}>{agent}</div>
+      <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.6 }}>{detail}</div>
+    </div>
+  );
+}
