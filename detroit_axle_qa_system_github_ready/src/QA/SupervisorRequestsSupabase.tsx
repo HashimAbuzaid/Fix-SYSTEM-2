@@ -1100,19 +1100,6 @@ function SupervisorRequestsSupabase({ currentUser = null }: SupervisorRequestsSu
     closed: requests.filter(r => r.status === 'Closed').length,
   }), [requests]);
 
-  const tabCounts = useMemo(() => ({
-    '': filteredRequests.length,
-    'Open': requests.filter(r => {
-      const s = searchText.trim().toLowerCase();
-      const dn = getRequestDisplayName(r).toLowerCase();
-      return r.status === 'Open' && (!s ||
-        (r.case_reference || '').toLowerCase().includes(s) ||
-        (r.agent_name || '').toLowerCase().includes(s) ||
-        dn.includes(s));
-    }).length,
-    'Under Review': requests.filter(r => r.status === 'Under Review').length,
-    'Closed': requests.filter(r => r.status === 'Closed').length,
-  }), [requests, searchText, agentProfiles]);
 
   // ── Create ────────────────────────────────────────────────────────────────
   async function handleCreate() {
