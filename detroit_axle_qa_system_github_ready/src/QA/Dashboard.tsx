@@ -1261,7 +1261,7 @@ export default memo(Dashboard);
 function DashHero({ dateFrom, dateTo, setDateFrom, setDateTo, fromRef, toRef, refreshing, lastLoadedAt, onRefresh, onThisMonth, onAllTime, currentUser }: {
   dateFrom: string; dateTo: string;
   setDateFrom: (v: string) => void; setDateTo: (v: string) => void;
-  fromRef: React.RefObject<HTMLInputElement>; toRef: React.RefObject<HTMLInputElement>;
+  fromRef: React.RefObject<HTMLInputElement | null>; toRef: React.RefObject<HTMLInputElement | null>;
   refreshing: boolean; lastLoadedAt: string;
   onRefresh: () => void; onThisMonth: () => void; onAllTime: () => void;
   currentUser: any;
