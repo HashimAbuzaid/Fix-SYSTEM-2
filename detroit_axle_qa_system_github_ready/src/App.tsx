@@ -905,57 +905,104 @@ a { color: inherit; text-decoration: none; }
 .da-loader-card {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 24px;
   padding: 28px 32px;
   border-radius: 20px;
   border: 1px solid var(--border-strong);
-  background: var(--bg-elevated);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 94%, transparent), color-mix(in srgb, var(--bg-overlay) 86%, transparent));
   box-shadow: var(--shadow-lg);
   animation: scaleIn 300ms var(--spring) both;
+  min-width: min(560px, calc(100vw - 36px));
 }
-.da-loader-rotor {
-  width: 52px; height: 52px;
-  border-radius: 50%;
-  border: 2px solid var(--border-strong);
-  border-top-color: var(--accent-blue);
-  border-right-color: var(--accent-violet);
-  animation: spin 0.9s linear infinite;
+.da-loader-visual {
+  position: relative;
+  width: 118px;
+  height: 118px;
   flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 12px 22px rgba(0,0,0,0.42));
 }
-.da-loader-copy {}
+.da-loader-visual::before {
+  content: '';
+  position: absolute;
+  inset: 14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent-blue) 18%, transparent) 0%, transparent 72%);
+  filter: blur(9px);
+  opacity: 0.95;
+}
+.da-loader-disc-spin {
+  position: absolute;
+  inset: 0;
+  animation: spin 1.15s linear infinite;
+  will-change: transform;
+}
+.da-loader-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.da-loader-caliper {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.da-loader-copy {
+  min-width: 0;
+}
 .da-loader-eyebrow {
   font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--accent-blue);
-  margin-bottom: 4px;
+  margin-bottom: 5px;
 }
 .da-loader-headline {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--fg-default);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.025em;
 }
 .da-loader-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--fg-muted);
-  margin-top: 2px;
+  margin-top: 6px;
+  line-height: 1.55;
+  max-width: 360px;
 }
 .da-loader-bar {
-  height: 2px;
-  margin-top: 14px;
+  height: 3px;
+  margin-top: 16px;
   border-radius: 999px;
   background: var(--border);
   overflow: hidden;
-  width: 200px;
+  width: min(260px, 100%);
 }
 .da-loader-bar-fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent-blue), var(--accent-violet));
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-violet), var(--accent-cyan));
   background-size: 200%;
   animation: shimmer 1.5s linear infinite;
+}
+@media (max-width: 640px) {
+  .da-loader-card {
+    min-width: 0;
+    width: calc(100vw - 24px);
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 24px;
+  }
+  .da-loader-visual {
+    width: 104px;
+    height: 104px;
+  }
+  .da-loader-bar {
+    width: 100%;
+  }
 }
 
 /* ── Profile panel ───────────────────────────────────────── */
@@ -1950,6 +1997,89 @@ const Header = memo(
 // Loader
 // ─────────────────────────────────────────────────────────────
 
+const RotorLoaderVisual = memo(function RotorLoaderVisual() {
+  const boltHoles = [0, 60, 120, 180, 240, 300];
+  const ventilationSlots = Array.from({ length: 12 }, (_, idx) => idx * 30);
+
+  return (
+    <div className="da-loader-visual" aria-hidden="true">
+      <div className="da-loader-disc-spin">
+        <svg viewBox="0 0 140 140" className="da-loader-svg">
+          <defs>
+            <radialGradient id="da-rotor-metal" cx="48%" cy="40%" r="70%">
+              <stop offset="0%" stopColor="#f3f6fb" />
+              <stop offset="42%" stopColor="#a4acb8" />
+              <stop offset="72%" stopColor="#5d6470" />
+              <stop offset="100%" stopColor="#222831" />
+            </radialGradient>
+            <linearGradient id="da-rotor-edge" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#eef2f7" />
+              <stop offset="45%" stopColor="#6d7480" />
+              <stop offset="100%" stopColor="#1b2028" />
+            </linearGradient>
+            <radialGradient id="da-rotor-hub" cx="45%" cy="38%" r="75%">
+              <stop offset="0%" stopColor="#cfd6df" />
+              <stop offset="70%" stopColor="#47515e" />
+              <stop offset="100%" stopColor="#1a2028" />
+            </radialGradient>
+          </defs>
+
+          <circle cx="70" cy="70" r="61" fill="#0f1319" opacity="0.4" />
+          <circle cx="70" cy="70" r="58" fill="url(#da-rotor-edge)" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
+          <circle cx="70" cy="70" r="46.5" fill="none" stroke="rgba(15,18,24,0.85)" strokeWidth="20" />
+          <circle cx="70" cy="70" r="46.5" fill="none" stroke="url(#da-rotor-metal)" strokeWidth="16" />
+          <circle cx="70" cy="70" r="45.5" fill="none" stroke="rgba(255,255,255,0.24)" strokeWidth="1.6" opacity="0.75" />
+
+          {ventilationSlots.map((angle) => (
+            <rect
+              key={angle}
+              x="67"
+              y="15"
+              width="6"
+              height="22"
+              rx="3"
+              fill="rgba(12,16,24,0.62)"
+              transform={`rotate(${angle} 70 70)`}
+            />
+          ))}
+
+          <circle cx="70" cy="70" r="23" fill="url(#da-rotor-hub)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.4" />
+          <circle cx="70" cy="70" r="8.5" fill="#0b1016" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2" />
+
+          {boltHoles.map((angle) => {
+            const radians = (angle * Math.PI) / 180;
+            const x = 70 + Math.cos(radians) * 15;
+            const y = 70 + Math.sin(radians) * 15;
+            return <circle key={angle} cx={x} cy={y} r="2.6" fill="#0d1218" stroke="rgba(255,255,255,0.12)" strokeWidth="0.8" />;
+          })}
+        </svg>
+      </div>
+
+      <svg viewBox="0 0 140 140" className="da-loader-svg da-loader-caliper">
+        <defs>
+          <linearGradient id="da-caliper-body" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#d7dee7" />
+            <stop offset="35%" stopColor="#8a93a0" />
+            <stop offset="100%" stopColor="#353d49" />
+          </linearGradient>
+          <linearGradient id="da-caliper-accent" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#4ba7ff" />
+            <stop offset="100%" stopColor="#235ec9" />
+          </linearGradient>
+        </defs>
+        <path d="M88 28 C104 28 114 39 114 55 V84 C114 97 105 108 91 108 H78 C74 108 72 105 72 101 V92 C72 88 70 85 66 84 L57 82 C53 81 50 77 50 73 V62 C50 58 53 54 57 53 L66 51 C70 50 72 47 72 43 V35 C72 31 75 28 79 28 H88 Z" fill="url(#da-caliper-body)" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
+        <path d="M82 37 H96 C103 37 108 42 108 49 V89 C108 96 103 101 96 101 H82" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.2" />
+        <rect x="76" y="50" width="22" height="39" rx="9" fill="rgba(12,16,22,0.28)" />
+        <rect x="81" y="45" width="8" height="49" rx="4" fill="url(#da-caliper-accent)" opacity="0.95" />
+        <circle cx="95" cy="48" r="3.4" fill="#171d25" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
+        <circle cx="95" cy="92" r="3.4" fill="#171d25" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
+        <path d="M57 58 H74" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" />
+        <path d="M57 78 H74" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+});
+
 const Loader = memo(function Loader({
   message = "Loading workspace…",
 }: {
@@ -1958,11 +2088,13 @@ const Loader = memo(function Loader({
   return (
     <div className="da-loader-shell" role="status" aria-label={message}>
       <div className="da-loader-card">
-        <div className="da-loader-rotor" aria-hidden="true" />
+        <RotorLoaderVisual />
         <div className="da-loader-copy">
           <div className="da-loader-eyebrow">Detroit Axle QA</div>
           <div className="da-loader-headline">{message}</div>
-          <div className="da-loader-sub">Preparing your workspace</div>
+          <div className="da-loader-sub">
+            Checking rotors, calipers, and release state.
+          </div>
           <div className="da-loader-bar">
             <div className="da-loader-bar-fill" />
           </div>
