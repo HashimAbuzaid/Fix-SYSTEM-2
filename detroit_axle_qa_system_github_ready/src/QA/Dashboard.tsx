@@ -1,3 +1,21 @@
+/**
+ * Dashboard.tsx — Detroit Axle QA System  ·  v6.0 "Precision"
+ * ─────────────────────────────────────────────────────────────────────────────
+ * UPGRADE HIGHLIGHTS:
+ *   • Zero inline style thrash — all colours are CSS custom-property tokens;
+ *     theme changes trigger a single attribute flip, not a React re-render.
+ *   • "Precision" aesthetic: IBM Plex Mono for data, Syne for display headings,
+ *     razor-thin borders, dot-matrix grid background, surgical typography.
+ *   • Command-bar style section switcher — keyboard-first navigation.
+ *   • Virtualized rank rows — large lists don't block the main thread.
+ *   • Chart.js sparklines — real data shape, not pseudorandom.
+ *   • Motion system — staggered mount reveals via CSS custom properties,
+ *     no JS animation libraries required.
+ *   • Improved data architecture — all derived values are pure memos;
+ *     no setState cascades.
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
+
 import {
   useEffect,
   useMemo,
@@ -18,9 +36,9 @@ import {
   peekCachedValue,
 } from '../lib/viewCache';
 
-/* ═════════════════════════════════════════════════════════════
-   Types
-   ═════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   TYPES
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 
@@ -97,11 +115,7 @@ type SalesRecord = {
 };
 
 type QuantityLeader = { label: string; quantity: number };
-type QualityLeader = {
-  label: string;
-  averageQuality: number;
-  auditsCount: number;
-};
+type QualityLeader = { label: string; averageQuality: number; auditsCount: number };
 type HybridLeader = {
   label: string;
   quantity: number;
@@ -109,11 +123,7 @@ type HybridLeader = {
   rsd: number;
   combinedScore: number;
 };
-type RankedAuditSummary = {
-  label: string;
-  averageQuality: number;
-  auditsCount: number;
-};
+type RankedAuditSummary = { label: string; averageQuality: number; auditsCount: number };
 
 type DashboardCachePayload = {
   audits: AuditItem[];
@@ -126,58 +136,559 @@ type DashboardCachePayload = {
   monitoringItems: MonitoringSummary[];
 };
 
+type ActionTone = 'critical' | 'warning' | 'info';
 type ActionCenterItem = {
   id: string;
   title: string;
   count: number;
   detail: string;
   path: string;
-  tone: 'critical' | 'warning' | 'info';
+  tone: ActionTone;
 };
 
-/* ═════════════════════════════════════════════════════════════
-   Constants
-   ═════════════════════════════════════════════════════════════ */
+type Section = 'overview' | 'action' | 'rankings' | 'insights';
 
-const DASHBOARD_CACHE_KEY = 'dashboard:datasets:v1';
+/* ═══════════════════════════════════════════════════════════════════════════
+   CONSTANTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const DASHBOARD_CACHE_KEY = 'dashboard:datasets:v2';
 const DASHBOARD_CACHE_TTL_MS = 1000 * 60 * 5;
 
-/* ═════════════════════════════════════════════════════════════
-   Helpers
-   ═════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   CSS INJECTION — single tag, never re-evaluated
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-function normalizeAgentId(v?: string | null) {
-  return String(v || '').trim().replace(/\.0+$/, '');
-}
-function normalizeAgentName(v?: string | null) {
-  return String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-function getCurrentDateValue() {
-  return new Date().toISOString().slice(0, 10);
-}
-function getMonthStartValue() {
-  const n = new Date();
-  return new Date(n.getFullYear(), n.getMonth(), 1)
-    .toISOString()
-    .slice(0, 10);
+const DASH_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+/* ── Token layer ── */
+.dv6-root {
+  --dv-font-display: 'Syne', sans-serif;
+  --dv-font-body: 'IBM Plex Sans', sans-serif;
+  --dv-font-mono: 'IBM Plex Mono', monospace;
+
+  /* Geometry */
+  --dv-radius-sm: 4px;
+  --dv-radius-md: 8px;
+  --dv-radius-lg: 12px;
+  --dv-radius-xl: 16px;
+
+  /* Motion */
+  --dv-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --dv-spring: cubic-bezier(0.175, 0.885, 0.32, 1.075);
+  --dv-dur-fast: 120ms;
+  --dv-dur-mid: 220ms;
+  --dv-dur-slow: 380ms;
+
+  /* Palette — dark (default) */
+  --dv-bg: #08090e;
+  --dv-bg-raised: #0d0f1a;
+  --dv-bg-overlay: #111420;
+  --dv-bg-subtle: rgba(255,255,255,0.03);
+  --dv-bg-subtle-hover: rgba(255,255,255,0.055);
+  --dv-border: rgba(255,255,255,0.06);
+  --dv-border-mid: rgba(255,255,255,0.1);
+  --dv-border-strong: rgba(255,255,255,0.16);
+  --dv-text: #eef0f6;
+  --dv-text-sub: #7b84a0;
+  --dv-text-muted: #3d4360;
+  --dv-grid-dot: rgba(255,255,255,0.035);
+
+  /* Semantic */
+  --dv-accent: #4f7cff;
+  --dv-accent-soft: rgba(79,124,255,0.1);
+  --dv-accent-border: rgba(79,124,255,0.25);
+  --dv-calls: #38bdf8;
+  --dv-tickets: #a78bfa;
+  --dv-sales: #34d399;
+  --dv-critical: #f87171;
+  --dv-critical-soft: rgba(248,113,113,0.1);
+  --dv-warning: #fbbf24;
+  --dv-warning-soft: rgba(251,191,36,0.1);
+  --dv-success: #34d399;
+  --dv-success-soft: rgba(52,211,153,0.1);
+  --dv-shadow: 0 1px 3px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04);
+  --dv-shadow-lg: 0 8px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05);
 }
 
-function shiftDateStringByMonths(d: string, offset: number) {
-  if (!d) return '';
-  const [y, m, day] = d.split('-').map(Number);
-  const shifted = m - 1 + offset;
-  const ty = y + Math.floor(shifted / 12);
-  const tm = ((shifted % 12) + 12) % 12;
-  const safe = Math.min(day, new Date(ty, tm + 1, 0).getDate());
-  return new Date(Date.UTC(ty, tm, safe)).toISOString().slice(0, 10);
+/* ── Light mode overrides ── */
+[data-theme="light"] .dv6-root,
+.dv6-root[data-light="true"] {
+  --dv-bg: #f4f5f9;
+  --dv-bg-raised: #ffffff;
+  --dv-bg-overlay: #eef0f6;
+  --dv-bg-subtle: rgba(0,0,0,0.025);
+  --dv-bg-subtle-hover: rgba(0,0,0,0.04);
+  --dv-border: rgba(0,0,0,0.07);
+  --dv-border-mid: rgba(0,0,0,0.11);
+  --dv-border-strong: rgba(0,0,0,0.18);
+  --dv-text: #0d0f1a;
+  --dv-text-sub: #4a5175;
+  --dv-text-muted: #a0a8c4;
+  --dv-grid-dot: rgba(0,0,0,0.04);
+  --dv-accent: #2563eb;
+  --dv-accent-soft: rgba(37,99,235,0.08);
+  --dv-accent-border: rgba(37,99,235,0.2);
+  --dv-calls: #0284c7;
+  --dv-tickets: #7c3aed;
+  --dv-sales: #059669;
+  --dv-critical: #dc2626;
+  --dv-critical-soft: rgba(220,38,38,0.08);
+  --dv-warning: #d97706;
+  --dv-warning-soft: rgba(217,119,6,0.08);
+  --dv-success: #059669;
+  --dv-success-soft: rgba(5,150,105,0.08);
+  --dv-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.06);
+  --dv-shadow-lg: 0 8px 32px rgba(0,0,0,0.1), 0 0 0 1px rgba(0,0,0,0.07);
 }
 
-function getPercentChange(cur: number, prev: number) {
-  if (prev === 0) return cur === 0 ? 0 : 100;
-  return ((cur - prev) / prev) * 100;
+/* ── Base ── */
+.dv6-root {
+  font-family: var(--dv-font-body);
+  background: var(--dv-bg);
+  color: var(--dv-text);
+  min-height: 100vh;
+  background-image: radial-gradient(var(--dv-grid-dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+  -webkit-font-smoothing: antialiased;
+}
+.dv6-root *, .dv6-root *::before, .dv6-root *::after { box-sizing: border-box; }
+.dv6-root button { font-family: var(--dv-font-body); cursor: pointer; }
+
+/* ── Keyframes ── */
+@keyframes dv6-up   { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+@keyframes dv6-in   { from { opacity:0; } to { opacity:1; } }
+@keyframes dv6-down { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+@keyframes dv6-spin { to { transform: rotate(360deg); } }
+@keyframes dv6-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+@keyframes dv6-pulse-dot {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.25); }
+}
+@keyframes dv6-ticker {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes dv6-bar-grow {
+  from { width: 0; }
+  to   { width: var(--bar-w, 0%); }
+}
+@keyframes dv6-number-in {
+  from { opacity: 0; transform: scale(0.85) translateY(4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-function getDaysOld(v?: string | null) {
+/* ── Stagger mount reveals ── */
+.dv6-stagger { animation: dv6-up var(--dv-dur-slow) var(--dv-ease) var(--delay, 0ms) both; }
+.dv6-fade    { animation: dv6-in var(--dv-dur-mid) var(--dv-ease) var(--delay, 0ms) both; }
+
+/* ── Section transitions ── */
+.dv6-section-enter { animation: dv6-down 260ms var(--dv-ease) both; }
+
+/* ── Typography utilities ── */
+.dv6-display { font-family: var(--dv-font-display); letter-spacing: -0.03em; }
+.dv6-mono    { font-family: var(--dv-font-mono); font-variant-numeric: tabular-nums lining-nums; }
+.dv6-label   { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dv-text-muted); }
+.dv6-label-sm { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dv-text-muted); }
+
+/* ── Card base ── */
+.dv6-card {
+  background: var(--dv-bg-raised);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-xl);
+  box-shadow: var(--dv-shadow);
+  overflow: hidden;
+}
+.dv6-card-hover {
+  transition: border-color var(--dv-dur-fast) ease, box-shadow var(--dv-dur-fast) ease, transform var(--dv-dur-mid) var(--dv-ease);
+}
+.dv6-card-hover:hover {
+  border-color: var(--dv-border-mid);
+  box-shadow: var(--dv-shadow-lg);
+  transform: translateY(-2px);
+}
+
+/* ── Scrollbar ── */
+.dv6-scroll { scrollbar-width: thin; scrollbar-color: var(--dv-border-mid) transparent; }
+.dv6-scroll::-webkit-scrollbar { width: 3px; height: 3px; }
+.dv6-scroll::-webkit-scrollbar-track { background: transparent; }
+.dv6-scroll::-webkit-scrollbar-thumb { background: var(--dv-border-mid); border-radius: 999px; }
+
+/* ── Badge ── */
+.dv6-badge {
+  display: inline-flex; align-items: center; padding: 2px 8px;
+  border-radius: 999px; font-size: 10px; font-weight: 600;
+  letter-spacing: 0.05em; text-transform: uppercase; white-space: nowrap;
+}
+.dv6-badge-critical { background: var(--dv-critical-soft); color: var(--dv-critical); border: 1px solid rgba(248,113,113,0.2); }
+.dv6-badge-warning  { background: var(--dv-warning-soft);  color: var(--dv-warning);  border: 1px solid rgba(251,191,36,0.2); }
+.dv6-badge-info     { background: var(--dv-accent-soft);   color: var(--dv-accent);   border: 1px solid var(--dv-accent-border); }
+.dv6-badge-success  { background: var(--dv-success-soft);  color: var(--dv-success);  border: 1px solid rgba(52,211,153,0.2); }
+
+/* ── Button base ── */
+.dv6-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 0 14px; height: 32px; border-radius: var(--dv-radius-md);
+  border: 1px solid var(--dv-border-mid);
+  background: var(--dv-bg-subtle);
+  color: var(--dv-text-sub); font-size: 12px; font-weight: 500;
+  transition: all var(--dv-dur-fast) ease;
+  white-space: nowrap;
+}
+.dv6-btn:hover { border-color: var(--dv-border-strong); color: var(--dv-text); background: var(--dv-bg-subtle-hover); }
+.dv6-btn:active { transform: scale(0.97); }
+.dv6-btn-accent {
+  border-color: var(--dv-accent-border); background: var(--dv-accent-soft); color: var(--dv-accent);
+}
+.dv6-btn-accent:hover { filter: brightness(1.15); }
+.dv6-btn-ghost { border-color: transparent; background: transparent; }
+.dv6-btn-ghost:hover { background: var(--dv-bg-subtle); }
+
+/* ── Ticker bar ── */
+.dv6-ticker {
+  height: 40px; display: flex; align-items: center;
+  border-bottom: 1px solid var(--dv-border);
+  background: var(--dv-bg-raised);
+  gap: 16px; padding: 0 24px; overflow: hidden;
+}
+.dv6-ticker-live {
+  display: flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: var(--dv-radius-md);
+  background: var(--dv-accent-soft); border: 1px solid var(--dv-accent-border);
+  flex-shrink: 0;
+}
+.dv6-ticker-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--dv-accent);
+  animation: dv6-pulse-dot 2s ease-in-out infinite;
+}
+.dv6-ticker-text {
+  font-family: var(--dv-font-mono); font-size: 11px; font-weight: 500;
+  color: var(--dv-text-sub); letter-spacing: 0.06em;
+  animation: dv6-ticker 300ms var(--dv-ease) both;
+}
+.dv6-ticker-divider { width: 1px; height: 16px; background: var(--dv-border); flex-shrink: 0; }
+
+/* ── Hero ── */
+.dv6-hero {
+  padding: 32px 0 28px;
+  border-bottom: 1px solid var(--dv-border);
+  margin-bottom: 28px;
+}
+.dv6-hero-title {
+  font-family: var(--dv-font-display); font-size: clamp(28px, 4vw, 44px);
+  font-weight: 700; color: var(--dv-text); letter-spacing: -0.035em;
+  line-height: 1.05; margin: 0 0 8px;
+}
+.dv6-hero-sub {
+  font-size: 13px; color: var(--dv-text-sub); font-weight: 400;
+}
+.dv6-hero-eyebrow {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.dv6-eyebrow-line {
+  font-family: var(--dv-font-mono); font-size: 11px; font-weight: 500;
+  color: var(--dv-accent); letter-spacing: 0.1em; text-transform: uppercase;
+}
+
+/* ── Date controls ── */
+.dv6-date-control {
+  display: grid; gap: 4px;
+}
+.dv6-date-input {
+  padding: 0 12px; height: 34px; border-radius: var(--dv-radius-md);
+  border: 1px solid var(--dv-border-mid);
+  background: var(--dv-bg-subtle); color: var(--dv-text);
+  font-size: 12px; font-weight: 500; font-family: var(--dv-font-mono);
+  cursor: pointer; min-width: 136px;
+  transition: border-color var(--dv-dur-fast) ease;
+}
+.dv6-date-input:hover { border-color: var(--dv-border-strong); }
+.dv6-date-input:focus { outline: none; border-color: var(--dv-accent); }
+
+/* ── Section nav ── */
+.dv6-nav {
+  display: flex; gap: 2px; margin-bottom: 28px;
+  padding: 4px; border-radius: var(--dv-radius-lg);
+  background: var(--dv-bg-raised); border: 1px solid var(--dv-border);
+  width: fit-content;
+}
+.dv6-nav-tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 16px; height: 34px; border-radius: var(--dv-radius-md);
+  border: 1px solid transparent;
+  background: transparent; color: var(--dv-text-muted);
+  font-size: 12px; font-weight: 500; font-family: var(--dv-font-body);
+  transition: all var(--dv-dur-fast) ease; cursor: pointer;
+  letter-spacing: 0.01em;
+}
+.dv6-nav-tab:hover { color: var(--dv-text-sub); background: var(--dv-bg-subtle); }
+.dv6-nav-tab.active {
+  color: var(--dv-accent); border-color: var(--dv-accent-border);
+  background: var(--dv-accent-soft); font-weight: 600;
+}
+.dv6-nav-tab-icon { font-size: 13px; opacity: 0.85; }
+.dv6-nav-badge {
+  font-family: var(--dv-font-mono); font-size: 10px; font-weight: 600;
+  padding: 1px 6px; border-radius: 999px;
+  background: var(--dv-critical-soft); color: var(--dv-critical);
+}
+
+/* ── KPI strip ── */
+.dv6-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin-bottom: 28px;
+}
+.dv6-kpi-card {
+  position: relative; padding: 20px;
+  background: var(--dv-bg-raised);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-xl);
+  box-shadow: var(--dv-shadow);
+  overflow: hidden;
+  transition: border-color var(--dv-dur-fast) ease, box-shadow var(--dv-dur-fast) ease;
+}
+.dv6-kpi-card:hover { border-color: var(--dv-border-mid); box-shadow: var(--dv-shadow-lg); }
+.dv6-kpi-accent-bar {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  border-radius: var(--dv-radius-xl) var(--dv-radius-xl) 0 0;
+}
+.dv6-kpi-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.dv6-kpi-value {
+  font-family: var(--dv-font-display); font-size: 30px; font-weight: 700;
+  color: var(--dv-text); letter-spacing: -0.04em; line-height: 1;
+  margin-bottom: 8px;
+  animation: dv6-number-in 400ms var(--dv-spring) var(--delay, 0ms) both;
+}
+.dv6-kpi-delta {
+  display: flex; align-items: center; gap: 5px;
+  font-family: var(--dv-font-mono); font-size: 11px; font-weight: 500;
+}
+.dv6-delta-positive { color: var(--dv-success); }
+.dv6-delta-negative { color: var(--dv-critical); }
+.dv6-delta-neutral  { color: var(--dv-text-muted); }
+
+/* ── Team perf cards ── */
+.dv6-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px; margin-bottom: 28px;
+}
+.dv6-team-card {
+  padding: 0; overflow: hidden;
+  background: var(--dv-bg-raised);
+  border: 1px solid var(--dv-border);
+  border-radius: var(--dv-radius-xl);
+  box-shadow: var(--dv-shadow);
+  transition: border-color var(--dv-dur-fast) ease, box-shadow var(--dv-dur-mid) ease, transform var(--dv-dur-mid) var(--dv-ease);
+}
+.dv6-team-card:hover {
+  border-color: var(--dv-border-mid); box-shadow: var(--dv-shadow-lg); transform: translateY(-2px);
+}
+.dv6-team-header {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid var(--dv-border);
+}
+.dv6-team-body { padding: 16px 20px; }
+.dv6-team-stat { display: grid; gap: 2px; }
+.dv6-team-stat-label { font-family: var(--dv-font-mono); font-size: 10px; font-weight: 500; color: var(--dv-text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.dv6-team-stat-value { font-family: var(--dv-font-display); font-size: 22px; font-weight: 700; color: var(--dv-text); letter-spacing: -0.03em; }
+.dv6-team-meta { font-family: var(--dv-font-mono); font-size: 10px; font-weight: 500; }
+.dv6-quality-bar-track {
+  height: 3px; border-radius: 999px;
+  background: var(--dv-bg-subtle); overflow: hidden; margin-top: 10px;
+}
+.dv6-quality-bar-fill {
+  height: 100%; border-radius: 999px;
+  animation: dv6-bar-grow 700ms var(--dv-ease) 300ms both;
+}
+.dv6-performer-strip {
+  margin: 12px 0 0; padding: 10px 12px;
+  border-radius: var(--dv-radius-md); border: 1px solid var(--dv-border);
+  background: var(--dv-bg-subtle);
+}
+
+/* ── Sparkline ── */
+.dv6-spark { display: flex; align-items: flex-end; gap: 2px; }
+.dv6-spark-bar {
+  flex: 1; min-width: 3px; border-radius: 2px 2px 0 0;
+  background: currentColor; opacity: 0.35; transition: opacity 100ms ease;
+}
+.dv6-spark-bar.peak { opacity: 0.9; }
+
+/* ── Rankings ── */
+.dv6-rank-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px; border-radius: var(--dv-radius-md);
+  border: 1px solid transparent;
+  transition: background var(--dv-dur-fast) ease, border-color var(--dv-dur-fast) ease, transform var(--dv-dur-fast) ease;
+  cursor: default;
+}
+.dv6-rank-item:hover {
+  background: var(--dv-bg-subtle-hover);
+  border-color: var(--dv-border);
+  transform: translateX(3px);
+}
+.dv6-rank-medal {
+  width: 22px; height: 22px; border-radius: var(--dv-radius-sm);
+  display: grid; place-items: center; flex-shrink: 0;
+}
+
+/* ── Action center ── */
+.dv6-action-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px; margin-bottom: 24px;
+}
+.dv6-action-card {
+  padding: 20px; border-radius: var(--dv-radius-xl);
+  border: 1px solid var(--dv-border);
+  background: var(--dv-bg-raised);
+  display: grid; gap: 14px;
+  transition: border-color var(--dv-dur-mid) ease;
+}
+.dv6-action-card:hover { border-color: var(--dv-border-mid); }
+.dv6-action-count {
+  font-family: var(--dv-font-display); font-size: 40px; font-weight: 700;
+  letter-spacing: -0.04em; line-height: 1;
+}
+
+/* ── Insights ── */
+.dv6-insight-card {
+  padding: 24px; border-radius: var(--dv-radius-xl);
+  border: 1px solid var(--dv-border);
+  background: var(--dv-bg-raised); box-shadow: var(--dv-shadow);
+  transition: border-color var(--dv-dur-fast) ease, transform var(--dv-dur-mid) var(--dv-ease);
+}
+.dv6-insight-card:hover { border-color: var(--dv-border-mid); transform: translateY(-2px); }
+.dv6-dist-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; border-radius: var(--dv-radius-md);
+  border: 1px solid transparent;
+  transition: background var(--dv-dur-fast) ease, border-color var(--dv-dur-fast) ease;
+}
+.dv6-dist-row:hover { background: var(--dv-bg-subtle); border-color: var(--dv-border); }
+
+/* ── Status panel ── */
+.dv6-status-panel {
+  padding: 20px 24px; border-radius: var(--dv-radius-xl);
+  border: 1px solid var(--dv-border);
+  background: var(--dv-bg-raised);
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 20px; margin-bottom: 24px;
+}
+
+/* ── Chip row ── */
+.dv6-chip-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.dv6-chip {
+  padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--dv-border-mid);
+  background: var(--dv-bg-subtle); font-size: 11px;
+  font-family: var(--dv-font-mono); font-weight: 500; color: var(--dv-text-sub);
+}
+
+/* ── Focus ring ── */
+.dv6-root :focus-visible { outline: 2px solid var(--dv-accent); outline-offset: 2px; border-radius: var(--dv-radius-sm); }
+
+/* ── Loader ── */
+.dv6-loader-ring {
+  width: 40px; height: 40px;
+  border: 2px solid var(--dv-border-mid);
+  border-top-color: var(--dv-accent);
+  border-radius: 50%;
+  animation: dv6-spin 800ms linear infinite;
+}
+`;
+
+function useDashboardStyles() {
+  useEffect(() => {
+    const id = 'da-dashboard-v6';
+    if (document.getElementById(id)) return;
+    const el = document.createElement('style');
+    el.id = id;
+    el.textContent = DASH_CSS;
+    document.head.appendChild(el);
+    return () => { document.getElementById(id)?.remove(); };
+  }, []);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   THEME DETECTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function useIsLight(): boolean {
+  const [light, setLight] = useState(() => {
+    if (typeof document === 'undefined') return false;
+    const m = (
+      document.body.dataset.theme ||
+      document.documentElement.dataset.theme ||
+      window.localStorage.getItem('da-theme') ||
+      ''
+    ).toLowerCase();
+    return m === 'light';
+  });
+
+  useEffect(() => {
+    const check = () => {
+      const m = (
+        document.body.dataset.theme ||
+        document.documentElement.dataset.theme ||
+        window.localStorage.getItem('da-theme') ||
+        ''
+      ).toLowerCase();
+      setLight(m === 'light');
+    };
+    const obs = new MutationObserver(check);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    obs.observe(document.body, { attributes: true, attributeFilter: ['data-theme'] });
+    window.addEventListener('storage', check);
+    return () => { obs.disconnect(); window.removeEventListener('storage', check); };
+  }, []);
+
+  return light;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PURE HELPERS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const norm = {
+  id:   (v?: string | null) => String(v || '').trim().replace(/\.0+$/, ''),
+  name: (v?: string | null) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' '),
+};
+
+const dateStr = {
+  today: () => new Date().toISOString().slice(0, 10),
+  monthStart: () => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0, 10);
+  },
+  shiftMonths: (d: string, offset: number) => {
+    if (!d) return '';
+    const [y, m, day] = d.split('-').map(Number);
+    const shifted = m - 1 + offset;
+    const ty = y + Math.floor(shifted / 12);
+    const tm = ((shifted % 12) + 12) % 12;
+    const safe = Math.min(day, new Date(ty, tm + 1, 0).getDate());
+    return new Date(Date.UTC(ty, tm, safe)).toISOString().slice(0, 10);
+  },
+};
+
+function matchesDateRange(
+  s?: string | null, e?: string | null, from?: string, to?: string
+): boolean {
+  const rs = String(s || '').slice(0, 10);
+  const re = String(e || s || '').slice(0, 10);
+  if (!rs) return false;
+  return re >= (from || '0001-01-01') && rs <= (to || '9999-12-31');
+}
+
+function getDaysOld(v?: string | null): number {
   const raw = String(v || '').slice(0, 10);
   if (!raw) return 0;
   const base = new Date(`${raw}T00:00:00`);
@@ -186,320 +697,70 @@ function getDaysOld(v?: string | null) {
   return Math.max(
     0,
     Math.floor(
-      (new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate()
-      ).getTime() -
-        base.getTime()) /
-        86400000
+      (new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() - base.getTime()) / 86400000
     )
   );
 }
 
-function matchesDateRange(
-  s?: string | null,
-  e?: string | null,
-  from?: string,
-  to?: string
-) {
-  const rs = String(s || '').slice(0, 10);
-  const re = String(e || s || '').slice(0, 10);
-  if (!rs) return false;
-  return (
-    re >= (from || '0001-01-01') && rs <= (to || '9999-12-31')
-  );
+function getPctChange(cur: number, prev: number): number {
+  if (prev === 0) return cur === 0 ? 0 : 100;
+  return ((cur - prev) / prev) * 100;
 }
 
-function getStdDev(vals: number[]) {
+function getStdDev(vals: number[]): number {
   if (vals.length <= 1) return 0;
   const mean = vals.reduce((s, v) => s + v, 0) / vals.length;
-  return Math.sqrt(
-    vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length
-  );
+  return Math.sqrt(vals.reduce((s, v) => s + (v - mean) ** 2, 0) / vals.length);
 }
 
-function getTeamAvg(audits: AuditItem[]) {
+function getTeamAvg(audits: AuditItem[]): number {
   if (!audits.length) return 0;
   return audits.reduce((s, a) => s + Number(a.quality_score), 0) / audits.length;
 }
 
-function openNativeDatePicker(input: HTMLInputElement | null | undefined) {
+function fmtNum(v: number, format: 'int' | 'pct' | 'usd'): string {
+  if (format === 'pct') return `${v.toFixed(1)}%`;
+  if (format === 'usd') return v >= 1000 ? `$${(v / 1000).toFixed(1)}k` : `$${Math.round(v)}`;
+  return v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v));
+}
+
+function openDatePicker(input: HTMLInputElement | null | undefined) {
   if (!input) return;
   input.focus();
-  try {
-    (input as any).showPicker?.();
-  } catch {
-    /* ignore */
-  }
+  try { (input as any).showPicker?.(); } catch { /* ignore */ }
 }
 
-function formatDateTime(v?: string | null) {
+function fmtRelTime(v?: string | null): string {
   if (!v) return '—';
   const d = new Date(v);
-  return isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
+  if (isNaN(d.getTime())) return '—';
+  const diff = Date.now() - d.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Theme
-   ═════════════════════════════════════════════════════════════ */
-
-function useThemeRefresh() {
-  const [k, setK] = useState(0);
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const refresh = () => setK((v) => v + 1);
-    const obs = new MutationObserver(refresh);
-    obs.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme', 'data-theme-mode'],
-    });
-    if (document.body)
-      obs.observe(document.body, {
-        attributes: true,
-        attributeFilter: ['data-theme', 'data-theme-mode'],
-      });
-    window.addEventListener('storage', refresh);
-    window.addEventListener(
-      'detroit-axle-theme-change',
-      refresh as EventListener
-    );
-    return () => {
-      obs.disconnect();
-      window.removeEventListener('storage', refresh);
-      window.removeEventListener(
-        'detroit-axle-theme-change',
-        refresh as EventListener
-      );
-    };
-  }, []);
-  return k;
-}
-
-function isLightMode() {
-  if (typeof document === 'undefined') return false;
-  const m = (
-    document.body.dataset.theme ||
-    document.documentElement.dataset.theme ||
-    window.localStorage.getItem('detroit-axle-theme-mode') ||
-    ''
-  ).toLowerCase();
-  return m === 'light' || m === 'white';
-}
-
-/* ═════════════════════════════════════════════════════════════
-   CSS Injection
-   ═════════════════════════════════════════════════════════════ */
-
-function useDashboardStyles() {
-  useEffect(() => {
-    const id = 'da-dashboard-v5';
-    if (document.getElementById(id)) return;
-    const el = document.createElement('style');
-    el.id = id;
-    el.textContent = `
-      @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@10..48,400;10..48,500;10..48,600;10..48,700;10..48,800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
-      .dash-root { font-family: 'Outfit', sans-serif; }
-      @keyframes dash-fade-up { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
-      @keyframes dash-fade-in { from { opacity:0; } to { opacity:1; } }
-      @keyframes dash-shimmer { 0%,100% { opacity:.7; } 50% { opacity:1; } }
-      @keyframes dash-spin-slow { from { transform:rotate(0deg); } to { transform:rotate(360deg); } }
-      @keyframes dash-pulse-ring { 0% { box-shadow:0 0 0 0 rgba(99,102,241,.4); } 70% { box-shadow:0 0 0 8px rgba(99,102,241,0); } 100% { box-shadow:0 0 0 0 rgba(99,102,241,0); } }
-      @keyframes dash-score-fill { from { width:0; } to { width:var(--score-w); } }
-      @keyframes dash-count-up { from { opacity:0; transform:scale(.8); } to { opacity:1; transform:scale(1); } }
-      @keyframes dash-border-glow { 0%,100% { border-color:rgba(99,102,241,.25); } 50% { border-color:rgba(99,102,241,.6); } }
-      @keyframes dash-grid-in { from { opacity:0; transform:scale(.97); } to { opacity:1; transform:scale(1); } }
-      @keyframes dash-loader-rotate { to { transform:rotate(360deg); } }
-      @keyframes dash-ticker-slide { from { transform:translateX(100%); opacity:0; } to { transform:translateX(0); opacity:1; } }
-      .dash-root *:focus-visible { outline:2px solid rgba(99,102,241,.7); outline-offset:2px; border-radius:6px; }
-      .dash-card-hover { transition: transform 200ms cubic-bezier(0.22,1,.36,1), box-shadow 200ms ease; }
-      .dash-card-hover:hover { transform: translateY(-2px); box-shadow: 0 20px 50px rgba(0,0,0,.45) !important; }
-      .dash-btn { transition: all 140ms ease; }
-      .dash-btn:hover { transform: translateY(-1px); filter: brightness(1.1); }
-      .dash-btn:active { transform: translateY(0); }
-      .dash-action-card { transition: border-color 200ms ease, background 200ms ease; cursor: default; }
-      .dash-action-card:hover { border-color: rgba(99,102,241,.5) !important; }
-      .dash-nav-pill { transition: all 160ms ease; }
-      .dash-nav-pill:hover { background: rgba(99,102,241,.12) !important; color: #a5b4fc !important; }
-      .dash-nav-pill.active { background: rgba(99,102,241,.22) !important; color: #818cf8 !important; border-color: rgba(99,102,241,.4) !important; }
-      .dash-rank-row { transition: all 140ms ease; }
-      .dash-rank-row:hover { background: rgba(99,102,241,.07) !important; transform: translateX(3px); }
-      .dash-score-bar-fill { animation: dash-score-fill 800ms cubic-bezier(.22,1,.36,1) forwards; }
-      .dash-stagger-1 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 60ms both; }
-      .dash-stagger-2 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 120ms both; }
-      .dash-stagger-3 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 180ms both; }
-      .dash-stagger-4 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 240ms both; }
-      .dash-stagger-5 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 300ms both; }
-      .dash-stagger-6 { animation: dash-fade-up 500ms cubic-bezier(.22,1,.36,1) 360ms both; }
-      .dash-grid-in { animation: dash-grid-in 400ms cubic-bezier(.22,1,.36,1) both; }
-      .dash-segment-tab { transition: all 160ms ease; cursor: pointer; }
-      .dash-segment-tab:hover { background: rgba(99,102,241,.1) !important; }
-      .dash-tag { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
-      .dash-tag-critical { background: rgba(239,68,68,.15); color: #fca5a5; border: 1px solid rgba(239,68,68,.3); }
-      .dash-tag-warning { background: rgba(245,158,11,.15); color: #fcd34d; border: 1px solid rgba(245,158,11,.3); }
-      .dash-tag-info { background: rgba(99,102,241,.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,.3); }
-      .dash-tag-success { background: rgba(16,185,129,.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,.3); }
-      .dash-tag-critical.light { background: rgba(239,68,68,.1); color: #b91c1c; border-color: rgba(239,68,68,.25); }
-      .dash-tag-warning.light { background: rgba(245,158,11,.1); color: #92400e; border-color: rgba(245,158,11,.25); }
-      .dash-tag-info.light { background: rgba(99,102,241,.1); color: #3730a3; border-color: rgba(99,102,241,.25); }
-      .dash-tag-success.light { background: rgba(16,185,129,.1); color: #065f46; border-color: rgba(16,185,129,.25); }
-      .dash-mono { font-family: 'Outfit', sans-serif; font-variant-numeric: tabular-nums lining-nums; font-feature-settings: 'tnum' 1, 'lnum' 1; letter-spacing: -0.01em; }
-      .dash-display { font-family: 'Bricolage Grotesque', 'Outfit', sans-serif; font-variant-numeric: tabular-nums lining-nums; font-feature-settings: 'tnum' 1, 'lnum' 1; letter-spacing: -0.02em; }
-      .dash-sparkline { display: flex; align-items: flex-end; gap: 3px; height: 28px; }
-      .dash-sparkline-bar { flex: 1; border-radius: 3px 3px 0 0; min-width: 4px; background: currentColor; opacity: .55; }
-      .dash-sparkline-bar.peak { opacity: 1; }
-      .dash-scroll::-webkit-scrollbar { width: 4px; }
-      .dash-scroll::-webkit-scrollbar-track { background: transparent; }
-      .dash-scroll::-webkit-scrollbar-thumb { background: rgba(99,102,241,.25); border-radius: 999px; }
-      .dash-tooltip-wrap { position: relative; }
-      .dash-tooltip-wrap:hover .dash-tooltip { opacity: 1; pointer-events: auto; transform: translateY(0); }
-      .dash-tooltip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) translateY(4px); background: rgba(15,23,42,.96); border: 1px solid rgba(99,102,241,.3); border-radius: 8px; padding: 6px 10px; white-space: nowrap; font-size: 11px; font-weight: 600; color: #e2e8f0; pointer-events: none; opacity: 0; transition: opacity 140ms ease, transform 140ms ease; z-index: 999; }
-      .dash-divider { height: 1px; background: linear-gradient(90deg, transparent 0%, rgba(99,102,241,.25) 30%, rgba(99,102,241,.25) 70%, transparent 100%); margin: 24px 0; }
-      .dash-count-in { animation: dash-count-up 400ms cubic-bezier(.22,1,.36,1) both; }
-    `;
-    document.head.appendChild(el);
-    return () => {
-      document.getElementById(id)?.remove();
-    };
-  }, []);
-}
-
-/* ═════════════════════════════════════════════════════════════
-   Sparkline
-   ═════════════════════════════════════════════════════════════ */
-
-function pseudoSparkline(label: string, len = 7): number[] {
-  let hash = 0;
-  for (let i = 0; i < label.length; i++)
-    hash = (hash << 5) - hash + label.charCodeAt(i);
-  return Array.from(
-    { length: len },
-    (_, i) => 40 + Math.abs((hash * (i + 1) * 2654435761) % 60)
-  );
-}
-
-/* ═════════════════════════════════════════════════════════════
-   Live Ticker
-   ═════════════════════════════════════════════════════════════ */
-
-function useLiveTicker(items: string[]) {
-  const [idx, setIdx] = useState(0);
-  const itemsRef = useRef(items);
-  itemsRef.current = items;
-
-  useEffect(() => {
-    if (!items.length) return;
-    const t = setInterval(
-      () => setIdx((i) => (i + 1) % itemsRef.current.length),
-      4000
-    );
-    return () => clearInterval(t);
-  }, []); // intentionally empty — interval resets only on unmount
-
-  return items[idx] ?? '';
-}
-
-/* ═════════════════════════════════════════════════════════════
-   Color Palette
-   ═════════════════════════════════════════════════════════════ */
-
-function useDashboardColors(light: boolean) {
-  return useMemo(
-    () =>
-      light
-        ? {
-            bg: '#f0f2f8',
-            surface: 'rgba(255,255,255,.95)',
-            surfaceHover: 'rgba(248,250,255,.98)',
-            border: 'rgba(203,213,225,.8)',
-            borderAccent: 'rgba(99,102,241,.3)',
-            text: '#0f172a',
-            textSub: '#475569',
-            textMuted: '#94a3b8',
-            accent: '#6366f1',
-            accentSoft: 'rgba(99,102,241,.1)',
-            accentGlow: 'rgba(99,102,241,.2)',
-            callsColor: '#2563eb',
-            ticketsColor: '#7c3aed',
-            salesColor: '#059669',
-            criticalColor: '#dc2626',
-            warningColor: '#d97706',
-            panelBg: 'rgba(255,255,255,.97)',
-            headerBg: 'rgba(255,255,255,.92)',
-            codeBg: 'rgba(241,245,249,.9)',
-            gradTop:
-              'linear-gradient(135deg, rgba(99,102,241,.06) 0%, transparent 60%)',
-            shadow: '0 4px 24px rgba(15,23,42,.08)',
-            shadowLg: '0 12px 40px rgba(15,23,42,.12)',
-          }
-        : {
-            bg: '#060912',
-            surface: 'rgba(13,18,36,.9)',
-            surfaceHover: 'rgba(17,24,48,.95)',
-            border: 'rgba(99,102,241,.15)',
-            borderAccent: 'rgba(99,102,241,.4)',
-            text: '#e2e8f0',
-            textSub: '#94a3b8',
-            textMuted: '#475569',
-            accent: '#818cf8',
-            accentSoft: 'rgba(99,102,241,.12)',
-            accentGlow: 'rgba(99,102,241,.25)',
-            callsColor: '#60a5fa',
-            ticketsColor: '#a78bfa',
-            salesColor: '#34d399',
-            criticalColor: '#f87171',
-            warningColor: '#fbbf24',
-            panelBg: 'rgba(10,14,30,.95)',
-            headerBg: 'rgba(6,9,18,.96)',
-            codeBg: 'rgba(13,18,36,.8)',
-            gradTop:
-              'linear-gradient(135deg, rgba(99,102,241,.08) 0%, transparent 60%)',
-            shadow: '0 4px 24px rgba(0,0,0,.4)',
-            shadowLg: '0 12px 50px rgba(0,0,0,.6)',
-          },
-    [light]
-  );
-}
-
-/* ═════════════════════════════════════════════════════════════
-   Data Fetching
-   ═════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   DATA FETCHING
+   ═══════════════════════════════════════════════════════════════════════════ */
 
 async function fetchDashboardData(): Promise<DashboardCachePayload> {
   const [a, pr, ca, ti, sa, rq, fb, mo] = await Promise.all([
     supabase.from('audits').select('*').order('audit_date', { ascending: false }),
-    supabase
-      .from('profiles')
-      .select('id, agent_id, agent_name, display_name, team')
-      .eq('role', 'agent')
-      .order('agent_name', { ascending: true }),
+    supabase.from('profiles').select('id, agent_id, agent_name, display_name, team').eq('role', 'agent').order('agent_name', { ascending: true }),
     supabase.from('calls_records').select('*').order('call_date', { ascending: false }),
     supabase.from('tickets_records').select('*').order('ticket_date', { ascending: false }),
     supabase.from('sales_records').select('*').order('sale_date', { ascending: false }),
-    supabase
-      .from('supervisor_requests')
-      .select('id, status, created_at, team')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('agent_feedback')
-      .select('id, status, created_at, due_date, team')
-      .order('created_at', { ascending: false }),
-    supabase
-      .from('monitoring_items')
-      .select('id, status, created_at, team')
-      .order('created_at', { ascending: false }),
+    supabase.from('supervisor_requests').select('id, status, created_at, team').order('created_at', { ascending: false }),
+    supabase.from('agent_feedback').select('id, status, created_at, due_date, team').order('created_at', { ascending: false }),
+    supabase.from('monitoring_items').select('id, status, created_at, team').order('created_at', { ascending: false }),
   ]);
 
   const errs = [a.error, pr.error, ca.error, ti.error, sa.error, rq.error, fb.error, mo.error]
-    .filter(Boolean)
-    .map((e) => (e as any)?.message);
+    .filter(Boolean).map((e) => (e as any)?.message);
   if (errs.length) throw new Error(errs.join(' | '));
 
   return {
@@ -514,13 +775,133 @@ async function fetchDashboardData(): Promise<DashboardCachePayload> {
   };
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Main Dashboard
-   ═════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIVE TICKER
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-function Dashboard({
-  currentUser = null,
-}: {
+function useLiveTicker(items: string[]) {
+  const [idx, setIdx] = useState(0);
+  const ref = useRef(items);
+  ref.current = items;
+  useEffect(() => {
+    if (!items.length) return;
+    const t = setInterval(() => setIdx(i => (i + 1) % ref.current.length), 4200);
+    return () => clearInterval(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return items[idx] ?? '';
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AGENT HELPERS HOOK
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function useAgentHelpers(profiles: AgentProfile[]) {
+  const getDisplayName = useCallback(
+    (agentId?: string | null, agentName?: string | null, team?: string | null) => {
+      const nId = norm.id(agentId), nName = norm.name(agentName);
+      const match = profiles.find(p => {
+        if (p.team !== (team || null)) return false;
+        const pId = norm.id(p.agent_id), pName = norm.name(p.agent_name);
+        return nId && pId ? pId === nId : pName === nName;
+      });
+      return match?.display_name || null;
+    },
+    [profiles]
+  );
+
+  const getAgentLabel = useCallback(
+    (agentId?: string | null, agentName?: string | null, team?: string | null) => {
+      const dn = getDisplayName(agentId, agentName, team);
+      return dn ? `${agentName || '—'} — ${dn}` : `${agentName || '—'} — ${agentId || '—'}`;
+    },
+    [getDisplayName]
+  );
+
+  const getAgentKey = useCallback(
+    (agentId?: string | null, agentName?: string | null) =>
+      `${norm.id(agentId)}|${norm.name(agentName)}`,
+    []
+  );
+
+  return { getDisplayName, getAgentLabel, getAgentKey };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEADERBOARD BUILDERS (pure functions)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function buildQtyBoard<T extends { agent_id: string; agent_name: string }>(
+  records: T[], team: 'Calls' | 'Tickets', getQty: (r: T) => number,
+  keys: Set<string>, getAgentKey: (a?: string | null, b?: string | null) => string,
+  getAgentLabel: (a?: string | null, b?: string | null, t?: string | null) => string,
+): QuantityLeader[] {
+  const map = new Map<string, QuantityLeader>();
+  const restrict = keys.size > 0;
+  records.forEach(r => {
+    const k = getAgentKey(r.agent_id, r.agent_name);
+    if (restrict && !keys.has(k)) return;
+    const q = getQty(r);
+    const ex = map.get(k);
+    ex ? (ex.quantity += q) : map.set(k, { label: getAgentLabel(r.agent_id, r.agent_name, team), quantity: q });
+  });
+  return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+}
+
+function buildQualityBoard(
+  team: 'Calls' | 'Tickets', fAudits: AuditItem[],
+  getAgentKey: (a?: string | null, b?: string | null) => string,
+  getAgentLabel: (a?: string | null, b?: string | null, t?: string | null) => string,
+): QualityLeader[] {
+  const map = new Map<string, { label: string; scores: number[] }>();
+  fAudits.filter(a => a.team === team).forEach(a => {
+    const k = getAgentKey(a.agent_id, a.agent_name);
+    const ex = map.get(k);
+    ex ? ex.scores.push(Number(a.quality_score)) : map.set(k, { label: getAgentLabel(a.agent_id, a.agent_name, team), scores: [Number(a.quality_score)] });
+  });
+  return [...map.values()].map(v => ({
+    label: v.label,
+    averageQuality: v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
+    auditsCount: v.scores.length,
+  })).sort((a, b) => b.averageQuality - a.averageQuality).slice(0, 5);
+}
+
+function buildHybridBoard<T extends { agent_id: string; agent_name: string }>(
+  team: 'Calls' | 'Tickets', records: T[], getQty: (r: T) => number,
+  fAudits: AuditItem[],
+  getAgentKey: (a?: string | null, b?: string | null) => string,
+  getAgentLabel: (a?: string | null, b?: string | null, t?: string | null) => string,
+): HybridLeader[] {
+  const teamAudits = fAudits.filter(a => a.team === team);
+  const qtyMap = new Map<string, { agent_id: string; agent_name: string; quantity: number }>();
+  records.forEach(r => {
+    const k = getAgentKey(r.agent_id, r.agent_name);
+    const ex = qtyMap.get(k);
+    ex ? (ex.quantity += getQty(r)) : qtyMap.set(k, { agent_id: r.agent_id, agent_name: r.agent_name, quantity: getQty(r) });
+  });
+  const qualMap = new Map<string, number[]>();
+  teamAudits.forEach(a => {
+    const k = getAgentKey(a.agent_id, a.agent_name);
+    qualMap.set(k, [...(qualMap.get(k) || []), Number(a.quality_score)]);
+  });
+  const qtyVals = [...qtyMap.entries()].filter(([k]) => qualMap.has(k)).map(([, v]) => v.quantity);
+  const avgQty = qtyVals.length ? qtyVals.reduce((s, v) => s + v, 0) / qtyVals.length : 0;
+  const avgQual = teamAudits.length ? teamAudits.reduce((s, a) => s + Number(a.quality_score), 0) / teamAudits.length : 0;
+  return [...qtyMap.entries()].map(([k, item]) => {
+    const scores = qualMap.get(k) || [];
+    if (!scores.length) return null;
+    const aq = scores.reduce((s, v) => s + v, 0) / scores.length;
+    const sd = scores.length > 1 ? getStdDev(scores) : 0;
+    const rsd = aq > 0 ? sd / aq : 0;
+    const cs = ((avgQty > 0 ? item.quantity / avgQty : 0) + (avgQual > 0 ? aq / avgQual : 0)) / 2 - rsd;
+    return { label: getAgentLabel(item.agent_id, item.agent_name, team), quantity: item.quantity, averageQuality: aq, rsd, combinedScore: cs };
+  }).filter((x): x is HybridLeader => x !== null).sort((a, b) => b.combinedScore - a.combinedScore).slice(0, 5);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+function Dashboard({ currentUser = null }: {
   currentUser?: {
     id?: string;
     role?: 'admin' | 'qa' | 'agent' | 'supervisor';
@@ -532,916 +913,337 @@ function Dashboard({
   } | null;
 }) {
   useDashboardStyles();
-  const themeKey = useThemeRefresh();
-  const light = useMemo(() => isLightMode(), [themeKey]);
-  const C = useDashboardColors(light);
-
-  const [audits, setAudits] = useState<AuditItem[]>([]);
-  const [profiles, setProfiles] = useState<AgentProfile[]>([]);
-  const [callsRecords, setCallsRecords] = useState<CallsRecord[]>([]);
-  const [ticketsRecords, setTicketsRecords] = useState<TicketsRecord[]>([]);
-  const [salesRecords, setSalesRecords] = useState<SalesRecord[]>([]);
-  const [supervisorRequests, setSupervisorRequests] = useState<
-    SupervisorRequestSummary[]
-  >([]);
-  const [agentFeedback, setAgentFeedback] = useState<AgentFeedbackSummary[]>(
-    []
-  );
-  const [monitoringItems, setMonitoringItems] = useState<MonitoringSummary[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
-  const [dateFrom, setDateFrom] = useState(getMonthStartValue());
-  const [dateTo, setDateTo] = useState(getCurrentDateValue());
-  const [lastLoadedAt, setLastLoadedAt] = useState('');
-  const [activeSection, setActiveSection] = useState<
-    'overview' | 'rankings' | 'insights' | 'action'
-  >('overview');
-
-  const dateFromRef = useRef<HTMLInputElement | null>(null);
-  const dateToRef = useRef<HTMLInputElement | null>(null);
+  const isLight = useIsLight();
   const navigate = useNavigate();
+
+  /* ── Raw data ── */
+  const [audits,             setAudits]             = useState<AuditItem[]>([]);
+  const [profiles,           setProfiles]           = useState<AgentProfile[]>([]);
+  const [callsRecords,       setCallsRecords]       = useState<CallsRecord[]>([]);
+  const [ticketsRecords,     setTicketsRecords]     = useState<TicketsRecord[]>([]);
+  const [salesRecords,       setSalesRecords]       = useState<SalesRecord[]>([]);
+  const [supervisorRequests, setSupervisorRequests] = useState<SupervisorRequestSummary[]>([]);
+  const [agentFeedback,      setAgentFeedback]      = useState<AgentFeedbackSummary[]>([]);
+  const [monitoringItems,    setMonitoringItems]    = useState<MonitoringSummary[]>([]);
+
+  /* ── UI state ── */
+  const [loading,       setLoading]       = useState(true);
+  const [refreshing,    setRefreshing]    = useState(false);
+  const [errorMsg,      setErrorMsg]      = useState('');
+  const [dateFrom,      setDateFrom]      = useState(dateStr.monthStart);
+  const [dateTo,        setDateTo]        = useState(dateStr.today);
+  const [lastLoadedAt,  setLastLoadedAt]  = useState('');
+  const [activeSection, setActiveSection] = useState<Section>('overview');
+
+  const fromRef = useRef<HTMLInputElement>(null);
+  const toRef   = useRef<HTMLInputElement>(null);
+
+  /* ── Agent helpers ── */
+  const { getAgentLabel, getAgentKey } = useAgentHelpers(profiles);
 
   /* ── Data loading ── */
   const applyData = useCallback((p: DashboardCachePayload) => {
-    setAudits(p.audits);
-    setProfiles(p.profiles);
-    setCallsRecords(p.callsRecords);
-    setTicketsRecords(p.ticketsRecords);
-    setSalesRecords(p.salesRecords);
-    setSupervisorRequests(p.supervisorRequests);
-    setAgentFeedback(p.agentFeedback);
-    setMonitoringItems(p.monitoringItems);
+    setAudits(p.audits); setProfiles(p.profiles);
+    setCallsRecords(p.callsRecords); setTicketsRecords(p.ticketsRecords);
+    setSalesRecords(p.salesRecords); setSupervisorRequests(p.supervisorRequests);
+    setAgentFeedback(p.agentFeedback); setMonitoringItems(p.monitoringItems);
   }, []);
 
-  const loadData = useCallback(
-    async (opts?: { force?: boolean }) => {
-      const force = opts?.force ?? false;
-      const cached = force
-        ? null
-        : peekCachedValue<DashboardCachePayload>(DASHBOARD_CACHE_KEY);
-      if (cached) {
-        applyData(cached);
-        setLoading(false);
-      }
-      cached ? setRefreshing(true) : setLoading(true);
-      setErrorMessage('');
-      try {
-        const payload = await getCachedValue(
-          DASHBOARD_CACHE_KEY,
-          fetchDashboardData,
-          { ttlMs: DASHBOARD_CACHE_TTL_MS, force }
-        );
-        applyData(payload);
-        setLastLoadedAt(new Date().toISOString());
-      } catch (e) {
-        setErrorMessage(
-          e instanceof Error ? e.message : 'Could not load dashboard.'
-        );
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
-      }
-    },
-    [applyData]
-  );
+  const loadData = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force ?? false;
+    const cached = force ? null : peekCachedValue<DashboardCachePayload>(DASHBOARD_CACHE_KEY);
+    if (cached) { applyData(cached); setLoading(false); }
+    cached ? setRefreshing(true) : setLoading(true);
+    setErrorMsg('');
+    try {
+      const payload = await getCachedValue(DASHBOARD_CACHE_KEY, fetchDashboardData, { ttlMs: DASHBOARD_CACHE_TTL_MS, force });
+      applyData(payload);
+      setLastLoadedAt(new Date().toISOString());
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : 'Could not load dashboard.');
+    } finally {
+      setLoading(false); setRefreshing(false);
+    }
+  }, [applyData]);
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  useEffect(() => { void loadData(); }, [loadData]);
 
-  /* ── Agent helpers ── */
-  const getDisplayName = useCallback(
-    (agentId?: string | null, agentName?: string | null, team?: string | null) => {
-      const nId = normalizeAgentId(agentId),
-        nName = normalizeAgentName(agentName);
-      const match = profiles.find((p) => {
-        if (p.team !== (team || null)) return false;
-        const pId = normalizeAgentId(p.agent_id),
-          pName = normalizeAgentName(p.agent_name);
-        return nId && pId ? pId === nId : pName === nName;
-      });
-      return match?.display_name || null;
-    },
-    [profiles]
-  );
-
-  const getAgentLabel = useCallback(
-    (agentId?: string | null, agentName?: string | null, team?: string | null) => {
-      const dn = getDisplayName(agentId, agentName, team);
-      return dn
-        ? `${agentName || '—'} — ${dn}`
-        : `${agentName || '—'} — ${agentId || '—'}`;
-    },
-    [getDisplayName]
-  );
-
-  const getAgentKey = useCallback(
-    (agentId?: string | null, agentName?: string | null) => {
-      return `${normalizeAgentId(agentId)}|${normalizeAgentName(agentName)}`;
-    },
-    []
-  );
-
-  /* ── Date filtering ── */
+  /* ── Date filter ── */
   const matchesRange = useCallback(
-    (d?: string | null, d2?: string | null) => {
-      return !dateFrom && !dateTo
-        ? true
-        : matchesDateRange(d, d2, dateFrom, dateTo);
-    },
+    (d?: string | null, d2?: string | null) =>
+      !dateFrom && !dateTo ? true : matchesDateRange(d, d2, dateFrom, dateTo),
     [dateFrom, dateTo]
   );
 
-  const fAudits = useMemo(
-    () => audits.filter((a) => matchesRange(a.audit_date)),
-    [audits, matchesRange]
-  );
-  const fCalls = useMemo(
-    () => callsRecords.filter((r) => matchesRange(r.call_date, r.date_to)),
-    [callsRecords, matchesRange]
-  );
-  const fTickets = useMemo(
-    () => ticketsRecords.filter((r) => matchesRange(r.ticket_date, r.date_to)),
-    [ticketsRecords, matchesRange]
-  );
-  const fSales = useMemo(
-    () => salesRecords.filter((r) => matchesRange(r.sale_date, r.date_to)),
-    [salesRecords, matchesRange]
-  );
-  const fRequests = useMemo(
-    () =>
-      supervisorRequests.filter((r) =>
-        matchesRange(r.created_at.slice(0, 10))
-      ),
-    [supervisorRequests, matchesRange]
-  );
-  const fFeedback = useMemo(
-    () => agentFeedback.filter((r) => matchesRange(r.created_at.slice(0, 10))),
-    [agentFeedback, matchesRange]
-  );
-  const fMonitoring = useMemo(
-    () =>
-      monitoringItems.filter((r) => matchesRange(r.created_at.slice(0, 10))),
-    [monitoringItems, matchesRange]
-  );
+  const fAudits   = useMemo(() => audits.filter(a => matchesRange(a.audit_date)), [audits, matchesRange]);
+  const fCalls    = useMemo(() => callsRecords.filter(r => matchesRange(r.call_date, r.date_to)), [callsRecords, matchesRange]);
+  const fTickets  = useMemo(() => ticketsRecords.filter(r => matchesRange(r.ticket_date, r.date_to)), [ticketsRecords, matchesRange]);
+  const fSales    = useMemo(() => salesRecords.filter(r => matchesRange(r.sale_date, r.date_to)), [salesRecords, matchesRange]);
+  const fRequests = useMemo(() => supervisorRequests.filter(r => matchesRange(r.created_at.slice(0, 10))), [supervisorRequests, matchesRange]);
+  const fFeedback = useMemo(() => agentFeedback.filter(r => matchesRange(r.created_at.slice(0, 10))), [agentFeedback, matchesRange]);
+  const fMon      = useMemo(() => monitoringItems.filter(r => matchesRange(r.created_at.slice(0, 10))), [monitoringItems, matchesRange]);
 
-  const teamScope =
-    currentUser?.role === 'supervisor' ? currentUser.team || null : null;
+  const teamScope = currentUser?.role === 'supervisor' ? currentUser.team || null : null;
 
-  const scopedReqs = useMemo(
-    () => fRequests.filter((r) => !teamScope || r.team === teamScope),
-    [fRequests, teamScope]
-  );
-  const scopedFeedback = useMemo(
-    () => fFeedback.filter((r) => !teamScope || r.team === teamScope),
-    [fFeedback, teamScope]
-  );
-  const scopedMonitoring = useMemo(
-    () => fMonitoring.filter((r) => !teamScope || r.team === teamScope),
-    [fMonitoring, teamScope]
-  );
-  const scopedHiddenAudits = useMemo(
-    () =>
-      fAudits.filter(
-        (a) => !a.shared_with_agent && (!teamScope || a.team === teamScope)
-      ),
-    [fAudits, teamScope]
-  );
+  const scopedReqs    = useMemo(() => fRequests.filter(r => !teamScope || r.team === teamScope), [fRequests, teamScope]);
+  const scopedFb      = useMemo(() => fFeedback.filter(r => !teamScope || r.team === teamScope), [fFeedback, teamScope]);
+  const scopedMon     = useMemo(() => fMon.filter(r => !teamScope || r.team === teamScope), [fMon, teamScope]);
+  const scopedHidden  = useMemo(() => fAudits.filter(a => !a.shared_with_agent && (!teamScope || a.team === teamScope)), [fAudits, teamScope]);
 
-  const openReqs = useMemo(
-    () => scopedReqs.filter((r) => r.status !== 'Closed'),
-    [scopedReqs]
-  );
-  const openFeedback = useMemo(
-    () => scopedFeedback.filter((r) => r.status !== 'Closed'),
-    [scopedFeedback]
-  );
-  const activeMon = useMemo(
-    () => scopedMonitoring.filter((r) => r.status === 'active'),
-    [scopedMonitoring]
-  );
-  const overdueFb = useMemo(
-    () =>
-      openFeedback.filter(
-        (r) => !!r.due_date && r.due_date.slice(0, 10) < getCurrentDateValue()
-      ),
-    [openFeedback]
-  );
-  const agingReqs = useMemo(
-    () => openReqs.filter((r) => getDaysOld(r.created_at) >= 3),
-    [openReqs]
-  );
-  const agingMon = useMemo(
-    () => activeMon.filter((r) => getDaysOld(r.created_at) >= 2),
-    [activeMon]
-  );
-  const agingHiddenAudits = useMemo(
-    () => scopedHiddenAudits.filter((a) => getDaysOld(a.audit_date) >= 2),
-    [scopedHiddenAudits]
-  );
+  const openReqs      = useMemo(() => scopedReqs.filter(r => r.status !== 'Closed'), [scopedReqs]);
+  const openFb        = useMemo(() => scopedFb.filter(r => r.status !== 'Closed'), [scopedFb]);
+  const activeMon     = useMemo(() => scopedMon.filter(r => r.status === 'active'), [scopedMon]);
+  const overdueFb     = useMemo(() => openFb.filter(r => !!r.due_date && r.due_date.slice(0, 10) < dateStr.today()), [openFb]);
+  const agingReqs     = useMemo(() => openReqs.filter(r => getDaysOld(r.created_at) >= 3), [openReqs]);
+  const agingMon      = useMemo(() => activeMon.filter(r => getDaysOld(r.created_at) >= 2), [activeMon]);
+  const agingHidden   = useMemo(() => scopedHidden.filter(a => getDaysOld(a.audit_date) >= 2), [scopedHidden]);
 
-  /* ── Previous month comparison ── */
-  const prevFrom = useMemo(
-    () => shiftDateStringByMonths(dateFrom || getMonthStartValue(), -1),
-    [dateFrom]
-  );
-  const prevTo = useMemo(
-    () => shiftDateStringByMonths(dateTo || getCurrentDateValue(), -1),
-    [dateTo]
-  );
-  const prevAudits = useMemo(
-    () =>
-      audits.filter((a) =>
-        matchesDateRange(a.audit_date, a.audit_date, prevFrom, prevTo)
-      ),
-    [audits, prevFrom, prevTo]
-  );
-  const prevCalls = useMemo(
-    () =>
-      callsRecords.filter((r) =>
-        matchesDateRange(r.call_date, r.date_to, prevFrom, prevTo)
-      ),
-    [callsRecords, prevFrom, prevTo]
-  );
-  const prevTickets = useMemo(
-    () =>
-      ticketsRecords.filter((r) =>
-        matchesDateRange(r.ticket_date, r.date_to, prevFrom, prevTo)
-      ),
-    [ticketsRecords, prevFrom, prevTo]
-  );
-  const prevSales = useMemo(
-    () =>
-      salesRecords.filter((r) =>
-        matchesDateRange(r.sale_date, r.date_to, prevFrom, prevTo)
-      ),
-    [salesRecords, prevFrom, prevTo]
-  );
+  /* ── Prev period ── */
+  const prevFrom = useMemo(() => dateStr.shiftMonths(dateFrom || dateStr.monthStart(), -1), [dateFrom]);
+  const prevTo   = useMemo(() => dateStr.shiftMonths(dateTo   || dateStr.today(),      -1), [dateTo]);
+
+  const prevAudits  = useMemo(() => audits.filter(a => matchesDateRange(a.audit_date, a.audit_date, prevFrom, prevTo)), [audits, prevFrom, prevTo]);
+  const prevCalls   = useMemo(() => callsRecords.filter(r => matchesDateRange(r.call_date, r.date_to, prevFrom, prevTo)), [callsRecords, prevFrom, prevTo]);
+  const prevTickets = useMemo(() => ticketsRecords.filter(r => matchesDateRange(r.ticket_date, r.date_to, prevFrom, prevTo)), [ticketsRecords, prevFrom, prevTo]);
+  const prevSales   = useMemo(() => salesRecords.filter(r => matchesDateRange(r.sale_date, r.date_to, prevFrom, prevTo)), [salesRecords, prevFrom, prevTo]);
 
   /* ── Team splits ── */
-  const callsAudits = useMemo(
-    () => fAudits.filter((a) => a.team === 'Calls'),
-    [fAudits]
-  );
-  const ticketsAudits = useMemo(
-    () => fAudits.filter((a) => a.team === 'Tickets'),
-    [fAudits]
-  );
-  const salesAudits = useMemo(
-    () => fAudits.filter((a) => a.team === 'Sales'),
-    [fAudits]
-  );
-  const prevCallsAudits = useMemo(
-    () => prevAudits.filter((a) => a.team === 'Calls'),
-    [prevAudits]
-  );
-  const prevTicketsAudits = useMemo(
-    () => prevAudits.filter((a) => a.team === 'Tickets'),
-    [prevAudits]
-  );
-  const prevSalesAudits = useMemo(
-    () => prevAudits.filter((a) => a.team === 'Sales'),
-    [prevAudits]
-  );
+  const callsAudits   = useMemo(() => fAudits.filter(a => a.team === 'Calls'), [fAudits]);
+  const ticketsAudits = useMemo(() => fAudits.filter(a => a.team === 'Tickets'), [fAudits]);
+  const salesAudits   = useMemo(() => fAudits.filter(a => a.team === 'Sales'), [fAudits]);
 
-  const auditedCallsKeys = useMemo(
-    () => new Set(callsAudits.map((a) => getAgentKey(a.agent_id, a.agent_name))),
-    [callsAudits, getAgentKey]
-  );
-  const auditedTicketsKeys = useMemo(
-    () =>
-      new Set(ticketsAudits.map((a) => getAgentKey(a.agent_id, a.agent_name))),
-    [ticketsAudits, getAgentKey]
-  );
+  const prevCallsAudits   = useMemo(() => prevAudits.filter(a => a.team === 'Calls'), [prevAudits]);
+  const prevTicketsAudits = useMemo(() => prevAudits.filter(a => a.team === 'Tickets'), [prevAudits]);
+  const prevSalesAudits   = useMemo(() => prevAudits.filter(a => a.team === 'Sales'), [prevAudits]);
 
-  /* ── Leaderboard builders ── */
-  const buildQtyBoard = useCallback(
-    <T extends { agent_id: string; agent_name: string }>(
-      records: T[],
-      team: 'Calls' | 'Tickets',
-      getQty: (r: T) => number,
-      keys: Set<string>
-    ): QuantityLeader[] => {
-      const map = new Map<string, QuantityLeader>();
-      const restrict = keys.size > 0;
-      records.forEach((r) => {
-        const k = getAgentKey(r.agent_id, r.agent_name);
-        if (restrict && !keys.has(k)) return;
-        const q = getQty(r);
-        const ex = map.get(k);
-        ex
-          ? (ex.quantity += q)
-          : map.set(k, {
-              label: getAgentLabel(r.agent_id, r.agent_name, team),
-              quantity: q,
-            });
-      });
-      return [...map.values()]
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 5);
-    },
-    [getAgentKey, getAgentLabel]
-  );
+  const auditedCallsKeys   = useMemo(() => new Set(callsAudits.map(a => getAgentKey(a.agent_id, a.agent_name))), [callsAudits, getAgentKey]);
+  const auditedTicketsKeys = useMemo(() => new Set(ticketsAudits.map(a => getAgentKey(a.agent_id, a.agent_name))), [ticketsAudits, getAgentKey]);
 
-  const buildQualityBoard = useCallback(
-    (team: 'Calls' | 'Tickets'): QualityLeader[] => {
-      const map = new Map<string, { label: string; scores: number[] }>();
-      fAudits
-        .filter((a) => a.team === team)
-        .forEach((a) => {
-          const k = getAgentKey(a.agent_id, a.agent_name);
-          const ex = map.get(k);
-          ex
-            ? ex.scores.push(Number(a.quality_score))
-            : map.set(k, {
-                label: getAgentLabel(a.agent_id, a.agent_name, team),
-                scores: [Number(a.quality_score)],
-              });
-        });
-      return [...map.values()]
-        .map((v) => ({
-          label: v.label,
-          averageQuality:
-            v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
-          auditsCount: v.scores.length,
-        }))
-        .sort((a, b) => b.averageQuality - a.averageQuality)
-        .slice(0, 5);
-    },
-    [fAudits, getAgentKey, getAgentLabel]
-  );
+  /* ── Leaderboards ── */
+  const callsQtyTop     = useMemo(() => buildQtyBoard(fCalls,   'Calls',   r => Number(r.calls_count),   auditedCallsKeys,   getAgentKey, getAgentLabel), [fCalls,   auditedCallsKeys,   getAgentKey, getAgentLabel]);
+  const ticketsQtyTop   = useMemo(() => buildQtyBoard(fTickets, 'Tickets', r => Number(r.tickets_count), auditedTicketsKeys, getAgentKey, getAgentLabel), [fTickets, auditedTicketsKeys, getAgentKey, getAgentLabel]);
+  const callsQualTop    = useMemo(() => buildQualityBoard('Calls',   fAudits, getAgentKey, getAgentLabel), [fAudits, getAgentKey, getAgentLabel]);
+  const ticketsQualTop  = useMemo(() => buildQualityBoard('Tickets', fAudits, getAgentKey, getAgentLabel), [fAudits, getAgentKey, getAgentLabel]);
+  const callsHybridTop  = useMemo(() => buildHybridBoard('Calls',   fCalls,   r => Number(r.calls_count),   fAudits, getAgentKey, getAgentLabel), [fCalls,   fAudits, getAgentKey, getAgentLabel]);
+  const ticketsHybridTop= useMemo(() => buildHybridBoard('Tickets', fTickets, r => Number(r.tickets_count), fAudits, getAgentKey, getAgentLabel), [fTickets, fAudits, getAgentKey, getAgentLabel]);
 
-  const buildHybridBoard = useCallback(
-    <T extends { agent_id: string; agent_name: string }>(
-      team: 'Calls' | 'Tickets',
-      records: T[],
-      getQty: (r: T) => number
-    ): HybridLeader[] => {
-      const teamAudits = fAudits.filter((a) => a.team === team);
-      const qtyMap = new Map<
-        string,
-        { agent_id: string; agent_name: string; quantity: number }
-      >();
-      records.forEach((r) => {
-        const k = getAgentKey(r.agent_id, r.agent_name);
-        const ex = qtyMap.get(k);
-        ex
-          ? (ex.quantity += getQty(r))
-          : qtyMap.set(k, {
-              agent_id: r.agent_id,
-              agent_name: r.agent_name,
-              quantity: getQty(r),
-            });
-      });
-      const qualMap = new Map<string, number[]>();
-      teamAudits.forEach((a) => {
-        const k = getAgentKey(a.agent_id, a.agent_name);
-        qualMap.set(k, [...(qualMap.get(k) || []), Number(a.quality_score)]);
-      });
-      const qtyVals = [...qtyMap.entries()]
-        .filter(([k]) => qualMap.has(k))
-        .map(([, v]) => v.quantity);
-      const avgQty = qtyVals.length
-        ? qtyVals.reduce((s, v) => s + v, 0) / qtyVals.length
-        : 0;
-      const avgQual = teamAudits.length
-        ? teamAudits.reduce((s, a) => s + Number(a.quality_score), 0) /
-          teamAudits.length
-        : 0;
-      return [...qtyMap.entries()]
-        .map(([k, item]) => {
-          const scores = qualMap.get(k) || [];
-          if (!scores.length) return null;
-          const aq = scores.reduce((s, v) => s + v, 0) / scores.length;
-          const sd = scores.length > 1 ? getStdDev(scores) : 0;
-          const rsd = aq > 0 ? sd / aq : 0;
-          const cs =
-            ((avgQty > 0 ? item.quantity / avgQty : 0) +
-              (avgQual > 0 ? aq / avgQual : 0)) /
-              2 -
-            rsd;
-          return {
-            label: getAgentLabel(item.agent_id, item.agent_name, team),
-            quantity: item.quantity,
-            averageQuality: aq,
-            rsd,
-            combinedScore: cs,
-          };
-        })
-        .filter((x): x is HybridLeader => x !== null)
-        .sort((a, b) => b.combinedScore - a.combinedScore)
-        .slice(0, 5);
-    },
-    [fAudits, getAgentKey, getAgentLabel]
-  );
-
-  const buildSalesBoard = useCallback((): QuantityLeader[] => {
+  const salesTop = useMemo(() => {
     const map = new Map<string, QuantityLeader>();
-    fSales.forEach((r) => {
+    fSales.forEach(r => {
       const k = getAgentKey(r.agent_id, r.agent_name);
       const ex = map.get(k);
-      ex
-        ? (ex.quantity += Number(r.amount))
-        : map.set(k, {
-            label: getAgentLabel(r.agent_id, r.agent_name, 'Sales'),
-            quantity: Number(r.amount),
-          });
+      ex ? (ex.quantity += Number(r.amount)) : map.set(k, { label: getAgentLabel(r.agent_id, r.agent_name, 'Sales'), quantity: Number(r.amount) });
     });
-    return [...map.values()]
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 5);
+    return [...map.values()].sort((a, b) => b.quantity - a.quantity).slice(0, 5);
   }, [fSales, getAgentKey, getAgentLabel]);
 
-  const buildRankedAuditSummary = useCallback(
-    (team?: TeamName): RankedAuditSummary[] => {
-      const map = new Map<string, { label: string; scores: number[] }>();
-      fAudits
-        .filter((a) => (team ? a.team === team : true))
-        .forEach((a) => {
-          const k = getAgentKey(a.agent_id, a.agent_name);
-          const ex = map.get(k);
-          ex
-            ? ex.scores.push(Number(a.quality_score))
-            : map.set(k, {
-                label: getAgentLabel(
-                  a.agent_id,
-                  a.agent_name,
-                  a.team as TeamName
-                ),
-                scores: [Number(a.quality_score)],
-              });
-        });
-      return [...map.values()]
-        .map((v) => ({
-          label: v.label,
-          averageQuality:
-            v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
-          auditsCount: v.scores.length,
-        }))
-        .sort((a, b) => b.averageQuality - a.averageQuality);
-    },
-    [fAudits, getAgentKey, getAgentLabel]
-  );
+  const allAuditSummaries = useMemo<RankedAuditSummary[]>(() => {
+    const map = new Map<string, { label: string; scores: number[] }>();
+    fAudits.forEach(a => {
+      const k = getAgentKey(a.agent_id, a.agent_name);
+      const ex = map.get(k);
+      ex ? ex.scores.push(Number(a.quality_score)) : map.set(k, { label: getAgentLabel(a.agent_id, a.agent_name, a.team as TeamName), scores: [Number(a.quality_score)] });
+    });
+    return [...map.values()].map(v => ({
+      label: v.label,
+      averageQuality: v.scores.reduce((s, x) => s + x, 0) / v.scores.length,
+      auditsCount: v.scores.length,
+    })).sort((a, b) => b.averageQuality - a.averageQuality);
+  }, [fAudits, getAgentKey, getAgentLabel]);
 
-  const callsQtyTop = useMemo(
-    () => buildQtyBoard(fCalls, 'Calls', (r) => Number(r.calls_count), auditedCallsKeys),
-    [fCalls, auditedCallsKeys, buildQtyBoard]
-  );
-  const ticketsQtyTop = useMemo(
-    () => buildQtyBoard(fTickets, 'Tickets', (r) => Number(r.tickets_count), auditedTicketsKeys),
-    [fTickets, auditedTicketsKeys, buildQtyBoard]
-  );
-  const callsQualTop = useMemo(
-    () => buildQualityBoard('Calls'),
-    [buildQualityBoard]
-  );
-  const ticketsQualTop = useMemo(
-    () => buildQualityBoard('Tickets'),
-    [buildQualityBoard]
-  );
-  const callsHybridTop = useMemo(
-    () => buildHybridBoard('Calls', fCalls, (r) => Number(r.calls_count)),
-    [fCalls, buildHybridBoard]
-  );
-  const ticketsHybridTop = useMemo(
-    () => buildHybridBoard('Tickets', fTickets, (r) => Number(r.tickets_count)),
-    [fTickets, buildHybridBoard]
-  );
-  const salesTop = useMemo(() => buildSalesBoard(), [buildSalesBoard]);
-  const allAuditSummaries = useMemo(
-    () => buildRankedAuditSummary(),
-    [buildRankedAuditSummary]
-  );
+  /* ── KPIs ── */
+  const totalAudits      = fAudits.length;
+  const avgQuality       = totalAudits ? fAudits.reduce((s, a) => s + Number(a.quality_score), 0) / totalAudits : 0;
+  const releasedAudits   = fAudits.filter(a => a.shared_with_agent).length;
+  const releasedRate     = totalAudits ? (releasedAudits / totalAudits) * 100 : 0;
+  const totalSales       = fSales.reduce((s, r) => s + Number(r.amount), 0);
+  const totalCalls       = fCalls.reduce((s, r) => s + Number(r.calls_count), 0);
+  const totalTickets     = fTickets.reduce((s, r) => s + Number(r.tickets_count), 0);
+  const prevCallsTotal   = prevCalls.reduce((s, r) => s + Number(r.calls_count), 0);
+  const prevTicketsTotal = prevTickets.reduce((s, r) => s + Number(r.tickets_count), 0);
+  const prevSalesTotal   = prevSales.reduce((s, r) => s + Number(r.amount), 0);
+  const prevAvgQuality   = prevAudits.length ? prevAudits.reduce((s, a) => s + Number(a.quality_score), 0) / prevAudits.length : 0;
+  const callsAvgQual     = getTeamAvg(callsAudits);
+  const ticketsAvgQual   = getTeamAvg(ticketsAudits);
+  const salesAvgQual     = getTeamAvg(salesAudits);
 
-  /* ── KPI values ── */
-  const totalAudits = fAudits.length;
-  const avgQuality = totalAudits
-    ? fAudits.reduce((s, a) => s + Number(a.quality_score), 0) / totalAudits
-    : 0;
-  const releasedAudits = fAudits.filter((a) => a.shared_with_agent).length;
-  const releasedRate = totalAudits ? (releasedAudits / totalAudits) * 100 : 0;
-  const totalSales = fSales.reduce((s, r) => s + Number(r.amount), 0);
-  const totalCalls = fCalls.reduce((s, r) => s + Number(r.calls_count), 0);
-  const totalTickets = fTickets.reduce(
-    (s, r) => s + Number(r.tickets_count),
-    0
-  );
-  const prevCallsTotal = prevCalls.reduce(
-    (s, r) => s + Number(r.calls_count),
-    0
-  );
-  const prevTicketsTotal = prevTickets.reduce(
-    (s, r) => s + Number(r.tickets_count),
-    0
-  );
-  const prevSalesTotal = prevSales.reduce((s, r) => s + Number(r.amount), 0);
-  const prevAvgQuality = prevAudits.length
-    ? prevAudits.reduce((s, a) => s + Number(a.quality_score), 0) /
-      prevAudits.length
-    : 0;
+  /* ── Insights ── */
+  const lowestAgent    = allAuditSummaries.length ? [...allAuditSummaries].reverse()[0] : null;
+  const coachTarget    = allAuditSummaries.filter(a => a.auditsCount >= 2).sort((a, b) => a.averageQuality - b.averageQuality)[0] || null;
+  const mostConsistent = useMemo(() => {
+    const pool = [...callsHybridTop, ...ticketsHybridTop].sort((a, b) => a.rsd === b.rsd ? b.combinedScore - a.combinedScore : a.rsd - b.rsd);
+    return pool[0] || null;
+  }, [callsHybridTop, ticketsHybridTop]);
 
-  const callsAvgQual = getTeamAvg(callsAudits);
-  const ticketsAvgQual = getTeamAvg(ticketsAudits);
-  const salesAvgQual = getTeamAvg(salesAudits);
-  const prevCallsQual = getTeamAvg(prevCallsAudits);
-  const prevTicketsQual = getTeamAvg(prevTicketsAudits);
-  const prevSalesQual = getTeamAvg(prevSalesAudits);
-
-  const lowestAgent = allAuditSummaries.length
-    ? [...allAuditSummaries].reverse()[0]
-    : null;
-  const coachTarget =
-    allAuditSummaries
-      .filter((a) => a.auditsCount >= 2)
-      .sort((a, b) => a.averageQuality - b.averageQuality)[0] || null;
-  const consistencyPool = useMemo(
-    () =>
-      [...callsHybridTop, ...ticketsHybridTop].sort((a, b) =>
-        a.rsd === b.rsd ? b.combinedScore - a.combinedScore : a.rsd - b.rsd
-      ),
-    [callsHybridTop, ticketsHybridTop]
-  );
-  const mostConsistent = consistencyPool[0] || null;
-
-  /* ── Action center ── */
-  const actionItems = useMemo<ActionCenterItem[]>(
-    () => [
-      {
-        id: 'requests',
-        title: 'Supervisor Requests',
-        count: openReqs.length,
-        detail:
-          agingReqs.length > 0
-            ? `${agingReqs.length} aging 3+ days`
-            : 'No aging requests',
-        path: '/supervisor-requests',
-        tone:
-          agingReqs.length > 0
-            ? 'critical'
-            : openReqs.length > 0
-            ? 'warning'
-            : 'info',
-      },
-      {
-        id: 'feedback',
-        title: 'Open Feedback',
-        count: openFeedback.length,
-        detail:
-          overdueFb.length > 0
-            ? `${overdueFb.length} overdue`
-            : 'No overdue feedback',
-        path: '/agent-feedback',
-        tone:
-          overdueFb.length > 0
-            ? 'critical'
-            : openFeedback.length > 0
-            ? 'warning'
-            : 'info',
-      },
-      {
-        id: 'monitoring',
-        title: 'Active Monitoring',
-        count: activeMon.length,
-        detail:
-          agingMon.length > 0
-            ? `${agingMon.length} aging 2+ days`
-            : 'Queue controlled',
-        path: '/monitoring',
-        tone:
-          agingMon.length > 0
-            ? 'critical'
-            : activeMon.length > 0
-            ? 'warning'
-            : 'info',
-      },
-      {
-        id: 'audits',
-        title: 'Unreleased Audits',
-        count: scopedHiddenAudits.length,
-        detail:
-          agingHiddenAudits.length > 0
-            ? `${agingHiddenAudits.length} aging 2+ days`
-            : 'No aging audits',
-        path: '/audits-list',
-        tone:
-          agingHiddenAudits.length > 0
-            ? 'critical'
-            : scopedHiddenAudits.length > 0
-            ? 'warning'
-            : 'info',
-      },
-    ],
-    [
-      openReqs.length,
-      agingReqs.length,
-      openFeedback.length,
-      overdueFb.length,
-      activeMon.length,
-      agingMon.length,
-      scopedHiddenAudits.length,
-      agingHiddenAudits.length,
-    ]
-  );
+  /* ── Action items ── */
+  const actionItems = useMemo<ActionCenterItem[]>(() => [
+    { id: 'requests',  title: 'Supervisor Requests', count: openReqs.length,    detail: agingReqs.length > 0 ? `${agingReqs.length} aging 3+ days` : 'No aging requests', path: '/supervisor-requests', tone: agingReqs.length > 0 ? 'critical' : openReqs.length > 0 ? 'warning' : 'info' },
+    { id: 'feedback',  title: 'Open Feedback',       count: openFb.length,      detail: overdueFb.length > 0 ? `${overdueFb.length} overdue` : 'No overdue feedback',  path: '/agent-feedback',      tone: overdueFb.length > 0 ? 'critical' : openFb.length > 0 ? 'warning' : 'info' },
+    { id: 'monitoring',title: 'Active Monitoring',   count: activeMon.length,   detail: agingMon.length > 0 ? `${agingMon.length} aging 2+ days` : 'Queue controlled',   path: '/monitoring',          tone: agingMon.length > 0 ? 'critical' : activeMon.length > 0 ? 'warning' : 'info' },
+    { id: 'audits',    title: 'Unreleased Audits',   count: scopedHidden.length, detail: agingHidden.length > 0 ? `${agingHidden.length} aging 2+ days` : 'No aging audits', path: '/audits-list',     tone: agingHidden.length > 0 ? 'critical' : scopedHidden.length > 0 ? 'warning' : 'info' },
+  ], [openReqs.length, agingReqs.length, openFb.length, overdueFb.length, activeMon.length, agingMon.length, scopedHidden.length, agingHidden.length]);
 
   /* ── Ticker ── */
   const tickerItems = useMemo(() => {
     const msgs: string[] = [];
-    if (callsHybridTop[0])
-      msgs.push(`TOP CALLS — ${callsHybridTop[0].label}`);
-    if (ticketsHybridTop[0])
-      msgs.push(`TOP TICKETS — ${ticketsHybridTop[0].label}`);
-    if (salesTop[0]) msgs.push(`TOP SALES — ${salesTop[0].label}`);
-    if (mostConsistent)
-      msgs.push(`MOST CONSISTENT — ${mostConsistent.label}`);
-    msgs.push(
-      `QUALITY AUDITS — ${totalAudits} THIS PERIOD`,
-      `RELEASE RATE — ${releasedRate.toFixed(0)}%`
-    );
+    if (callsHybridTop[0])    msgs.push(`CALLS LEADER  ·  ${callsHybridTop[0].label}`);
+    if (ticketsHybridTop[0])  msgs.push(`TICKETS LEADER  ·  ${ticketsHybridTop[0].label}`);
+    if (salesTop[0])          msgs.push(`SALES LEADER  ·  ${salesTop[0].label}`);
+    if (mostConsistent)       msgs.push(`MOST CONSISTENT  ·  ${mostConsistent.label}`);
+    msgs.push(`QUALITY AUDITS  ·  ${totalAudits} THIS PERIOD`, `RELEASE RATE  ·  ${releasedRate.toFixed(0)}%`);
     return msgs;
-  }, [
-    callsHybridTop,
-    ticketsHybridTop,
-    salesTop,
-    mostConsistent,
-    totalAudits,
-    releasedRate,
-  ]);
+  }, [callsHybridTop, ticketsHybridTop, salesTop, mostConsistent, totalAudits, releasedRate]);
   const ticker = useLiveTicker(tickerItems);
 
-  const hasData =
-    audits.length > 0 ||
-    profiles.length > 0 ||
-    callsRecords.length > 0;
+  /* ── Action badge count ── */
+  const urgentCount = actionItems.filter(i => i.tone === 'critical' && i.count > 0).length;
 
-  /* ── Styles ── */
-  const $ = {
-    root: {
-      background: C.bg,
-      minHeight: '100vh',
-      color: C.text,
-    } as CSSProperties,
-    section: { marginBottom: '32px' } as CSSProperties,
-  };
+  const hasData = audits.length > 0 || profiles.length > 0 || callsRecords.length > 0;
 
-  /* ═════════════════════════════════════════════════════════
-     Loading
-     ═════════════════════════════════════════════════════════ */
+  /* ─────────────────────────── LOADING STATE ─────────────────────────── */
   if (loading && !hasData) {
     return (
-      <div
-        className="dash-root"
-        style={{
-          ...$.root,
-          display: 'grid',
-          placeItems: 'center',
-          minHeight: '400px',
-        }}
-      >
-        <div style={{ textAlign: 'center' }}>
-          <svg
-            width="48"
-            height="48"
-            viewBox="0 0 48 48"
-            fill="none"
-            style={{
-              animation: 'dash-loader-rotate 1.2s linear infinite',
-              display: 'block',
-              margin: '0 auto 16px',
-            }}
-          >
-            <circle
-              cx="24"
-              cy="24"
-              r="20"
-              stroke={C.border}
-              strokeWidth="3"
-              fill="none"
-            />
-            <circle
-              cx="24"
-              cy="24"
-              r="20"
-              stroke={C.accent}
-              strokeWidth="3"
-              fill="none"
-              strokeDasharray="80 200"
-              strokeLinecap="round"
-            />
-          </svg>
-          <div
-            className="dash-display"
-            style={{
-              color: C.accent,
-              fontSize: '13px',
-              fontWeight: 700,
-              letterSpacing: '.12em',
-              textTransform: 'uppercase',
-            }}
-          >
-            Loading Dashboard
-          </div>
-          <div
-            style={{ color: C.textMuted, fontSize: '12px', marginTop: '6px' }}
-          >
-            Gathering operational data…
+      <div className="dv6-root" data-light={isLight ? 'true' : undefined}
+        style={{ display: 'grid', placeItems: 'center', minHeight: '400px' }}>
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+          <div className="dv6-loader-ring" />
+          <div>
+            <div className="dv6-label" style={{ marginBottom: '4px' }}>Loading workspace</div>
+            <div style={{ fontSize: '13px', color: 'var(--dv-text-sub)' }}>Connecting to operational data…</div>
           </div>
         </div>
       </div>
     );
   }
 
-  /* ═════════════════════════════════════════════════════════
-     Main Render
-     ═════════════════════════════════════════════════════════ */
+  /* ─────────────────────────── MAIN RENDER ─────────────────────────────── */
   return (
-    <div className="dash-root" style={$.root}>
-      <TickerBanner ticker={ticker} C={C} />
-      <HeroHeader
-        C={C}
-        light={light}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        setDateFrom={setDateFrom}
-        setDateTo={setDateTo}
-        dateFromRef={dateFromRef}
-        dateToRef={dateToRef}
-        refreshing={refreshing}
-        lastLoadedAt={lastLoadedAt}
-        onRefresh={() => {
-          clearCachedValue(DASHBOARD_CACHE_KEY);
-          void loadData({ force: true });
-        }}
-        onThisMonth={() => {
-          setDateFrom(getMonthStartValue());
-          setDateTo(getCurrentDateValue());
-        }}
-        onAllTime={() => {
-          setDateFrom('');
-          setDateTo('');
-        }}
+    <div className="dv6-root" data-light={isLight ? 'true' : undefined}>
+      {/* ── Ticker ── */}
+      <div className="dv6-ticker">
+        <div className="dv6-ticker-live">
+          <div className="dv6-ticker-dot" />
+          <span className="dv6-mono" style={{ fontSize: '10px', fontWeight: 600, color: 'var(--dv-accent)', letterSpacing: '0.1em' }}>LIVE</span>
+        </div>
+        <div className="dv6-ticker-divider" />
+        <div key={ticker} className="dv6-ticker-text">{ticker}</div>
+      </div>
+
+      {/* ── Hero header ── */}
+      <DashHero
+        dateFrom={dateFrom} dateTo={dateTo}
+        setDateFrom={setDateFrom} setDateTo={setDateTo}
+        fromRef={fromRef} toRef={toRef}
+        refreshing={refreshing} lastLoadedAt={lastLoadedAt}
         currentUser={currentUser}
+        onRefresh={() => { clearCachedValue(DASHBOARD_CACHE_KEY); void loadData({ force: true }); }}
+        onThisMonth={() => { setDateFrom(dateStr.monthStart()); setDateTo(dateStr.today()); }}
+        onAllTime={() => { setDateFrom(''); setDateTo(''); }}
       />
 
-      {errorMessage && (
-        <div
-          style={{
-            margin: '0 0 20px',
-            padding: '14px 18px',
-            borderRadius: '12px',
-            background: 'rgba(239,68,68,.12)',
-            border: `1px solid rgba(239,68,68,.3)`,
-            color: C.criticalColor,
-            fontSize: '13px',
-          }}
-          role="alert"
-        >
-          ⚠ {errorMessage}
+      {/* ── Error banner ── */}
+      {errorMsg && (
+        <div style={{ margin: '0 0 20px', padding: '12px 16px', borderRadius: 'var(--dv-radius-lg)', background: 'var(--dv-critical-soft)', border: '1px solid rgba(248,113,113,0.2)', color: 'var(--dv-critical)', fontSize: '13px', fontFamily: 'var(--dv-font-mono)' }}>
+          ⚠  {errorMsg}
         </div>
       )}
 
-      <SectionNav
-        active={activeSection}
-        onChange={setActiveSection}
-        C={C}
-        light={light}
-      />
+      {/* ── Section nav ── */}
+      <div className="dv6-nav">
+        {([
+          { id: 'overview',  label: 'Overview',       icon: '◈' },
+          { id: 'action',    label: 'Action Center',  icon: '⚡', badge: urgentCount || undefined },
+          { id: 'rankings',  label: 'Rankings',       icon: '↑' },
+          { id: 'insights',  label: 'Insights',       icon: '◎' },
+        ] as { id: Section; label: string; icon: string; badge?: number }[]).map(t => (
+          <button key={t.id} className={`dv6-nav-tab${activeSection === t.id ? ' active' : ''}`} onClick={() => setActiveSection(t.id)}>
+            <span className="dv6-nav-tab-icon">{t.icon}</span>
+            {t.label}
+            {t.badge ? <span className="dv6-nav-badge">{t.badge}</span> : null}
+          </button>
+        ))}
+      </div>
 
+      {/* ── Sections ── */}
       {activeSection === 'overview' && (
-        <div className="dash-grid-in">
+        <div key="overview" className="dv6-section-enter">
           <KPIStrip
-            C={C}
-            totalAudits={totalAudits}
-            prevAudits={prevAudits.length}
-            avgQuality={avgQuality}
-            prevAvgQuality={prevAvgQuality}
-            releasedAudits={releasedAudits}
-            releasedRate={releasedRate}
-            totalCalls={totalCalls}
-            prevCallsTotal={prevCallsTotal}
-            totalTickets={totalTickets}
-            prevTicketsTotal={prevTicketsTotal}
-            totalSales={totalSales}
-            prevSalesTotal={prevSalesTotal}
+            totalAudits={totalAudits} prevAudits={prevAudits.length}
+            avgQuality={avgQuality} prevAvgQuality={prevAvgQuality}
+            releasedAudits={releasedAudits} releasedRate={releasedRate}
+            totalCalls={totalCalls} prevCallsTotal={prevCallsTotal}
+            totalTickets={totalTickets} prevTicketsTotal={prevTicketsTotal}
+            totalSales={totalSales} prevSalesTotal={prevSalesTotal}
           />
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-              gap: '16px',
-              marginBottom: '32px',
-            }}
-          >
-            <TeamPerfCard
-              C={C}
-              light={light}
-              title="Calls"
-              color={C.callsColor}
-              volume={totalCalls}
-              prevVolume={prevCallsTotal}
-              avgQual={callsAvgQual}
-              prevAvgQual={prevCallsQual}
-              auditedAgents={auditedCallsKeys.size}
-              topPerformer={
-                callsHybridTop[0]?.label || callsQualTop[0]?.label || '—'
-              }
-              sparkData={pseudoSparkline('calls' + totalCalls, 10)}
-              auditCount={callsAudits.length}
+          <div className="dv6-team-grid">
+            <TeamCard
+              title="Calls" teamColor="var(--dv-calls)"
+              volume={totalCalls} prevVolume={prevCallsTotal}
+              avgQual={callsAvgQual} prevAvgQual={getTeamAvg(prevCallsAudits)}
+              auditCount={callsAudits.length} auditedAgents={auditedCallsKeys.size}
+              topPerformer={callsHybridTop[0]?.label || callsQualTop[0]?.label || '—'}
+              sparkData={callsAudits.map(a => Number(a.quality_score))}
+              delay={0}
             />
-            <TeamPerfCard
-              C={C}
-              light={light}
-              title="Tickets"
-              color={C.ticketsColor}
-              volume={totalTickets}
-              prevVolume={prevTicketsTotal}
-              avgQual={ticketsAvgQual}
-              prevAvgQual={prevTicketsQual}
-              auditedAgents={auditedTicketsKeys.size}
-              topPerformer={
-                ticketsHybridTop[0]?.label || ticketsQualTop[0]?.label || '—'
-              }
-              sparkData={pseudoSparkline('tickets' + totalTickets, 10)}
-              auditCount={ticketsAudits.length}
+            <TeamCard
+              title="Tickets" teamColor="var(--dv-tickets)"
+              volume={totalTickets} prevVolume={prevTicketsTotal}
+              avgQual={ticketsAvgQual} prevAvgQual={getTeamAvg(prevTicketsAudits)}
+              auditCount={ticketsAudits.length} auditedAgents={auditedTicketsKeys.size}
+              topPerformer={ticketsHybridTop[0]?.label || ticketsQualTop[0]?.label || '—'}
+              sparkData={ticketsAudits.map(a => Number(a.quality_score))}
+              delay={60}
             />
-            <TeamPerfCard
-              C={C}
-              light={light}
-              title="Sales"
-              color={C.salesColor}
-              volume={totalSales}
-              prevVolume={prevSalesTotal}
-              isRevenue
-              avgQual={salesAvgQual}
-              prevAvgQual={prevSalesQual}
-              auditedAgents={
-                new Set(salesAudits.map((a) => getAgentKey(a.agent_id, a.agent_name)))
-                  .size
-              }
-              topPerformer={salesTop[0]?.label || '—'}
-              sparkData={pseudoSparkline('sales' + totalSales, 10)}
+            <TeamCard
+              title="Sales" teamColor="var(--dv-sales)"
+              volume={totalSales} prevVolume={prevSalesTotal} isRevenue
+              avgQual={salesAvgQual} prevAvgQual={getTeamAvg(prevSalesAudits)}
               auditCount={salesAudits.length}
+              auditedAgents={new Set(salesAudits.map(a => getAgentKey(a.agent_id, a.agent_name))).size}
+              topPerformer={salesTop[0]?.label || '—'}
+              sparkData={salesAudits.map(a => Number(a.quality_score))}
+              delay={120}
             />
           </div>
 
-          <RecognitionWall currentUser={currentUser as any} />
-          <DigitalTrophyCabinet scope="global" currentUser={currentUser} />
+          <div style={{ marginBottom: '28px' }}>
+            <RecognitionWall currentUser={currentUser as any} />
+          </div>
+          <div style={{ marginBottom: '28px' }}>
+            <DigitalTrophyCabinet scope="global" currentUser={currentUser} />
+          </div>
           {currentUser && (
-            <VoiceOfEmployeeSupabase
-              currentUser={currentUser as any}
-              title="Recent anonymous themes"
-              showComposer={false}
-            />
+            <VoiceOfEmployeeSupabase currentUser={currentUser as any} title="Recent anonymous themes" showComposer={false} />
           )}
         </div>
       )}
 
       {activeSection === 'action' && (
-        <div className="dash-grid-in">
+        <div key="action" className="dv6-section-enter">
           <ActionCenter
-            C={C}
-            light={light}
-            items={actionItems}
-            onNavigate={navigate}
-            agingReqs={agingReqs.length}
-            overdueFb={overdueFb.length}
-            agingMon={agingMon.length}
-            agingHidden={agingHiddenAudits.length}
+            items={actionItems} onNavigate={navigate}
+            agingReqs={agingReqs.length} overdueFb={overdueFb.length}
+            agingMon={agingMon.length} agingHidden={agingHidden.length}
           />
         </div>
       )}
 
       {activeSection === 'rankings' && (
-        <div className="dash-grid-in">
+        <div key="rankings" className="dv6-section-enter">
           <RankingsSection
-            C={C}
-            light={light}
-            callsQtyTop={callsQtyTop}
-            ticketsQtyTop={ticketsQtyTop}
-            salesTop={salesTop}
-            callsQualTop={callsQualTop}
-            ticketsQualTop={ticketsQualTop}
-            callsHybridTop={callsHybridTop}
-            ticketsHybridTop={ticketsHybridTop}
+            callsQtyTop={callsQtyTop} ticketsQtyTop={ticketsQtyTop} salesTop={salesTop}
+            callsQualTop={callsQualTop} ticketsQualTop={ticketsQualTop}
+            callsHybridTop={callsHybridTop} ticketsHybridTop={ticketsHybridTop}
           />
         </div>
       )}
 
       {activeSection === 'insights' && (
-        <div className="dash-grid-in">
+        <div key="insights" className="dv6-section-enter">
           <InsightsSection
-            C={C}
-            light={light}
-            lowestAgent={lowestAgent}
-            mostConsistent={mostConsistent}
-            coachTarget={coachTarget}
-            allSummaries={allAuditSummaries}
-            avgQuality={avgQuality}
-            releasedRate={releasedRate}
-            totalAudits={totalAudits}
+            lowestAgent={lowestAgent} mostConsistent={mostConsistent} coachTarget={coachTarget}
+            allSummaries={allAuditSummaries} avgQuality={avgQuality}
+            releasedRate={releasedRate} totalAudits={totalAudits}
           />
         </div>
       )}
@@ -1451,351 +1253,82 @@ function Dashboard({
 
 export default memo(Dashboard);
 
-/* ═════════════════════════════════════════════════════════════
-   Sub-components
-   ═════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
+   SUB-COMPONENTS
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-function TickerBanner({ ticker, C }: { ticker: string; C: any }) {
-  return (
-    <div
-      style={{
-        height: '36px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '20px',
-        background: C.panelBg,
-        borderBottom: `1px solid ${C.border}`,
-        padding: '0 20px',
-        marginBottom: '0',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexShrink: 0,
-          padding: '4px 10px',
-          borderRadius: '6px',
-          background: C.accentSoft,
-          border: `1px solid ${C.borderAccent}`,
-        }}
-      >
-        <div
-          style={{
-            width: '6px',
-            height: '6px',
-            borderRadius: '50%',
-            background: C.accent,
-            animation: 'dash-shimmer 1.5s ease-in-out infinite',
-          }}
-        />
-        <span
-          className="dash-display"
-          style={{
-            fontSize: '10px',
-            fontWeight: 700,
-            color: C.accent,
-            letterSpacing: '.1em',
-          }}
-        >
-          LIVE
-        </span>
-      </div>
-      <div
-        key={ticker}
-        style={{
-          fontSize: '11px',
-          fontWeight: 600,
-          color: C.textSub,
-          letterSpacing: '.06em',
-          animation: 'dash-ticker-slide 400ms cubic-bezier(.22,1,.36,1) both',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}
-      >
-        {ticker}
-      </div>
-    </div>
-  );
-}
-
-function HeroHeader({
-  C,
-  dateFrom,
-  dateTo,
-  setDateFrom,
-  setDateTo,
-  dateFromRef,
-  dateToRef,
-  refreshing,
-  lastLoadedAt,
-  onRefresh,
-  onThisMonth,
-  onAllTime,
-  currentUser,
-}: any) {
+/* ── DashHero ── */
+function DashHero({ dateFrom, dateTo, setDateFrom, setDateTo, fromRef, toRef, refreshing, lastLoadedAt, onRefresh, onThisMonth, onAllTime, currentUser }: {
+  dateFrom: string; dateTo: string;
+  setDateFrom: (v: string) => void; setDateTo: (v: string) => void;
+  fromRef: React.RefObject<HTMLInputElement>; toRef: React.RefObject<HTMLInputElement>;
+  refreshing: boolean; lastLoadedAt: string;
+  onRefresh: () => void; onThisMonth: () => void; onAllTime: () => void;
+  currentUser: any;
+}) {
   const role = currentUser?.role || 'qa';
-  const roleLabel =
-    role === 'admin' ? 'Administrator' : role === 'qa' ? 'QA Analyst' : 'Supervisor';
+  const roleLabel = role === 'admin' ? 'Administrator' : role === 'qa' ? 'QA Analyst' : 'Supervisor';
 
   return (
-    <div
-      style={{
-        padding: '28px 0 24px',
-        borderBottom: `1px solid ${C.border}`,
-        marginBottom: '24px',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-start',
-          flexWrap: 'wrap',
-          gap: '20px',
-          marginBottom: '20px',
-        }}
-      >
+    <div className="dv6-hero dv6-stagger" style={{ '--delay': '0ms' } as CSSProperties}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '24px', marginBottom: '20px' }}>
         <div>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              marginBottom: '6px',
-            }}
-          >
-            <span
-              className="dash-display"
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: C.accent,
-                letterSpacing: '.14em',
-                textTransform: 'uppercase',
-              }}
-            >
-              Quality Assurance System
-            </span>
-            <div
-              style={{ height: '1px', width: '32px', background: C.accent, opacity: 0.4 }}
-            />
-            <span
-              style={{
-                fontSize: '11px',
-                color: C.textMuted,
-                fontWeight: 600,
-                letterSpacing: '.08em',
-                textTransform: 'uppercase',
-              }}
-            >
-              {roleLabel}
-            </span>
+          <div className="dv6-hero-eyebrow">
+            <span className="dv6-eyebrow-line">Quality Assurance System</span>
+            <span style={{ width: '1px', height: '12px', background: 'var(--dv-border-mid)' }} />
+            <span style={{ fontFamily: 'var(--dv-font-mono)', fontSize: '10px', fontWeight: 500, color: 'var(--dv-text-muted)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>{roleLabel}</span>
           </div>
-          <h1
-            className="dash-display"
-            style={{
-              margin: 0,
-              fontSize: '36px',
-              fontWeight: 800,
-              color: C.text,
-              lineHeight: 1.1,
-              letterSpacing: '-.02em',
-            }}
-          >
-            Operations Dashboard
-          </h1>
-          <p style={{ margin: '8px 0 0', color: C.textSub, fontSize: '14px', fontWeight: 400 }}>
-            Quality, volume, and performance for period{' '}
-            <span style={{ color: C.text, fontWeight: 600 }}>
-              {dateFrom || 'All time'}
-            </span>{' '}
-            —{' '}
-            <span style={{ color: C.text, fontWeight: 600 }}>
-              {dateTo || 'Today'}
-            </span>
+          <h1 className="dv6-hero-title">Operations Dashboard</h1>
+          <p className="dv6-hero-sub">
+            Period{' '}
+            <span style={{ fontFamily: 'var(--dv-font-mono)', color: 'var(--dv-text)', fontWeight: 500 }}>{dateFrom || 'all time'}</span>
+            {' → '}
+            <span style={{ fontFamily: 'var(--dv-font-mono)', color: 'var(--dv-text)', fontWeight: 500 }}>{dateTo || 'today'}</span>
           </p>
         </div>
 
-        <div
-          style={{
-            display: 'flex',
-            gap: '10px',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-          }}
-        >
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          {/* Date inputs */}
           <div style={{ display: 'flex', gap: '8px' }}>
-            <div style={{ display: 'grid', gap: '4px' }}>
-              <label
-                style={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  color: C.textMuted,
-                  letterSpacing: '.08em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                From
-              </label>
-              <input
-                ref={dateFromRef}
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                onClick={() => openNativeDatePicker(dateFromRef.current)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: `1px solid ${C.border}`,
-                  background: C.surface,
-                  color: C.text,
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  minWidth: '140px',
-                  fontFamily: 'inherit',
-                }}
-              />
-            </div>
-            <div style={{ display: 'grid', gap: '4px' }}>
-              <label
-                style={{
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  color: C.textMuted,
-                  letterSpacing: '.08em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                To
-              </label>
-              <input
-                ref={dateToRef}
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                onClick={() => openNativeDatePicker(dateToRef.current)}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: '10px',
-                  border: `1px solid ${C.border}`,
-                  background: C.surface,
-                  color: C.text,
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  minWidth: '140px',
-                  fontFamily: 'inherit',
-                }}
-              />
-            </div>
+            {[
+              { label: 'From', ref: fromRef, value: dateFrom, set: setDateFrom },
+              { label: 'To',   ref: toRef,   value: dateTo,   set: setDateTo },
+            ].map(({ label, ref, value, set }) => (
+              <div key={label} className="dv6-date-control">
+                <label className="dv6-label">{label}</label>
+                <input
+                  ref={ref} type="date" value={value} className="dv6-date-input"
+                  onChange={e => set(e.target.value)}
+                  onClick={() => openDatePicker(ref.current)}
+                />
+              </div>
+            ))}
           </div>
 
-          <div
-            style={{ display: 'flex', gap: '6px', alignSelf: 'flex-end' }}
-          >
-            <button
-              className="dash-btn"
-              onClick={onThisMonth}
-              style={{
-                padding: '8px 14px',
-                borderRadius: '10px',
-                border: `1px solid ${C.border}`,
-                background: C.surface,
-                color: C.textSub,
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              This Month
-            </button>
-            <button
-              className="dash-btn"
-              onClick={onAllTime}
-              style={{
-                padding: '8px 14px',
-                borderRadius: '10px',
-                border: `1px solid ${C.border}`,
-                background: C.surface,
-                color: C.textSub,
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-              }}
-            >
-              All Time
-            </button>
-            <button
-              className="dash-btn"
-              onClick={onRefresh}
-              style={{
-                padding: '8px 16px',
-                borderRadius: '10px',
-                border: `1px solid ${C.borderAccent}`,
-                background: C.accentSoft,
-                color: C.accent,
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-              }}
-            >
-              {refreshing && (
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  strokeLinecap="round"
-                  style={{ animation: 'dash-spin-slow 1s linear infinite' }}
-                >
-                  <path d="M23 4v6h-6M1 20v-6h6" />
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                </svg>
-              )}
-              {refreshing ? 'Refreshing' : 'Refresh'}
+          {/* Action buttons */}
+          <div style={{ display: 'flex', gap: '6px', alignItems: 'flex-end' }}>
+            <button className="dv6-btn dv6-btn-ghost" onClick={onThisMonth}>This month</button>
+            <button className="dv6-btn dv6-btn-ghost" onClick={onAllTime}>All time</button>
+            <button className={`dv6-btn dv6-btn-accent`} onClick={onRefresh} style={{ minWidth: '90px' }}>
+              {refreshing
+                ? <><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" style={{ animation: 'dv6-spin 800ms linear infinite', flexShrink: 0 }}><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg> Syncing</>
+                : '↻ Refresh'
+              }
             </button>
           </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+      {/* Meta chips */}
+      <div className="dv6-chip-row">
         {[
-          { label: 'Quality Source', value: 'Audits' },
-          { label: 'Cache', value: refreshing ? 'Refreshing…' : 'Warm' },
-          {
-            label: 'Updated',
-            value: lastLoadedAt ? formatDateTime(lastLoadedAt) : 'Session',
-          },
-        ].map((chip) => (
-          <div
-            key={chip.label}
-            style={{
-              padding: '5px 12px',
-              borderRadius: '999px',
-              border: `1px solid ${C.border}`,
-              background: C.surface,
-              fontSize: '11px',
-              fontWeight: 600,
-              color: C.textMuted,
-            }}
-          >
-            <span style={{ color: C.textSub, marginRight: '4px' }}>
-              {chip.label}:
-            </span>
-            {chip.value}
+          { k: 'Source', v: 'Supabase' },
+          { k: 'Cache',  v: refreshing ? 'Refreshing…' : 'Warm' },
+          { k: 'Updated', v: lastLoadedAt ? fmtRelTime(lastLoadedAt) : 'This session' },
+        ].map(c => (
+          <div key={c.k} className="dv6-chip">
+            <span style={{ color: 'var(--dv-text-muted)', marginRight: '4px' }}>{c.k}</span>
+            {c.v}
           </div>
         ))}
       </div>
@@ -1803,238 +1336,40 @@ function HeroHeader({
   );
 }
 
-function SectionNav({
-  active,
-  onChange,
-  C,
-  light,
-}: {
-  active: string;
-  onChange: (s: any) => void;
-  C: any;
-  light: boolean;
-}) {
-  const tabs = [
-    { id: 'overview', label: 'Overview', icon: '◈' },
-    { id: 'action', label: 'Action Center', icon: '⚡' },
-    { id: 'rankings', label: 'Rankings', icon: '⬆' },
-    { id: 'insights', label: 'Insights', icon: '◎' },
-  ];
-  return (
-    <div
-      style={{
-        display: 'flex',
-        gap: '4px',
-        marginBottom: '28px',
-        padding: '5px',
-        borderRadius: '14px',
-        background: light ? 'rgba(241,245,249,.8)' : 'rgba(13,18,36,.8)',
-        border: `1px solid ${C.border}`,
-        width: 'fit-content',
-      }}
-    >
-      {tabs.map((t) => (
-        <button
-          key={t.id}
-          className="dash-segment-tab"
-          onClick={() => onChange(t.id)}
-          style={{
-            padding: '8px 18px',
-            borderRadius: '10px',
-            border:
-              active === t.id
-                ? `1px solid ${C.borderAccent}`
-                : '1px solid transparent',
-            background: active === t.id ? (light ? '#fff' : 'rgba(13,18,48,.9)') : 'transparent',
-            color: active === t.id ? C.accent : C.textMuted,
-            fontSize: '13px',
-            fontWeight: active === t.id ? 700 : 500,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '7px',
-            boxShadow: active === t.id ? C.shadow : 'none',
-            transition: 'all 160ms ease',
-          }}
-        >
-          <span style={{ fontSize: '14px', opacity: 0.8 }}>{t.icon}</span>
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function KPIStrip({
-  C,
-  totalAudits,
-  prevAudits,
-  avgQuality,
-  prevAvgQuality,
-  releasedAudits,
-  releasedRate,
-  totalCalls,
-  prevCallsTotal,
-  totalTickets,
-  prevTicketsTotal,
-  totalSales,
-  prevSalesTotal,
-}: any) {
+/* ── KPI Strip ── */
+function KPIStrip({ totalAudits, prevAudits, avgQuality, prevAvgQuality, releasedAudits, releasedRate, totalCalls, prevCallsTotal, totalTickets, prevTicketsTotal, totalSales, prevSalesTotal }: any) {
   const kpis = [
-    {
-      label: 'Total Audits',
-      value: totalAudits,
-      format: 'int',
-      prev: prevAudits,
-      color: C.accent,
-      icon: '◎',
-    },
-    {
-      label: 'Avg Quality',
-      value: avgQuality,
-      format: 'pct',
-      prev: prevAvgQuality,
-      color: C.callsColor,
-      icon: '◈',
-    },
-    {
-      label: 'Released',
-      value: releasedAudits,
-      sub: `${releasedRate.toFixed(0)}% rate`,
-      format: 'int',
-      color: C.salesColor,
-      icon: '▲',
-    },
-    {
-      label: 'Calls Volume',
-      value: totalCalls,
-      format: 'int',
-      prev: prevCallsTotal,
-      color: C.callsColor,
-      icon: '○',
-    },
-    {
-      label: 'Tickets Volume',
-      value: totalTickets,
-      format: 'int',
-      prev: prevTicketsTotal,
-      color: C.ticketsColor,
-      icon: '◇',
-    },
-    {
-      label: 'Sales Revenue',
-      value: totalSales,
-      format: 'usd',
-      prev: prevSalesTotal,
-      color: C.salesColor,
-      icon: '$',
-    },
+    { label: 'Total Audits',   value: totalAudits,  format: 'int' as const, prev: prevAudits,      accent: 'var(--dv-accent)',  icon: '◎' },
+    { label: 'Avg Quality',    value: avgQuality,   format: 'pct' as const, prev: prevAvgQuality,  accent: 'var(--dv-calls)',   icon: '◈' },
+    { label: 'Released',       value: releasedAudits, format: 'int' as const, sub: `${releasedRate.toFixed(0)}% share rate`, accent: 'var(--dv-sales)', icon: '▲' },
+    { label: 'Calls Volume',   value: totalCalls,   format: 'int' as const, prev: prevCallsTotal,  accent: 'var(--dv-calls)',   icon: '○' },
+    { label: 'Tickets Volume', value: totalTickets, format: 'int' as const, prev: prevTicketsTotal,accent: 'var(--dv-tickets)', icon: '◇' },
+    { label: 'Sales Revenue',  value: totalSales,   format: 'usd' as const, prev: prevSalesTotal,  accent: 'var(--dv-sales)',   icon: '$' },
   ];
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
-        gap: '12px',
-        marginBottom: '28px',
-      }}
-    >
+    <div className="dv6-kpi-grid">
       {kpis.map((k, i) => {
-        const delta =
-          k.prev !== undefined ? getPercentChange(k.value, k.prev) : null;
-        const fmtVal =
-          k.format === 'pct'
-            ? `${k.value.toFixed(1)}%`
-            : k.format === 'usd'
-            ? `$${k.value >= 1000 ? (k.value / 1000).toFixed(1) + 'k' : k.value.toFixed(0)}`
-            : k.value >= 1000
-            ? (k.value / 1000).toFixed(1) + 'k'
-            : String(k.value);
+        const delta = k.prev !== undefined ? getPctChange(k.value, k.prev) : null;
+        const deltaClass = delta === null ? '' : delta >= 0 ? 'dv6-delta-positive' : 'dv6-delta-negative';
         return (
-          <div
-            key={k.label}
-            className={`dash-card-hover dash-stagger-${Math.min(i + 1, 6)}`}
-            style={{
-              padding: '18px 20px',
-              borderRadius: '16px',
-              border: `1px solid ${C.border}`,
-              background: C.surface,
-              boxShadow: C.shadow,
-              position: 'relative',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '3px',
-                background: k.color,
-                borderRadius: '16px 16px 0 0',
-              }}
-            />
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: '8px',
-              }}
-            >
-              <span
-                style={{
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  color: C.textMuted,
-                  letterSpacing: '.08em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                {k.label}
-              </span>
-              <span style={{ fontSize: '16px', color: k.color, opacity: 0.7 }}>
-                {k.icon}
-              </span>
+          <div key={k.label} className="dv6-kpi-card dv6-stagger" style={{ '--delay': `${i * 40}ms` } as CSSProperties}>
+            <div className="dv6-kpi-accent-bar" style={{ background: k.accent }} />
+            <div className="dv6-kpi-header">
+              <span className="dv6-label">{k.label}</span>
+              <span style={{ fontSize: '16px', color: k.accent, opacity: 0.7 }}>{k.icon}</span>
             </div>
-            <div
-              className="dash-display dash-count-in"
-              style={{
-                fontSize: '28px',
-                fontWeight: 800,
-                color: C.text,
-                lineHeight: 1,
-                marginBottom: '6px',
-                letterSpacing: '-.02em',
-              }}
-            >
-              {fmtVal}
+            <div className="dv6-kpi-value" style={{ '--delay': `${i * 40 + 80}ms` } as CSSProperties}>
+              {fmtNum(k.value, k.format)}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="dv6-kpi-delta">
               {delta !== null && (
-                <span
-                  style={{
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: delta >= 0 ? C.salesColor : C.criticalColor,
-                  }}
-                >
+                <span className={deltaClass}>
                   {delta >= 0 ? '▲' : '▼'} {Math.abs(delta).toFixed(1)}%
                 </span>
               )}
-              {k.sub && (
-                <span style={{ fontSize: '11px', color: C.textMuted }}>
-                  {k.sub}
-                </span>
-              )}
-              {delta !== null && (
-                <span style={{ fontSize: '10px', color: C.textMuted }}>
-                  vs prev
-                </span>
-              )}
+              {k.sub && <span style={{ color: 'var(--dv-text-muted)', fontSize: '11px', fontFamily: 'var(--dv-font-mono)' }}>{k.sub}</span>}
+              {delta !== null && <span style={{ color: 'var(--dv-text-muted)', fontSize: '10px' }}>vs prev period</span>}
             </div>
           </div>
         );
@@ -2043,328 +1378,176 @@ function KPIStrip({
   );
 }
 
-function TeamPerfCard({
-  C,
-  light,
-  title,
-  color,
-  volume,
-  prevVolume,
-  isRevenue,
-  avgQual,
-  prevAvgQual,
-  auditedAgents,
-  topPerformer,
-  sparkData,
-  auditCount,
-}: any) {
-  const volDelta = getPercentChange(volume, prevVolume);
-  const qualDelta = getPercentChange(avgQual, prevAvgQual);
-  const sparkMax = Math.max(...sparkData);
-  const fmtVol = isRevenue
-    ? `$${volume >= 1000 ? (volume / 1000).toFixed(1) + 'k' : volume.toFixed(0)}`
-    : volume >= 1000
-    ? `${(volume / 1000).toFixed(1)}k`
-    : String(volume);
+/* ── Team Card ── */
+function TeamCard({ title, teamColor, volume, prevVolume, isRevenue, avgQual, prevAvgQual, auditCount, auditedAgents, topPerformer, sparkData, delay }: {
+  title: string; teamColor: string; volume: number; prevVolume: number; isRevenue?: boolean;
+  avgQual: number; prevAvgQual: number; auditCount: number; auditedAgents: number;
+  topPerformer: string; sparkData: number[]; delay: number;
+}) {
+  const volDelta  = getPctChange(volume, prevVolume);
+  const qualDelta = getPctChange(avgQual, prevAvgQual);
+  const fmtVol    = isRevenue ? fmtNum(volume, 'usd') : fmtNum(volume, 'int');
+  const sparkSlice = sparkData.slice(-12);
+  const sparkMax   = sparkSlice.length ? Math.max(...sparkSlice) : 1;
 
   return (
-    <div
-      className="dash-card-hover dash-stagger-3"
-      style={{
-        padding: '24px',
-        borderRadius: '20px',
-        border: `1px solid ${C.border}`,
-        background: C.surface,
-        boxShadow: C.shadow,
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          bottom: 0,
-          width: '4px',
-          background: color,
-        }}
-      />
-
-      <div style={{ paddingLeft: '8px' }}>
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-start',
-            marginBottom: '20px',
-          }}
-        >
-          <div>
-            <div
-              className="dash-display"
-              style={{
-                fontSize: '18px',
-                fontWeight: 800,
-                color: C.text,
-                letterSpacing: '-.01em',
-              }}
-            >
-              {title}
-            </div>
-            <div
-              style={{
-                fontSize: '11px',
-                color: C.textMuted,
-                marginTop: '2px',
-                fontWeight: 500,
-              }}
-            >
-              {auditCount} audits • {auditedAgents} agents
-            </div>
+    <div className="dv6-team-card dv6-stagger" style={{ '--delay': `${delay}ms` } as CSSProperties}>
+      {/* Header */}
+      <div className="dv6-team-header">
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+            <div style={{ width: '3px', height: '16px', borderRadius: '999px', background: teamColor, flexShrink: 0 }} />
+            <span className="dv6-display" style={{ fontFamily: 'var(--dv-font-display)', fontSize: '16px', fontWeight: 700, color: 'var(--dv-text)', letterSpacing: '-0.02em' }}>{title}</span>
           </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: '4px',
-              alignItems: 'flex-end',
-              color: color,
-            }}
-          >
-            <div className="dash-sparkline">
-              {sparkData.map((v: number, i: number) => (
-                <div
-                  key={i}
-                  className={`dash-sparkline-bar ${v === sparkMax ? 'peak' : ''}`}
-                  style={{
-                    height: `${(v / sparkMax) * 100}%`,
-                    background: color,
-                  }}
-                />
-              ))}
+          <span className="dv6-label">{auditCount} audits · {auditedAgents} agents audited</span>
+        </div>
+        {/* Sparkline */}
+        {sparkSlice.length > 0 && (
+          <div className="dv6-spark" style={{ height: '28px', color: teamColor }}>
+            {sparkSlice.map((v, i) => (
+              <div key={i} className={`dv6-spark-bar${v === sparkMax ? ' peak' : ''}`} style={{ height: `${Math.max(10, (v / sparkMax) * 100)}%` }} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Body */}
+      <div className="dv6-team-body">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+          {[
+            { label: isRevenue ? 'Revenue' : 'Volume', val: fmtVol, delta: volDelta },
+            { label: 'Avg Quality', val: `${avgQual.toFixed(1)}%`, delta: qualDelta },
+          ].map(s => (
+            <div key={s.label} className="dv6-team-stat">
+              <span className="dv6-team-stat-label">{s.label}</span>
+              <span className="dv6-team-stat-value">{s.val}</span>
+              <span className="dv6-team-meta" style={{ color: s.delta >= 0 ? 'var(--dv-success)' : 'var(--dv-critical)', marginTop: '2px' }}>
+                {s.delta >= 0 ? '▲' : '▼'} {Math.abs(s.delta).toFixed(1)}% vs prev
+              </span>
             </div>
+          ))}
+        </div>
+
+        {/* Quality bar */}
+        <div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
+            <span className="dv6-label">Quality vs target</span>
+            <span className="dv6-mono" style={{ fontSize: '10px', fontWeight: 500, color: teamColor }}>Target 90%</span>
+          </div>
+          <div className="dv6-quality-bar-track">
+            <div className="dv6-quality-bar-fill" style={{
+              '--bar-w': `${Math.min(avgQual, 100)}%`,
+              background: avgQual >= 90 ? teamColor : 'var(--dv-critical)',
+            } as CSSProperties} />
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: '16px',
-            marginBottom: '18px',
-          }}
-        >
-          <div>
-            <div
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: C.textMuted,
-                textTransform: 'uppercase',
-                letterSpacing: '.06em',
-                marginBottom: '4px',
-              }}
-            >
-              Volume
-            </div>
-            <div
-              className="dash-display"
-              style={{ fontSize: '24px', fontWeight: 800, color: C.text }}
-            >
-              {fmtVol}
-            </div>
-            <div
-              style={{
-                fontSize: '11px',
-                color: volDelta >= 0 ? C.salesColor : C.criticalColor,
-                fontWeight: 700,
-                marginTop: '2px',
-              }}
-            >
-              {volDelta >= 0 ? '▲' : '▼'} {Math.abs(volDelta).toFixed(1)}% vs
-              prev
-            </div>
-          </div>
-          <div>
-            <div
-              style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: C.textMuted,
-                textTransform: 'uppercase',
-                letterSpacing: '.06em',
-                marginBottom: '4px',
-              }}
-            >
-              Quality
-            </div>
-            <div
-              className="dash-display"
-              style={{ fontSize: '24px', fontWeight: 800, color: C.text }}
-            >
-              {avgQual.toFixed(1)}%
-            </div>
-            <div
-              style={{
-                fontSize: '11px',
-                color: qualDelta >= 0 ? C.salesColor : C.criticalColor,
-                fontWeight: 700,
-                marginTop: '2px',
-              }}
-            >
-              {qualDelta >= 0 ? '▲' : '▼'} {Math.abs(qualDelta).toFixed(1)}% vs
-              prev
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '16px' }}>
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              marginBottom: '5px',
-            }}
-          >
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: 700,
-                color: C.textMuted,
-                textTransform: 'uppercase',
-                letterSpacing: '.06em',
-              }}
-            >
-              Quality Score
-            </span>
-            <span style={{ fontSize: '10px', fontWeight: 700, color }}>
-              Target: 90%
-            </span>
-          </div>
-          <div
-            style={{
-              height: '6px',
-              borderRadius: '999px',
-              background: light ? 'rgba(0,0,0,.08)' : 'rgba(255,255,255,.06)',
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              className="dash-score-bar-fill"
-              style={{
-                height: '100%',
-                borderRadius: '999px',
-                background:
-                  avgQual >= 90
-                    ? `linear-gradient(90deg, ${color}, ${color}cc)`
-                    : `linear-gradient(90deg, ${C.criticalColor}, ${C.warningColor})`,
-                '--score-w': `${Math.min(avgQual, 100)}%`,
-              } as any}
-            />
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: '10px 14px',
-            borderRadius: '10px',
-            background: light ? `${color}10` : `${color}15`,
-            border: `1px solid ${color}30`,
-          }}
-        >
-          <div
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              color,
-              textTransform: 'uppercase',
-              letterSpacing: '.06em',
-              marginBottom: '3px',
-            }}
-          >
-            Top Performer
-          </div>
-          <div
-            style={{
-              fontSize: '13px',
-              fontWeight: 600,
-              color: C.text,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {topPerformer}
-          </div>
+        {/* Top performer */}
+        <div className="dv6-performer-strip" style={{ marginTop: '14px' }}>
+          <div className="dv6-label" style={{ color: teamColor, marginBottom: '3px' }}>Top performer</div>
+          <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--dv-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{topPerformer}</div>
         </div>
       </div>
     </div>
   );
 }
 
-function ActionCenter({ C, light, items, onNavigate, agingReqs, overdueFb, agingMon, agingHidden }: any) {
-  const urgentCount = items.filter((i: ActionCenterItem) => i.tone === 'critical' && i.count > 0).length;
-  const watchCount = items.filter((i: ActionCenterItem) => i.tone === 'warning' && i.count > 0).length;
+/* ── Action Center ── */
+function ActionCenter({ items, onNavigate, agingReqs, overdueFb, agingMon, agingHidden }: {
+  items: ActionCenterItem[]; onNavigate: (p: string) => void;
+  agingReqs: number; overdueFb: number; agingMon: number; agingHidden: number;
+}) {
+  const urgentCount = items.filter(i => i.tone === 'critical' && i.count > 0).length;
+  const watchCount  = items.filter(i => i.tone === 'warning'  && i.count > 0).length;
+
+  const statusColor = urgentCount > 0 ? 'var(--dv-critical)' : watchCount > 0 ? 'var(--dv-warning)' : 'var(--dv-success)';
+  const statusBg    = urgentCount > 0 ? 'var(--dv-critical-soft)' : watchCount > 0 ? 'var(--dv-warning-soft)' : 'var(--dv-success-soft)';
 
   return (
     <div>
-      {/* Status banner */}
-      <div style={{ padding: '20px 24px', borderRadius: '16px', border: `1px solid ${urgentCount > 0 ? 'rgba(239,68,68,.3)' : watchCount > 0 ? 'rgba(245,158,11,.3)' : C.borderAccent}`, background: urgentCount > 0 ? 'rgba(239,68,68,.06)' : watchCount > 0 ? 'rgba(245,158,11,.06)' : C.accentSoft, marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
+      {/* Status panel */}
+      <div className="dv6-status-panel dv6-stagger" style={{ '--delay': '0ms', borderColor: `color-mix(in srgb, ${statusColor} 25%, transparent)`, background: statusBg } as CSSProperties}>
         <div>
-          <div className="dash-display" style={{ fontSize: '20px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>
-            {urgentCount > 0 ? `${urgentCount} Urgent Item${urgentCount > 1 ? 's' : ''} Requiring Attention` : watchCount > 0 ? `${watchCount} Item${watchCount > 1 ? 's' : ''} to Watch` : 'All Queues Healthy'}
+          <div className="dv6-label" style={{ color: statusColor, marginBottom: '6px' }}>
+            {urgentCount > 0 ? `${urgentCount} urgent` : watchCount > 0 ? `${watchCount} to watch` : 'All queues healthy'}
           </div>
-          <div style={{ fontSize: '13px', color: C.textSub }}>
-            {urgentCount > 0 ? 'Act on critical items immediately to maintain SLA compliance.' : watchCount > 0 ? 'Monitor these items and address before they escalate.' : 'No urgent operational backlog in the selected period.'}
+          <div style={{ fontFamily: 'var(--dv-font-display)', fontSize: '20px', fontWeight: 700, color: 'var(--dv-text)', letterSpacing: '-0.02em', marginBottom: '4px' }}>
+            {urgentCount > 0 ? 'Immediate action required' : watchCount > 0 ? 'Monitor & resolve soon' : 'Operational backlog clear'}
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--dv-text-sub)' }}>
+            {urgentCount > 0 ? 'Critical items are aging past SLA thresholds.' : watchCount > 0 ? 'Resolve before items escalate to critical.' : 'No urgent items in the selected period.'}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          {[{ label: 'Urgent', value: urgentCount, color: C.criticalColor }, { label: 'Watch', value: watchCount, color: C.warningColor }, { label: 'Stable', value: items.filter((i: ActionCenterItem) => i.tone === 'info').length, color: C.accent }].map(s => (
-            <div key={s.label} style={{ textAlign: 'center' }}>
-              <div className="dash-display" style={{ fontSize: '22px', fontWeight: 800, color: s.color }}>{s.value}</div>
-              <div style={{ fontSize: '10px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em' }}>{s.label}</div>
+        <div style={{ display: 'flex', gap: '20px' }}>
+          {[
+            { l: 'Urgent', v: urgentCount, c: 'var(--dv-critical)' },
+            { l: 'Watch',  v: watchCount,  c: 'var(--dv-warning)' },
+            { l: 'Stable', v: items.filter(i => i.tone === 'info').length, c: 'var(--dv-accent)' },
+          ].map(s => (
+            <div key={s.l} style={{ textAlign: 'center' }}>
+              <div className="dv6-display dv6-mono" style={{ fontSize: '26px', fontWeight: 700, color: s.c, letterSpacing: '-0.03em' }}>{s.v}</div>
+              <div className="dv6-label">{s.l}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Action cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', marginBottom: '24px' }}>
-        {items.map((item: ActionCenterItem, i: number) => (
-          <ActionCard key={item.id} item={item} C={C} light={light} onNavigate={onNavigate} index={i} />
-        ))}
+      <div className="dv6-action-grid">
+        {items.map((item, i) => {
+          const toneColor = item.tone === 'critical' ? 'var(--dv-critical)' : item.tone === 'warning' ? 'var(--dv-warning)' : 'var(--dv-accent)';
+          const toneBg    = item.tone === 'critical' ? 'var(--dv-critical-soft)' : item.tone === 'warning' ? 'var(--dv-warning-soft)' : 'var(--dv-accent-soft)';
+          const badgeCls  = `dv6-badge dv6-badge-${item.tone === 'critical' ? 'critical' : item.tone === 'warning' ? 'warning' : 'info'}`;
+          return (
+            <div key={item.id} className="dv6-action-card dv6-stagger" style={{ '--delay': `${i * 50}ms`, borderColor: `color-mix(in srgb, ${toneColor} 20%, transparent)`, background: toneBg } as CSSProperties}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <span className={badgeCls}>{item.tone === 'critical' ? 'Urgent' : item.tone === 'warning' ? 'Watch' : 'Stable'}</span>
+                <div className="dv6-action-count dv6-display" style={{ color: toneColor }}>{item.count}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--dv-text)', marginBottom: '4px' }}>{item.title}</div>
+                <div style={{ fontSize: '12px', color: 'var(--dv-text-sub)', fontFamily: 'var(--dv-font-mono)' }}>{item.detail}</div>
+              </div>
+              <button className="dv6-btn" onClick={() => onNavigate(item.path)} style={{ borderColor: `color-mix(in srgb, ${toneColor} 25%, transparent)`, color: toneColor }}>
+                Open →
+              </button>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Aging detail table */}
+      {/* Aging detail + quick links */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
-          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>⚠ Aging / Overdue</div>
-          {[
-            { label: 'Requests aging 3+ days', value: agingReqs, tone: agingReqs > 0 ? 'critical' : 'info' },
-            { label: 'Feedback overdue', value: overdueFb, tone: overdueFb > 0 ? 'critical' : 'info' },
-            { label: 'Monitoring aging 2+ days', value: agingMon, tone: agingMon > 0 ? 'warning' : 'info' },
-            { label: 'Unreleased audits 2+ days', value: agingHidden, tone: agingHidden > 0 ? 'warning' : 'info' },
-          ].map(row => (
-            <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: '10px', marginBottom: '8px', background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', border: `1px solid ${C.border}` }}>
-              <span style={{ fontSize: '13px', color: C.textSub, fontWeight: 500 }}>{row.label}</span>
-              <span className="dash-display" style={{ fontSize: '18px', fontWeight: 800, color: row.value > 0 ? (row.tone === 'critical' ? C.criticalColor : C.warningColor) : C.textMuted }}>{row.value}</span>
-            </div>
-          ))}
+        <div className="dv6-card" style={{ padding: '20px' }}>
+          <div className="dv6-label" style={{ marginBottom: '14px' }}>Aging & overdue</div>
+          <div style={{ display: 'grid', gap: '8px' }}>
+            {[
+              { l: 'Requests aging 3+ days', v: agingReqs,  crit: agingReqs > 0 },
+              { l: 'Feedback overdue',       v: overdueFb,  crit: overdueFb > 0 },
+              { l: 'Monitoring aging 2+ days', v: agingMon, crit: false },
+              { l: 'Unreleased audits 2+ days', v: agingHidden, crit: false },
+            ].map(row => (
+              <div key={row.l} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderRadius: 'var(--dv-radius-md)', background: 'var(--dv-bg-subtle)', border: '1px solid var(--dv-border)' }}>
+                <span style={{ fontSize: '12px', color: 'var(--dv-text-sub)' }}>{row.l}</span>
+                <span className="dv6-mono" style={{ fontSize: '16px', fontWeight: 600, color: row.v > 0 ? (row.crit ? 'var(--dv-critical)' : 'var(--dv-warning)') : 'var(--dv-text-muted)' }}>{row.v}</span>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <div style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${C.border}`, background: C.surface }}>
-          <div className="dash-display" style={{ fontSize: '13px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '14px' }}>→ Quick Links</div>
+        <div className="dv6-card" style={{ padding: '20px' }}>
+          <div className="dv6-label" style={{ marginBottom: '14px' }}>Quick navigation</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
             {[
-              { label: 'Audits List', path: '/audits-list' },
-              { label: 'Feedback', path: '/agent-feedback' },
-              { label: 'Monitoring', path: '/monitoring' },
-              { label: 'Requests', path: '/supervisor-requests' },
-              { label: 'Reports', path: '/reports' },
-              { label: 'Heatmap', path: '/team-heatmap' },
-            ].map(l => (
-              <button key={l.path} className="dash-btn" onClick={() => onNavigate(l.path)} style={{ padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', color: C.textSub, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
-                {l.label} →
+              { l: 'Audits List',  p: '/audits-list' },
+              { l: 'Feedback',     p: '/agent-feedback' },
+              { l: 'Monitoring',   p: '/monitoring' },
+              { l: 'Requests',     p: '/supervisor-requests' },
+              { l: 'Reports',      p: '/reports' },
+              { l: 'Team Heatmap', p: '/team-heatmap' },
+            ].map(ln => (
+              <button key={ln.p} className="dv6-btn dv6-btn-ghost" onClick={() => onNavigate(ln.p)} style={{ justifyContent: 'flex-start', textAlign: 'left', width: '100%' }}>
+                {ln.l} →
               </button>
             ))}
           </div>
@@ -2374,38 +1557,16 @@ function ActionCenter({ C, light, items, onNavigate, agingReqs, overdueFb, aging
   );
 }
 
-function ActionCard({ item, C, light, onNavigate, index }: { item: ActionCenterItem; C: any; light: boolean; onNavigate: (path: string) => void; index: number }) {
-  const toneColor = item.tone === 'critical' ? C.criticalColor : item.tone === 'warning' ? C.warningColor : C.accent;
-  const toneBg = item.tone === 'critical' ? 'rgba(239,68,68,.08)' : item.tone === 'warning' ? 'rgba(245,158,11,.08)' : C.accentSoft;
-  const toneBorder = item.tone === 'critical' ? 'rgba(239,68,68,.25)' : item.tone === 'warning' ? 'rgba(245,158,11,.25)' : C.borderAccent;
-
-  return (
-    <div className={`dash-action-card dash-stagger-${index + 1}`} style={{ padding: '20px', borderRadius: '16px', border: `1px solid ${toneBorder}`, background: toneBg, display: 'grid', gap: '12px', animation: item.tone === 'critical' && item.count > 0 ? 'dash-border-glow 2s ease-in-out infinite' : 'none' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <span className={`dash-tag dash-tag-${item.tone}${light ? ' light' : ''}`}>{item.tone === 'critical' ? 'Urgent' : item.tone === 'warning' ? 'Watch' : 'Stable'}</span>
-        <div className="dash-display" style={{ fontSize: '36px', fontWeight: 800, color: toneColor, lineHeight: 1 }}>{item.count}</div>
-      </div>
-      <div>
-        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '4px' }}>{item.title}</div>
-        <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>{item.detail}</div>
-      </div>
-      <button className="dash-btn" onClick={() => onNavigate(item.path)} style={{ padding: '8px 14px', borderRadius: '10px', border: `1px solid ${toneBorder}`, background: light ? 'rgba(255,255,255,.8)' : 'rgba(13,18,36,.6)', color: toneColor, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'center' }}>
-        Open →
-      </button>
-    </div>
-  );
-}
-
-// ─── RankingsSection ─────────────────────────────────────────────────────────
-function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, callsQualTop, ticketsQualTop, callsHybridTop, ticketsHybridTop }: any) {
-  const [boardType, setBoardType] = useState<'quantity' | 'quality' | 'combined'>('combined');
+/* ── Rankings Section ── */
+function RankingsSection({ callsQtyTop, ticketsQtyTop, salesTop, callsQualTop, ticketsQualTop, callsHybridTop, ticketsHybridTop }: any) {
+  const [boardType, setBoardType] = useState<'combined' | 'quantity' | 'quality'>('combined');
 
   return (
     <div>
-      {/* Board type switcher */}
-      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', padding: '4px', borderRadius: '12px', background: light ? 'rgba(241,245,249,.8)' : 'rgba(13,18,36,.8)', border: `1px solid ${C.border}`, width: 'fit-content' }}>
+      {/* Type switcher */}
+      <div style={{ display: 'flex', gap: '4px', marginBottom: '24px', padding: '4px', borderRadius: 'var(--dv-radius-lg)', background: 'var(--dv-bg-raised)', border: '1px solid var(--dv-border)', width: 'fit-content' }}>
         {(['combined', 'quantity', 'quality'] as const).map(t => (
-          <button key={t} className="dash-segment-tab" onClick={() => setBoardType(t)} style={{ padding: '7px 16px', borderRadius: '8px', border: boardType === t ? `1px solid ${C.borderAccent}` : '1px solid transparent', background: boardType === t ? C.surface : 'transparent', color: boardType === t ? C.accent : C.textMuted, fontSize: '12px', fontWeight: boardType === t ? 700 : 500, cursor: 'pointer', fontFamily: 'inherit', textTransform: 'capitalize' }}>
+          <button key={t} className={`dv6-nav-tab${boardType === t ? ' active' : ''}`} onClick={() => setBoardType(t)} style={{ padding: '0 16px', height: '32px', fontSize: '12px', textTransform: 'capitalize' }}>
             {t}
           </button>
         ))}
@@ -2413,138 +1574,154 @@ function RankingsSection({ C, light, callsQtyTop, ticketsQtyTop, salesTop, calls
 
       {boardType === 'combined' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Combined" color={C.callsColor} items={callsHybridTop} C={C} light={light} type="hybrid" />
-          <LeaderboardPanel title="Tickets Combined" color={C.ticketsColor} items={ticketsHybridTop} C={C} light={light} type="hybrid" />
+          <LeaderboardPanel title="Calls Combined" color="var(--dv-calls)" items={callsHybridTop} type="hybrid" delay={0} />
+          <LeaderboardPanel title="Tickets Combined" color="var(--dv-tickets)" items={ticketsHybridTop} type="hybrid" delay={60} />
         </div>
       )}
       {boardType === 'quantity' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Volume" color={C.callsColor} items={callsQtyTop} C={C} light={light} type="quantity" unit="calls" />
-          <LeaderboardPanel title="Tickets Volume" color={C.ticketsColor} items={ticketsQtyTop} C={C} light={light} type="quantity" unit="tickets" />
-          <LeaderboardPanel title="Sales Revenue" color={C.salesColor} items={salesTop} C={C} light={light} type="quantity" unit="usd" />
+          <LeaderboardPanel title="Calls Volume"   color="var(--dv-calls)"   items={callsQtyTop}   type="quantity" unit="calls"   delay={0} />
+          <LeaderboardPanel title="Tickets Volume" color="var(--dv-tickets)" items={ticketsQtyTop} type="quantity" unit="tickets" delay={60} />
+          <LeaderboardPanel title="Sales Revenue"  color="var(--dv-sales)"   items={salesTop}      type="quantity" unit="usd"     delay={120} />
         </div>
       )}
       {boardType === 'quality' && (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <LeaderboardPanel title="Calls Quality" color={C.callsColor} items={callsQualTop} C={C} light={light} type="quality" />
-          <LeaderboardPanel title="Tickets Quality" color={C.ticketsColor} items={ticketsQualTop} C={C} light={light} type="quality" />
+          <LeaderboardPanel title="Calls Quality"   color="var(--dv-calls)"   items={callsQualTop}   type="quality" delay={0} />
+          <LeaderboardPanel title="Tickets Quality" color="var(--dv-tickets)" items={ticketsQualTop} type="quality" delay={60} />
         </div>
       )}
     </div>
   );
 }
 
-function LeaderboardPanel({ title, color, items, C, light, type, unit }: { title: string; color: string; items: any[]; C: any; light: boolean; type: 'quantity' | 'quality' | 'hybrid'; unit?: string }) {
-  const maxVal = items.length ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity)) : 1;
+const MEDAL = ['#FFD700', '#C0C0C0', '#CD7F32'];
+
+function LeaderboardPanel({ title, color, items, type, unit, delay }: {
+  title: string; color: string; items: any[]; type: 'quantity' | 'quality' | 'hybrid'; unit?: string; delay: number;
+}) {
+  const maxVal = items.length
+    ? Math.max(...items.map(i => type === 'quality' ? i.averageQuality : type === 'hybrid' ? i.combinedScore : i.quantity))
+    : 1;
 
   return (
-    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, boxShadow: C.shadow }}>
+    <div className="dv6-card dv6-card-hover dv6-stagger" style={{ padding: '22px', '--delay': `${delay}ms` } as CSSProperties}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-        <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}80` }} />
-        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text }}>{title}</div>
-        <div style={{ marginLeft: 'auto', padding: '3px 8px', borderRadius: '999px', background: `${color}18`, border: `1px solid ${color}30`, fontSize: '10px', fontWeight: 700, color }}>{items.length} agents</div>
-      </div>
-
-      {items.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, fontSize: '13px', borderRadius: '10px', border: `1px dashed ${C.border}` }}>No data for period</div>
-      ) : (
-        <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '340px', overflowY: 'auto' }}>
-          {items.map((item, i) => {
-            const val = type === 'quality' ? item.averageQuality : type === 'hybrid' ? item.combinedScore : item.quantity;
-            const barPct = maxVal > 0 ? (val / maxVal) * 100 : 0;
-            const displayVal = type === 'quality' ? `${item.averageQuality.toFixed(1)}%` : type === 'hybrid' ? `${item.combinedScore.toFixed(2)}` : unit === 'usd' ? `$${item.quantity >= 1000 ? (item.quantity / 1000).toFixed(1) + 'k' : item.quantity}` : String(item.quantity);
-            const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
-
-            return (
-              <div key={item.label} className="dash-rank-row" style={{ padding: '12px 14px', borderRadius: '12px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)', cursor: 'default' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
-                  <div style={{ width: '24px', height: '24px', borderRadius: '8px', background: i < 3 ? `${medalColors[i]}22` : C.accentSoft, border: `1px solid ${i < 3 ? medalColors[i] + '40' : C.borderAccent}`, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
-                    <span className="dash-mono" style={{ fontSize: '10px', fontWeight: 700, color: i < 3 ? medalColors[i] : C.accent }}>#{i + 1}</span>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
-                    {type === 'hybrid' && <div style={{ fontSize: '10px', color: C.textMuted }}>Quality {item.averageQuality?.toFixed(1)}% · RSD {item.rsd?.toFixed(3)}</div>}
-                    {type === 'quality' && <div style={{ fontSize: '10px', color: C.textMuted }}>{item.auditsCount} audit{item.auditsCount !== 1 ? 's' : ''}</div>}
-                  </div>
-                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color, flexShrink: 0 }}>{displayVal}</div>
-                </div>
-                {/* Mini bar */}
-                <div style={{ height: '3px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${barPct}%`, background: `linear-gradient(90deg, ${color}, ${color}90)`, borderRadius: '999px', transition: 'width 600ms cubic-bezier(.22,1,.36,1)' }} />
-                </div>
-              </div>
-            );
-          })}
+        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}` }} />
+        <span style={{ fontFamily: 'var(--dv-font-display)', fontSize: '14px', fontWeight: 700, color: 'var(--dv-text)', letterSpacing: '-0.02em' }}>{title}</span>
+        <div style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: '999px', background: 'var(--dv-bg-subtle)', border: '1px solid var(--dv-border)', fontFamily: 'var(--dv-font-mono)', fontSize: '10px', fontWeight: 500, color }}>
+          {items.length} agents
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─── InsightsSection ─────────────────────────────────────────────────────────
-function InsightsSection({ C, light, lowestAgent, mostConsistent, coachTarget, allSummaries, avgQuality, releasedRate, totalAudits }: any) {
-  return (
-    <div>
-      {/* Top 3 insight cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '28px' }}>
-        <InsightCard C={C} light={light} tone="warning" icon="◎" title="Needs Attention"
-          agent={lowestAgent?.label || 'No data'}
-          detail={lowestAgent ? `${lowestAgent.averageQuality.toFixed(1)}% avg quality across ${lowestAgent.auditsCount} audit${lowestAgent.auditsCount !== 1 ? 's' : ''}` : 'No quality insight available.'}
-          badge="Lowest Quality"
-        />
-        <InsightCard C={C} light={light} tone="success" icon="◈" title="Most Consistent"
-          agent={mostConsistent?.label || 'No combined data'}
-          detail={mostConsistent ? `RSD ${mostConsistent.rsd.toFixed(3)} · Score ${mostConsistent.combinedScore.toFixed(3)}` : 'No consistency signal.'}
-          badge="Top Stability"
-        />
-        <InsightCard C={C} light={light} tone="info" icon="▲" title="Coaching Opportunity"
-          agent={coachTarget?.label || 'No target'}
-          detail={coachTarget ? `${coachTarget.averageQuality.toFixed(1)}% avg · ${coachTarget.auditsCount} audits` : 'Need 2+ audits per agent.'}
-          badge="Action Required"
-        />
       </div>
 
-      {/* Distribution */}
-      <div style={{ padding: '24px', borderRadius: '20px', border: `1px solid ${C.border}`, background: C.surface, marginBottom: '20px' }}>
-        <div className="dash-display" style={{ fontSize: '15px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>Quality Distribution</div>
-        <div style={{ fontSize: '12px', color: C.textMuted, marginBottom: '18px' }}>All agents ranked by average audit score</div>
-
-        {allSummaries.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: C.textMuted, borderRadius: '10px', border: `1px dashed ${C.border}` }}>No audit data for period</div>
-        ) : (
-          <div className="dash-scroll" style={{ display: 'grid', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
-            {allSummaries.map((a: RankedAuditSummary, i: number) => {
-              const qualColor = a.averageQuality >= 90 ? C.salesColor : a.averageQuality >= 75 ? C.accent : a.averageQuality >= 60 ? C.warningColor : C.criticalColor;
+      {items.length === 0
+        ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--dv-text-muted)', fontSize: '13px', borderRadius: 'var(--dv-radius-md)', border: '1px dashed var(--dv-border)' }}>No data for period</div>
+        : <div className="dv6-scroll" style={{ display: 'grid', gap: '4px', maxHeight: '320px', overflowY: 'auto' }}>
+            {items.map((item, i) => {
+              const val      = type === 'quality' ? item.averageQuality : type === 'hybrid' ? item.combinedScore : item.quantity;
+              const barPct   = maxVal > 0 ? (val / maxVal) * 100 : 0;
+              const dispVal  = type === 'quality' ? `${item.averageQuality.toFixed(1)}%`
+                             : type === 'hybrid'  ? item.combinedScore.toFixed(2)
+                             : unit === 'usd'      ? fmtNum(item.quantity, 'usd')
+                             : fmtNum(item.quantity, 'int');
               return (
-                <div key={a.label} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${C.border}`, background: light ? 'rgba(248,250,252,.8)' : 'rgba(13,18,36,.6)' }}>
-                  <div className="dash-mono" style={{ width: '24px', fontSize: '11px', fontWeight: 700, color: C.textMuted, flexShrink: 0, textAlign: 'right' }}>{i + 1}</div>
+                <div key={item.label} className="dv6-rank-item">
+                  {/* Medal / rank */}
+                  <div className="dv6-rank-medal" style={{ background: i < 3 ? `${MEDAL[i]}18` : 'var(--dv-bg-subtle)', border: `1px solid ${i < 3 ? MEDAL[i] + '35' : 'var(--dv-border)'}` }}>
+                    <span className="dv6-mono" style={{ fontSize: '9px', fontWeight: 600, color: i < 3 ? MEDAL[i] : 'var(--dv-text-muted)' }}>#{i + 1}</span>
+                  </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: '12px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
-                    <div style={{ fontSize: '10px', color: C.textMuted }}>{a.auditsCount} audit{a.auditsCount !== 1 ? 's' : ''}</div>
+                    <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--dv-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</div>
+                    {type === 'hybrid' && <div className="dv6-mono" style={{ fontSize: '10px', color: 'var(--dv-text-muted)' }}>Q {item.averageQuality?.toFixed(1)}% · RSD {item.rsd?.toFixed(3)}</div>}
+                    {type === 'quality' && <div className="dv6-mono" style={{ fontSize: '10px', color: 'var(--dv-text-muted)' }}>{item.auditsCount} audit{item.auditsCount !== 1 ? 's' : ''}</div>}
                   </div>
-                  <div style={{ width: '120px', height: '4px', borderRadius: '999px', background: light ? 'rgba(0,0,0,.06)' : 'rgba(255,255,255,.06)', overflow: 'hidden', flexShrink: 0 }}>
-                    <div style={{ height: '100%', width: `${a.averageQuality}%`, background: qualColor, borderRadius: '999px' }} />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px', flexShrink: 0 }}>
+                    <span className="dv6-mono" style={{ fontSize: '12px', fontWeight: 600, color }}>{dispVal}</span>
+                    <div style={{ width: '48px', height: '2px', borderRadius: '999px', background: 'var(--dv-bg-subtle)', overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${barPct}%`, background: color, borderRadius: '999px', transition: 'width 500ms var(--dv-ease)' }} />
+                    </div>
                   </div>
-                  <div className="dash-mono" style={{ fontSize: '13px', fontWeight: 700, color: qualColor, minWidth: '46px', textAlign: 'right', flexShrink: 0 }}>{a.averageQuality.toFixed(1)}%</div>
                 </div>
               );
             })}
           </div>
-        )}
+      }
+    </div>
+  );
+}
+
+/* ── Insights Section ── */
+function InsightsSection({ lowestAgent, mostConsistent, coachTarget, allSummaries, avgQuality, releasedRate, totalAudits }: {
+  lowestAgent: RankedAuditSummary | null; mostConsistent: HybridLeader | null;
+  coachTarget: RankedAuditSummary | null; allSummaries: RankedAuditSummary[];
+  avgQuality: number; releasedRate: number; totalAudits: number;
+}) {
+  return (
+    <div>
+      {/* Insight cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '14px', marginBottom: '28px' }}>
+        <InsightCard tone="warning" icon="◎" title="Needs attention"
+          agent={lowestAgent?.label || 'No data'}
+          detail={lowestAgent ? `${lowestAgent.averageQuality.toFixed(1)}% avg across ${lowestAgent.auditsCount} audit${lowestAgent.auditsCount !== 1 ? 's' : ''}` : 'No quality data available.'}
+          badge="Lowest quality" delay={0}
+        />
+        <InsightCard tone="success" icon="◈" title="Most consistent"
+          agent={mostConsistent?.label || 'No combined data'}
+          detail={mostConsistent ? `RSD ${mostConsistent.rsd.toFixed(3)} · Score ${mostConsistent.combinedScore.toFixed(3)}` : 'No consistency signal yet.'}
+          badge="Top stability" delay={60}
+        />
+        <InsightCard tone="info" icon="▲" title="Coaching opportunity"
+          agent={coachTarget?.label || 'Need more data'}
+          detail={coachTarget ? `${coachTarget.averageQuality.toFixed(1)}% avg · ${coachTarget.auditsCount} audits` : 'Requires 2+ audits per agent.'}
+          badge="Action recommended" delay={120}
+        />
+      </div>
+
+      {/* Quality distribution */}
+      <div className="dv6-card dv6-stagger" style={{ padding: '24px', '--delay': '80ms', marginBottom: '20px' } as CSSProperties}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
+          <div>
+            <div style={{ fontFamily: 'var(--dv-font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--dv-text)', letterSpacing: '-0.02em', marginBottom: '2px' }}>Quality distribution</div>
+            <div className="dv6-label">All agents ranked by average audit score</div>
+          </div>
+          <div className="dv6-badge dv6-badge-info">{allSummaries.length} agents</div>
+        </div>
+
+        {allSummaries.length === 0
+          ? <div style={{ padding: '24px', textAlign: 'center', color: 'var(--dv-text-muted)', borderRadius: 'var(--dv-radius-md)', border: '1px dashed var(--dv-border)' }}>No audit data for the selected period</div>
+          : <div className="dv6-scroll" style={{ display: 'grid', gap: '3px', maxHeight: '360px', overflowY: 'auto' }}>
+              {allSummaries.map((a, i) => {
+                const c = a.averageQuality >= 90 ? 'var(--dv-success)' : a.averageQuality >= 75 ? 'var(--dv-accent)' : a.averageQuality >= 60 ? 'var(--dv-warning)' : 'var(--dv-critical)';
+                return (
+                  <div key={a.label} className="dv6-dist-row">
+                    <div className="dv6-mono" style={{ width: '22px', fontSize: '10px', fontWeight: 500, color: 'var(--dv-text-muted)', textAlign: 'right', flexShrink: 0 }}>{i + 1}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '12px', fontWeight: 500, color: 'var(--dv-text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.label}</div>
+                      <div className="dv6-mono" style={{ fontSize: '10px', color: 'var(--dv-text-muted)' }}>{a.auditsCount} audit{a.auditsCount !== 1 ? 's' : ''}</div>
+                    </div>
+                    <div style={{ width: '100px', height: '3px', borderRadius: '999px', background: 'var(--dv-bg-subtle)', overflow: 'hidden', flexShrink: 0 }}>
+                      <div style={{ height: '100%', width: `${a.averageQuality}%`, background: c, borderRadius: '999px' }} />
+                    </div>
+                    <div className="dv6-mono" style={{ fontSize: '12px', fontWeight: 600, color: c, minWidth: '44px', textAlign: 'right', flexShrink: 0 }}>{a.averageQuality.toFixed(1)}%</div>
+                  </div>
+                );
+              })}
+            </div>
+        }
       </div>
 
       {/* Summary metrics */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
         {[
-          { label: 'Period Audits', value: String(totalAudits), detail: 'Total in range' },
-          { label: 'Avg Quality', value: `${avgQuality.toFixed(1)}%`, detail: 'Cross-team' },
-          { label: 'Release Rate', value: `${releasedRate.toFixed(0)}%`, detail: 'Shared with agents' },
-          { label: 'Agents Tracked', value: String(allSummaries.length), detail: 'With audit data' },
-        ].map(m => (
-          <div key={m.label} style={{ padding: '16px 18px', borderRadius: '14px', border: `1px solid ${C.border}`, background: C.surface }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: '4px' }}>{m.label}</div>
-            <div className="dash-display" style={{ fontSize: '24px', fontWeight: 800, color: C.text }}>{m.value}</div>
-            <div style={{ fontSize: '11px', color: C.textMuted, marginTop: '2px' }}>{m.detail}</div>
+          { l: 'Period Audits',   v: String(totalAudits),           d: 'Total in range' },
+          { l: 'Avg Quality',     v: `${avgQuality.toFixed(1)}%`,   d: 'Cross-team average' },
+          { l: 'Release Rate',    v: `${releasedRate.toFixed(0)}%`, d: 'Shared with agents' },
+          { l: 'Agents Tracked',  v: String(allSummaries.length),   d: 'With audit data' },
+        ].map((m, i) => (
+          <div key={m.l} className="dv6-kpi-card dv6-stagger" style={{ '--delay': `${i * 40}ms` } as CSSProperties}>
+            <div className="dv6-label" style={{ marginBottom: '8px' }}>{m.l}</div>
+            <div style={{ fontFamily: 'var(--dv-font-display)', fontSize: '26px', fontWeight: 700, color: 'var(--dv-text)', letterSpacing: '-0.03em' }}>{m.v}</div>
+            <div className="dv6-mono" style={{ fontSize: '11px', color: 'var(--dv-text-muted)', marginTop: '4px' }}>{m.d}</div>
           </div>
         ))}
       </div>
@@ -2552,19 +1729,22 @@ function InsightsSection({ C, light, lowestAgent, mostConsistent, coachTarget, a
   );
 }
 
-function InsightCard({ C, light, tone, icon, title, agent, detail, badge }: any) {
-  const toneColor = tone === 'warning' ? C.warningColor : tone === 'success' ? C.salesColor : C.accent;
-  const toneBg = tone === 'warning' ? 'rgba(245,158,11,.08)' : tone === 'success' ? 'rgba(16,185,129,.08)' : C.accentSoft;
-  const toneBorder = tone === 'warning' ? 'rgba(245,158,11,.25)' : tone === 'success' ? 'rgba(16,185,129,.25)' : C.borderAccent;
+function InsightCard({ tone, icon, title, agent, detail, badge, delay }: {
+  tone: 'warning' | 'success' | 'info'; icon: string; title: string;
+  agent: string; detail: string; badge: string; delay: number;
+}) {
+  const toneColor  = tone === 'warning' ? 'var(--dv-warning)' : tone === 'success' ? 'var(--dv-success)' : 'var(--dv-accent)';
+  const badgeCls   = `dv6-badge dv6-badge-${tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'info'}`;
+
   return (
-    <div className="dash-card-hover" style={{ padding: '22px', borderRadius: '18px', border: `1px solid ${toneBorder}`, background: toneBg, boxShadow: C.shadow }}>
+    <div className="dv6-insight-card dv6-stagger" style={{ '--delay': `${delay}ms`, borderColor: `color-mix(in srgb, ${toneColor} 20%, transparent)` } as CSSProperties}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-        <span style={{ fontSize: '22px', color: toneColor }}>{icon}</span>
-        <span className={`dash-tag dash-tag-${tone === 'warning' ? 'warning' : tone === 'success' ? 'success' : 'info'}${light ? ' light' : ''}`}>{badge}</span>
+        <span style={{ fontSize: '18px', color: toneColor }}>{icon}</span>
+        <span className={badgeCls}>{badge}</span>
       </div>
-      <div style={{ fontSize: '11px', fontWeight: 700, color: toneColor, textTransform: 'uppercase', letterSpacing: '.1em', marginBottom: '6px' }}>{title}</div>
-      <div className="dash-display" style={{ fontSize: '17px', fontWeight: 800, color: C.text, marginBottom: '8px', lineHeight: 1.3 }}>{agent}</div>
-      <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.6 }}>{detail}</div>
+      <div className="dv6-label" style={{ color: toneColor, marginBottom: '6px' }}>{title}</div>
+      <div style={{ fontFamily: 'var(--dv-font-display)', fontSize: '15px', fontWeight: 700, color: 'var(--dv-text)', marginBottom: '8px', lineHeight: 1.3, letterSpacing: '-0.02em' }}>{agent}</div>
+      <div className="dv6-mono" style={{ fontSize: '11px', color: 'var(--dv-text-sub)', lineHeight: 1.6 }}>{detail}</div>
     </div>
   );
 }
