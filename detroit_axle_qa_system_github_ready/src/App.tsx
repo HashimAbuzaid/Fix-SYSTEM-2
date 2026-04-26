@@ -34,9 +34,7 @@ import {
 import { AuthContext } from "./context/AuthContext";
 import { useAuthState } from "./hooks/useAuthState";
 import {
-  getThemePalette,
   applyThemeCssVariables,
-  createStyles,
   readStoredTheme,
 } from "./lib/theme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -1981,13 +1979,9 @@ const Loader = memo(function Loader({
 const ProfilePanel = memo(function ProfilePanel({
   title,
   profile,
-  styles,
-  theme,
 }: {
   title: string;
   profile: UserProfile;
-  styles: ReturnType<typeof createStyles>;
-  theme: ReturnType<typeof getThemePalette>;
 }) {
   const initials = getUserInitials(profile);
   const roleColor = ROLE_COLORS[profile.role || "qa"] || "var(--fg-muted)";
@@ -2074,12 +2068,8 @@ const ProfilePanel = memo(function ProfilePanel({
 
 const StaffRoutes = memo(function StaffRoutes({
   profile,
-  styles,
-  theme,
 }: {
   profile: UserProfile;
-  styles: ReturnType<typeof createStyles>;
-  theme: ReturnType<typeof getThemePalette>;
 }) {
   const isAdmin = profile.role === "admin";
   const isStaff = isAdmin || profile.role === "qa";
@@ -2149,8 +2139,6 @@ const StaffRoutes = memo(function StaffRoutes({
           <ProfilePanel
             title={isAdmin ? "My Admin Profile" : "My QA Profile"}
             profile={profile}
-            styles={styles}
-            theme={theme}
           />
         }
       />
@@ -2161,12 +2149,8 @@ const StaffRoutes = memo(function StaffRoutes({
 
 const SupervisorRoutes = memo(function SupervisorRoutes({
   profile,
-  styles,
-  theme,
 }: {
   profile: UserProfile;
-  styles: ReturnType<typeof createStyles>;
-  theme: ReturnType<typeof getThemePalette>;
 }) {
   return (
     <Routes>
@@ -2206,8 +2190,6 @@ const SupervisorRoutes = memo(function SupervisorRoutes({
           <ProfilePanel
             title="My Supervisor Profile"
             profile={profile}
-            styles={styles}
-            theme={theme}
           />
         }
       />
@@ -2240,7 +2222,6 @@ function AppShell() {
   const pinnedRef = useRef(false);
 
   const isCompact = viewportWidth < COMPACT_BP;
-  const isDark = themeMode === "dark";
   const isSidebarExpanded =
     !isCompact && (isSidebarPinned || isSidebarHovered);
 
@@ -2306,12 +2287,6 @@ function AppShell() {
   const handleCloseCmd = useCallback(() => setCmdOpen(false), []);
 
   // ── Derived ────────────────────────────────────────────────
-  const theme = useMemo(() => getThemePalette(themeMode), [themeMode]);
-  const styles = useMemo(
-    () => createStyles(theme, themeMode),
-    [theme, themeMode]
-  );
-
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } =
     auth;
 
@@ -2479,17 +2454,9 @@ function AppShell() {
                 )}
                 <div className="da-content">
                   {isStaff ? (
-                    <StaffRoutes
-                      profile={profile}
-                      styles={styles}
-                      theme={theme}
-                    />
+                    <StaffRoutes profile={profile} />
                   ) : (
-                    <SupervisorRoutes
-                      profile={profile}
-                      styles={styles}
-                      theme={theme}
-                    />
+                    <SupervisorRoutes profile={profile} />
                   )}
                 </div>
               </>
