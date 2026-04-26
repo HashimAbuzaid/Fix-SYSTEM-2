@@ -2071,7 +2071,6 @@ function ReportsSupabase() {
             const cfg = TEAM_CONFIG[team];
             const avg = team === 'Calls' ? callsAverage : team === 'Tickets' ? ticketsAverage : salesAverage;
             const count = team === 'Calls' ? callsAudits.length : team === 'Tickets' ? ticketsAudits.length : salesAudits.length;
-            const score = parseFloat(avg);
             return (
               <div key={team} className="rpt-team-card" style={{ animationDelay: `${i * 60}ms`, borderLeft: `2px solid ${cfg.accent}` }}>
                 <div className="rpt-team-badge" style={{ background: `color-mix(in srgb, ${cfg.accent} 12%, transparent)`, color: cfg.accent }}>
