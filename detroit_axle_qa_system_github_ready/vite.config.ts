@@ -1,9 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
@@ -27,6 +28,13 @@ export default defineConfig({
             id.includes('@supabase/functions-js')
           ) {
             return 'supabase';
+          }
+
+          if (
+            id.includes('framer-motion') ||
+            id.includes('@tanstack/react-query')
+          ) {
+            return 'vendors';
           }
 
           return undefined;

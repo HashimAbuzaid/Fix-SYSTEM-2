@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-  font-family: 'Outfit', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #e5eefb;
@@ -124,17 +126,40 @@ body {
   to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes da-slide-in-right {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes da-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
 /* ─── Utility animation classes ─── */
 .da-fade-in-up {
   animation: da-fade-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+.da-slide-in-left {
+  animation: da-slide-in-left 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.da-slide-in-right {
+  animation: da-slide-in-right 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.da-scale-in {
+  animation: da-scale-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 /* ─── Typography ─── */
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Syne', 'Outfit', sans-serif;
+  font-family: 'Syne', 'Inter', sans-serif;
   margin-top: 0;
   color: var(--da-title, #f8fbff);
   letter-spacing: -0.025em;
+  font-weight: 700;
 }
 
 p {
@@ -159,7 +184,7 @@ textarea {
 button {
   cursor: pointer;
   transition:
-    transform 0.15s ease,
+    transform 0.15s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.15s ease,
     border-color 0.15s ease,
     background-color 0.15s ease,
@@ -282,3 +307,5 @@ body[data-theme='light'] h6 {
     scroll-behavior: auto !important;
   }
 }
+
+
