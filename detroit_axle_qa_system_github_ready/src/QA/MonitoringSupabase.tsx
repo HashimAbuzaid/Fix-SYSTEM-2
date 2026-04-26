@@ -1228,7 +1228,7 @@ function MonitoringSupabase() {
         {/* Status filter */}
         <div className="mon-filter-group">
           {([
-            { value: '',         label: 'All' },
+            { value: '',         label: 'All',      accent: '' },
             { value: 'active',   label: 'Active',   accent: 'active' },
             { value: 'resolved', label: 'Resolved',  accent: 'resolved' },
           ] as const).map(({ value, label, accent }) => (
