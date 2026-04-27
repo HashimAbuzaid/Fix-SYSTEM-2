@@ -895,7 +895,7 @@ function AuditsListSupabase() {
         .map((e) => ({ score: clampScoreValue(e.quality_score), label: e.audit_date ? `${formatDateOnly(e.audit_date)} · ${e.case_type}` : '' }));
       const evals = imp?.evaluations?.length > 0 ? imp.evaluations.slice(0, MAX_PROGRESS_EVALS) : dbEvals;
       const offToday = imp?.offToday === true || !!offTodayByAgent[k];
-      const offIdx = normalizeOffEvalIndexes(manualOffEvalIndexesByAgent[k] || []);
+      const offIdx = getEffectiveOffIndexes(row.agent_id, row.team);
       const shifted = buildShiftedEvaluations(evals, offIdx);
       const scored = evals.filter((e) => e.score !== null);
       const avg = clampScoreValue(imp?.averageScore ?? (scored.length > 0 ? scored.reduce((s, e) => s + (e.score ?? 0), 0) / scored.length : null));
@@ -910,7 +910,7 @@ function AuditsListSupabase() {
     });
 
     return { rows, evaluationColumns: cols };
-  }, [filteredAudits, profiles, deferredSearch, teamFilter, offTodayByAgent, manualOffEvalIndexesByAgent, importedProgressByAgent, displayNameByKey]);
+  }, [filteredAudits, profiles, deferredSearch, teamFilter, offTodayByAgent, importedProgressByAgent, displayNameByKey, getEffectiveOffIndexes]);
 
   const visibleCols = useMemo(
     () => progressData.evaluationColumns.filter((c) => (focusedEvalGroup === 'all' || c.groupKey === focusedEvalGroup) && !collapsedEvalGroups[c.groupKey]),
@@ -1487,6 +1487,7 @@ const ProgressRow = memo(function ProgressRow({
   formatOffSummary: (idxs: number[]) => string;
 }) {
   const offIdx = row.offIndexes;
+  const offSummary = formatOffSummary(offIdx);
   const hasOff = offIdx.length > 0;
   const allOff = selectedOffEvalIndexes.length > 0 && selectedOffEvalIndexes.every((i) => offIdx.includes(i));
 
@@ -1501,6 +1502,7 @@ const ProgressRow = memo(function ProgressRow({
       </div>
       <div style={{ ...S.metaCell, ...S.stickyToday }}>
         <button onClick={() => void onToggleOff(row.agent_id, row.team)} disabled={!canManageOffToday}
+          title={hasOff ? `OFF: ${offSummary}` : 'No OFF markers'}
           style={{ ...S.offBtn, ...(hasOff ? S.offBtnActive : {}), opacity: canManageOffToday ? 1 : 0.5 }}>
           {selectedOffEvalIndexes.length === 0 ? '— Select —' : allOff ? `Clear ${selectedOffEvalIndexes.length}` : `OFF ×${selectedOffEvalIndexes.length}`}
         </button>
