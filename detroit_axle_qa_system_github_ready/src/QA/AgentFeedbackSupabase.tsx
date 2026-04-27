@@ -960,11 +960,6 @@ function priorityPillClass(p: PlanPriority) {
   return 'cc-pill cc-pill-medium';
 }
 
-function statusPillClass(s: FeedbackStatus) {
-  if (s === 'Open') return 'cc-pill cc-pill-open';
-  if (s === 'In Progress') return 'cc-pill cc-pill-progress';
-  return 'cc-pill cc-pill-closed';
-}
 
 function outcomePillClass(o: FollowUpOutcome) {
   if (o === 'Improved') return 'cc-pill cc-pill-improved';
