@@ -1450,12 +1450,12 @@ function MiniTrendChart({ points }: { points: TrendPoint[] }) {
 function PerformanceTrendsSection({
   audits,
   allAudits,
-  selectedAgent,
+  selectedAgents,
   effectiveTeamFilter,
 }: {
   audits: AuditItem[];
   allAudits: AuditItem[];
-  selectedAgent: AgentProfile | null;
+  selectedAgents: AgentProfile[];
   effectiveTeamFilter: string;
 }) {
   const [periodMode, setPeriodMode] = useState<PeriodMode>('weekly');
@@ -1471,9 +1471,11 @@ function PerformanceTrendsSection({
   const momentumDelta = latestAverage != null && previousAverage != null ? Number((latestAverage - previousAverage).toFixed(2)) : null;
   const teamGap = latestAverage != null && teamLatestAverage != null ? Number((latestAverage - teamLatestAverage).toFixed(2)) : null;
 
-  const subjectLabel = selectedAgent
-    ? selectedAgent.display_name ? `${selectedAgent.agent_name} — ${selectedAgent.display_name}` : `${selectedAgent.agent_name} — ${selectedAgent.agent_id || '-'}`
-    : effectiveTeamFilter ? `${effectiveTeamFilter} Team` : 'All Teams';
+  const subjectLabel = selectedAgents.length === 1
+    ? selectedAgents[0].display_name ? `${selectedAgents[0].agent_name} — ${selectedAgents[0].display_name}` : `${selectedAgents[0].agent_name} — ${selectedAgents[0].agent_id || '-'}`
+    : selectedAgents.length > 1
+      ? `${selectedAgents.length} Agents Selected`
+      : effectiveTeamFilter ? `${effectiveTeamFilter} Team` : 'All Teams';
 
   const strongestIssue = recurringIssues[0]?.metric || 'None';
   const totalIssueTouches = recurringIssues.reduce((s, i) => s + i.count, 0);
@@ -1726,7 +1728,7 @@ function ReportsSupabase() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
-  const [selectedAgentProfileId, setSelectedAgentProfileId] = useState('');
+  const [selectedAgentProfileIdss, setSelectedAgentProfileIds] = useState<string[]>([]);
   const [agentSearch, setAgentSearch] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
 
@@ -1778,13 +1780,24 @@ function ReportsSupabase() {
     return (dateFrom ? raw >= dateFrom : true) && (dateTo ? raw <= dateTo : true);
   }
 
-  const selectedAgent = profiles.find((p) => p.id === selectedAgentProfileId) || null;
+  const selectedAgents = useMemo(
+    () => profiles.filter((p) => selectedAgentProfileIdss.includes(p.id)),
+    [profiles, selectedAgentProfileIdss]
+  );
 
-  function matchesSelectedAgent(itemAgentId?: string | null, itemAgentName?: string | null, itemTeam?: string | null) {
-    if (!selectedAgent) return true;
-    return (itemAgentId || '') === (selectedAgent.agent_id || '') &&
-      (itemAgentName || '') === selectedAgent.agent_name &&
-      (itemTeam || '') === (selectedAgent.team || '');
+  const selectedAgent = selectedAgents.length === 1 ? selectedAgents[0] : null;
+
+  function matchesSelectedAgent(itemAgentId?: string | null, itemAgentName?: string | null) {
+    if (selectedAgents.length === 0) return true;
+
+    return selectedAgents.some((agent) => {
+      if (agent.agent_id && itemAgentId) {
+        return String(itemAgentId).trim() === String(agent.agent_id).trim();
+      }
+
+      return String(itemAgentName || '').trim().toLowerCase() ===
+        String(agent.agent_name || '').trim().toLowerCase();
+    });
   }
 
   const visibleAgentProfiles = useMemo(() => {
@@ -1799,14 +1812,16 @@ function ReportsSupabase() {
   }, [profiles, teamFilter, agentSearch]);
 
   function handleSelectAgent(profile: AgentProfile) {
-    setSelectedAgentProfileId(profile.id);
-    setAgentSearch(getAgentLabel(profile));
-    setIsAgentPickerOpen(false);
-    if (profile.team) setTeamFilter(profile.team);
+    setSelectedAgentProfileIds((current) =>
+      current.includes(profile.id)
+        ? current.filter((id) => id !== profile.id)
+        : [...current, profile.id]
+    );
+    setAgentSearch('');
   }
 
   function clearAgentFilter() {
-    setSelectedAgentProfileId('');
+    setSelectedAgentProfileIds([]);
     setAgentSearch('');
     setIsAgentPickerOpen(false);
   }
@@ -1815,33 +1830,33 @@ function ReportsSupabase() {
 
   const filteredAudits = useMemo(() => audits.filter((item) => {
     const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, item.team) && matchesDate(item.audit_date);
-  }), [audits, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.audit_date);
+  }), [audits, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   const filteredCalls = useMemo(() => callsRecords.filter((item) => {
     const matchesTeam = teamFilter ? teamFilter === 'Calls' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Calls') && matchesDate(item.call_date);
-  }), [callsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.call_date);
+  }), [callsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   const filteredTickets = useMemo(() => ticketsRecords.filter((item) => {
     const matchesTeam = teamFilter ? teamFilter === 'Tickets' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Tickets') && matchesDate(item.ticket_date);
-  }), [ticketsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.ticket_date);
+  }), [ticketsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   const filteredSales = useMemo(() => salesRecords.filter((item) => {
     const matchesTeam = teamFilter ? teamFilter === 'Sales' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Sales') && matchesDate(item.sale_date);
-  }), [salesRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.sale_date);
+  }), [salesRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   const filteredRequests = useMemo(() => supervisorRequests.filter((item) => {
     const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null, item.team || null) && matchesDate(item.created_at.slice(0, 10));
-  }), [supervisorRequests, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null) && matchesDate(item.created_at.slice(0, 10));
+  }), [supervisorRequests, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   const filteredFeedback = useMemo(() => agentFeedback.filter((item) => {
     const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null, item.team || null) && matchesDate(item.created_at.slice(0, 10));
-  }), [agentFeedback, teamFilter, dateFrom, dateTo, selectedAgentProfileId]);
+    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null) && matchesDate(item.created_at.slice(0, 10));
+  }), [agentFeedback, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
 
   // ── Aggregates ─────────────────────────────────────────────
 
@@ -1899,7 +1914,7 @@ function ReportsSupabase() {
   const exportFns = {
     summary: () => downloadCsv('reports_summary.csv', [{
       date_from: dateFrom || 'All', date_to: dateTo || 'All', team_filter: teamFilter || 'All',
-      selected_agent: selectedAgent ? getAgentLabel(selectedAgent) : 'All Agents',
+      selected_agent: selectedAgents.length > 0 ? selectedAgents.map(getAgentLabel).join(' | ') : 'All Agents',
       total_audits: filteredAudits.length, average_quality: averageQuality,
       total_calls: totalCalls, total_tickets: totalTickets, total_sales: totalSales.toFixed(2),
       open_supervisor_requests: openRequests, closed_supervisor_requests: closedRequests,
@@ -1990,7 +2005,7 @@ function ReportsSupabase() {
                 aria-expanded={isAgentPickerOpen}
               >
                 <span className="rpt-picker-btn-text" style={{ color: selectedAgent ? 'var(--fg-default)' : 'var(--fg-muted)' }}>
-                  {selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent…'}
+                  {selectedAgents.length === 0 ? 'Select agent…' : selectedAgents.length === 1 ? getAgentLabel(selectedAgents[0]) : `${selectedAgents.length} agents selected`}
                 </span>
                 <span className="rpt-picker-btn-arrow">▾</span>
               </button>
@@ -2015,10 +2030,10 @@ function ReportsSupabase() {
                         <button
                           key={profile.id}
                           type="button"
-                          className={`rpt-picker-option${selectedAgentProfileId === profile.id ? ' selected' : ''}`}
+                          className={`rpt-picker-option${selectedAgentProfileIds.includes(profile.id) ? ' selected' : ''}`}
                           onClick={() => handleSelectAgent(profile)}
                         >
-                          {getAgentLabel(profile)}
+                          {selectedAgentProfileIds.includes(profile.id) ? '✓ ' : ''}{getAgentLabel(profile)}
                         </button>
                       ))
                     )}
@@ -2026,7 +2041,7 @@ function ReportsSupabase() {
                 </div>
               )}
             </div>
-            {selectedAgent && (
+            {selectedAgents.length > 0 && (
               <div style={{ alignSelf: 'flex-end' }}>
                 <button type="button" className="rpt-clear-btn" onClick={clearAgentFilter}>
                   Clear
@@ -2088,7 +2103,7 @@ function ReportsSupabase() {
       <PerformanceTrendsSection
         audits={filteredAudits}
         allAudits={trendTeamAudits}
-        selectedAgent={selectedAgent}
+        selectedAgents={selectedAgents}
         effectiveTeamFilter={trendTeamFilter}
       />
 
