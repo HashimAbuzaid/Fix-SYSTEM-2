@@ -162,7 +162,7 @@ const NAV_SHORTCUTS: Partial<Record<string, string>> = {
 
 const GLOBAL_STYLE_ID = "da-shell-v4";
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap');
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -182,7 +182,7 @@ const GLOBAL_CSS = `
                         opacity 160ms ease;
 
   /* Typography */
-  --font-sans: 'Geist', system-ui, sans-serif;
+  --font-sans: 'Inter', system-ui, sans-serif;
   --font-mono: 'Geist Mono', monospace;
 
   /* Motion */
