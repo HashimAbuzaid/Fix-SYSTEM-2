@@ -106,7 +106,7 @@ const COMPACT_BP = 1024;
 // Spring-like easing — matches a physical spring with low mass/high stiffness
 const SPRING = "cubic-bezier(0.175, 0.885, 0.32, 1.075)";
 const EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)";
-const DURATION_SIDEBAR = "220ms";
+const DURATION_SIDEBAR = "260ms";
 
 const NAV_GROUPS: Readonly<Record<string, readonly string[]>> = {
   Core: ["Dashboard", "Overview", "Team Dashboard"],
@@ -179,6 +179,7 @@ const GLOBAL_CSS = `
   /* Sidebar */
   --sidebar-w: ${SIDEBAR_W_COLLAPSED}px;
   --sidebar-transition: width ${DURATION_SIDEBAR} ${EASE_OUT},
+                        box-shadow ${DURATION_SIDEBAR} ease,
                         opacity 160ms ease;
 
   /* Typography */
@@ -402,7 +403,7 @@ a { color: inherit; text-decoration: none; }
   opacity: 0;
   transition:
     max-height ${DURATION_SIDEBAR} ${EASE_OUT},
-    opacity 100ms ease,
+    opacity 160ms ease,
     padding ${DURATION_SIDEBAR} ${EASE_OUT};
 }
 .da-sidebar.expanded .da-nav-section-label {
@@ -465,14 +466,20 @@ a { color: inherit; text-decoration: none; }
   white-space: nowrap;
   opacity: 0;
   max-width: 0;
+  transform: translateX(-6px);
   transition:
-    max-width 200ms ${EASE_OUT},
-    opacity 100ms ease;
+    max-width ${DURATION_SIDEBAR} ${EASE_OUT},
+    opacity 150ms ease,
+    transform ${DURATION_SIDEBAR} ${EASE_OUT};
   color: inherit;
   letter-spacing: -0.01em;
 }
 .da-nav-item.active .da-nav-label { font-weight: 600; }
-.da-sidebar.expanded .da-nav-label { opacity: 1; max-width: 160px; }
+.da-sidebar.expanded .da-nav-label {
+  opacity: 1;
+  max-width: 160px;
+  transform: translateX(0);
+}
 
 /* Active pip */
 .da-nav-pip {
@@ -601,6 +608,7 @@ a { color: inherit; text-decoration: none; }
   -webkit-backdrop-filter: blur(20px);
   gap: 12px;
   transition: left ${DURATION_SIDEBAR} ${EASE_OUT};
+  will-change: left;
 }
 .da-sidebar.expanded ~ .da-page-root .da-header { left: ${SIDEBAR_W_EXPANDED}px; }
 /* Simpler: header is a sibling — use CSS var */
@@ -721,6 +729,7 @@ a { color: inherit; text-decoration: none; }
   margin-left: var(--sidebar-w, ${SIDEBAR_W_COLLAPSED}px);
   padding-top: 56px;
   transition: margin-left ${DURATION_SIDEBAR} ${EASE_OUT};
+  will-change: margin-left;
 }
 .da-sidebar.expanded ~ .da-page-root { margin-left: ${SIDEBAR_W_EXPANDED}px; }
 
@@ -2525,7 +2534,16 @@ function AppShell() {
         />
       )}
 
-      <div className="da-shell">
+      <div
+        className="da-shell"
+        style={
+          {
+            "--sidebar-w": isSidebarExpanded
+              ? `${SIDEBAR_W_EXPANDED}px`
+              : `${SIDEBAR_W_COLLAPSED}px`,
+          } as CSSProperties
+        }
+      >
         {hasSidebar && (
           <Sidebar
             navGroupsOrdered={navGroupsOrdered}
