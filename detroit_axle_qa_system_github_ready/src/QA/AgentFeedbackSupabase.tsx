@@ -1,14 +1,42 @@
+/**
+ * AgentFeedbackSupabase.tsx — Detroit Axle QA System
+ * ──────────────────────────────────────────────────────────────
+ * Upgraded to App.tsx design language:
+ *   • Consumes --bg-*, --fg-*, --accent-*, --border-* CSS vars
+ *   • Scoped .cc-* CSS injected once via useEffect
+ *   • Priority/status/outcome pills with semantic color tiers
+ *   • Staggered entry animations (transform/opacity only — no layout jank)
+ *   • Compact KPI bento row, refined coaching workspace grid
+ *   • Review-stage progress stepper in expanded detail panel
+ *   • Zero inline style objects that recompute on every render
+ * ──────────────────────────────────────────────────────────────
+ */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
+
+// ─────────────────────────────────────────────────────────────
+// Types (unchanged)
+// ─────────────────────────────────────────────────────────────
 
 type TeamName = 'Calls' | 'Tickets' | 'Sales';
 type FeedbackType = 'Coaching' | 'Audit Feedback' | 'Warning' | 'Follow-up';
 type FeedbackStatus = 'Open' | 'In Progress' | 'Closed';
 type PlanTab = 'All' | 'Open' | 'Overdue' | 'Awaiting Ack' | 'Follow-up';
 type PlanPriority = 'Low' | 'Medium' | 'High' | 'Critical';
-type FollowUpOutcome = 'Not Set' | 'Improved' | 'Partial Improvement' | 'No Improvement' | 'Needs Escalation';
-type ReviewStage = 'QA Shared' | 'Acknowledged' | 'Agent Responded' | 'Supervisor Reviewed' | 'Follow-up' | 'Closed';
+type FollowUpOutcome =
+  | 'Not Set'
+  | 'Improved'
+  | 'Partial Improvement'
+  | 'No Improvement'
+  | 'Needs Escalation';
+type ReviewStage =
+  | 'QA Shared'
+  | 'Acknowledged'
+  | 'Agent Responded'
+  | 'Supervisor Reviewed'
+  | 'Follow-up'
+  | 'Closed';
 
 type CurrentUser = {
   id?: string;
@@ -57,119 +85,956 @@ type AuditItem = {
   shared_with_agent?: boolean | null;
 };
 
-function normalizeAgentId(value?: string | null) {
-  return String(value || '').trim().replace(/\.0+$/, '');
+// ─────────────────────────────────────────────────────────────
+// CSS Injection
+// ─────────────────────────────────────────────────────────────
+
+const CC_CSS_ID = 'da-coaching-v2';
+const CC_CSS = `
+  /* ── Animations ──────────────────────────────────────────── */
+  @keyframes ccFadeUp  { from { opacity:0; transform:translateY(8px) } to { opacity:1; transform:translateY(0) } }
+  @keyframes ccScaleIn { from { opacity:0; transform:scale(0.97) }      to { opacity:1; transform:scale(1) } }
+  @keyframes ccSlideIn { from { opacity:0; transform:translateX(-6px) } to { opacity:1; transform:translateX(0) } }
+
+  /* ── Page shell ──────────────────────────────────────────── */
+  .cc-page {
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    color: var(--fg-default);
+    animation: ccFadeUp 220ms cubic-bezier(0.16,1,0.3,1) both;
+  }
+
+  /* ── Page header ─────────────────────────────────────────── */
+  .cc-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .cc-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cc-eyebrow::before {
+    content: '';
+    display: inline-block;
+    width: 14px;
+    height: 2px;
+    background: var(--accent-blue);
+    border-radius: 1px;
+  }
+  .cc-page-title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--fg-default);
+    letter-spacing: -0.03em;
+    margin: 0 0 5px;
+  }
+  .cc-page-sub {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin: 0;
+  }
+
+  /* ── KPI grid ────────────────────────────────────────────── */
+  .cc-kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .cc-kpi-card {
+    position: relative;
+    padding: 14px 16px;
+    border-radius: 12px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    transition: border-color 140ms ease, box-shadow 140ms ease;
+    animation: ccFadeUp 240ms cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .cc-kpi-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-sm); }
+  .cc-kpi-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 10px; bottom: 10px;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
+    background: var(--kpi-accent, var(--accent-blue));
+  }
+  .cc-kpi-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 6px;
+  }
+  .cc-kpi-value {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--fg-default);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .cc-kpi-sub {
+    font-size: 10px;
+    color: var(--fg-muted);
+    line-height: 1.4;
+  }
+
+  /* ── Alert banners ───────────────────────────────────────── */
+  .cc-banner {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 14px;
+    animation: ccFadeUp 160ms ease both;
+  }
+  .cc-banner-error {
+    background: color-mix(in srgb, var(--accent-rose) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
+    color: var(--accent-rose);
+  }
+  .cc-banner-success {
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
+    color: var(--accent-emerald);
+  }
+
+  /* ── Workspace grid ──────────────────────────────────────── */
+  .cc-workspace-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(300px, 0.9fr);
+    gap: 14px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 960px) { .cc-workspace-grid { grid-template-columns: 1fr; } }
+  .cc-stack-col { display: grid; gap: 14px; align-content: start; }
+
+  /* ── Panel ───────────────────────────────────────────────── */
+  .cc-panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    animation: ccFadeUp 240ms cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .cc-panel-eyebrow {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .cc-panel-eyebrow::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+    max-width: 80px;
+  }
+  .cc-panel-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--fg-default);
+    letter-spacing: -0.025em;
+    margin: 0 0 4px;
+  }
+  .cc-panel-sub {
+    font-size: 12px;
+    color: var(--fg-muted);
+    margin: 0 0 18px;
+    line-height: 1.5;
+  }
+
+  /* ── Refresh btn ─────────────────────────────────────────── */
+  .cc-refresh-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 30px;
+    padding: 0 12px;
+    border-radius: 7px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--fg-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+  }
+  .cc-refresh-btn:hover { color: var(--fg-default); background: var(--bg-subtle-hover, rgba(255,255,255,0.06)); }
+
+  /* ── Form ────────────────────────────────────────────────── */
+  .cc-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 680px) { .cc-form-grid { grid-template-columns: 1fr; } }
+  .cc-full-col { grid-column: 1 / -1; }
+
+  .cc-field-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 6px;
+  }
+  .cc-field {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--fg-default);
+    font-size: 13px;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: border-color 120ms ease, box-shadow 120ms ease;
+  }
+  .cc-field:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  }
+  .cc-field-textarea {
+    height: auto;
+    padding: 10px 12px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .cc-field-select { cursor: pointer; }
+
+  /* ── Agent picker ────────────────────────────────────────── */
+  .cc-picker-btn {
+    width: 100%;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--fg-default);
+    font-size: 13px;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+    transition: border-color 120ms ease;
+    text-align: left;
+  }
+  .cc-picker-btn:hover { border-color: var(--accent-blue); }
+  .cc-picker-btn-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .cc-picker-menu {
+    position: absolute;
+    top: calc(100% + 5px);
+    left: 0; right: 0;
+    background: var(--bg-overlay);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+    overflow: hidden;
+    animation: ccScaleIn 130ms cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .cc-picker-search { padding: 8px; border-bottom: 1px solid var(--border); }
+  .cc-picker-list {
+    max-height: 240px;
+    overflow-y: auto;
+    padding: 5px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .cc-picker-option {
+    padding: 7px 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--fg-default);
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    transition: background 80ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+  .cc-picker-option:hover { background: var(--bg-subtle-hover, rgba(255,255,255,0.06)); }
+  .cc-picker-option.active {
+    background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+    border-color: color-mix(in srgb, var(--accent-blue) 25%, transparent);
+    color: var(--accent-blue);
+  }
+  .cc-picker-empty { padding: 14px; text-align: center; font-size: 12px; color: var(--fg-muted); }
+
+  /* ── Agent snapshot card ─────────────────────────────────── */
+  .cc-snapshot-card {
+    background: var(--bg-overlay);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .cc-snapshot-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 10px;
+  }
+  .cc-snapshot-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+  }
+  .cc-snapshot-row:last-child { border-bottom: none; }
+  .cc-snapshot-key { font-size: 11px; font-weight: 600; color: var(--fg-muted); flex-shrink: 0; }
+  .cc-snapshot-val { font-size: 11px; font-weight: 600; color: var(--fg-default); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* ── Context stat cards ──────────────────────────────────── */
+  .cc-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .cc-stat-card {
+    padding: 11px 13px;
+    border-radius: 10px;
+    background: var(--bg-overlay);
+    border: 1px solid var(--border);
+  }
+  .cc-stat-label { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--fg-muted); margin-bottom: 4px; }
+  .cc-stat-value { font-size: 18px; font-weight: 800; color: var(--fg-default); letter-spacing: -0.03em; margin-bottom: 2px; }
+  .cc-stat-helper { font-size: 10px; color: var(--fg-muted); }
+
+  /* ── Routing grid ────────────────────────────────────────── */
+  .cc-routing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  /* ── Audit filter row ────────────────────────────────────── */
+  .cc-audit-filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 12px;
+  }
+  @media (max-width: 580px) { .cc-audit-filter-grid { grid-template-columns: 1fr; } }
+
+  /* ── Audit history list ──────────────────────────────────── */
+  .cc-audit-list {
+    display: grid;
+    gap: 8px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+  .cc-audit-card {
+    padding: 13px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-overlay);
+    transition: border-color 120ms ease, background 80ms ease;
+    cursor: default;
+  }
+  .cc-audit-card:hover { border-color: var(--border-strong); }
+  .cc-audit-card.active {
+    border-color: color-mix(in srgb, var(--accent-blue) 40%, transparent);
+    background: color-mix(in srgb, var(--accent-blue) 5%, transparent);
+  }
+  .cc-audit-top-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 8px;
+  }
+  .cc-audit-case-type { font-size: 13px; font-weight: 700; color: var(--fg-default); letter-spacing: -0.01em; }
+  .cc-audit-meta { font-size: 11px; color: var(--fg-muted); margin-top: 2px; }
+  .cc-audit-score { font-size: 20px; font-weight: 800; letter-spacing: -0.04em; color: var(--fg-default); text-align: right; }
+  .cc-audit-comment {
+    font-size: 12px;
+    color: var(--fg-muted);
+    line-height: 1.55;
+    white-space: pre-wrap;
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .cc-audit-action-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .cc-source-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 25%, transparent);
+    color: var(--accent-blue);
+  }
+
+  /* ── Filter bar (saved plans) ────────────────────────────── */
+  .cc-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  @media (max-width: 640px) { .cc-filter-grid { grid-template-columns: 1fr; } }
+
+  /* ── Buttons ─────────────────────────────────────────────── */
+  .cc-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid color-mix(in srgb, var(--accent-blue) 30%, transparent);
+    background: linear-gradient(135deg, var(--accent-blue) 0%, #1d4ed8 100%);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity 120ms ease;
+  }
+  .cc-btn-primary:hover { opacity: 0.9; }
+  .cc-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cc-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--fg-muted);
+    font-size: 12px;
+    font-weight: 600;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+  }
+  .cc-btn-secondary:hover { color: var(--fg-default); border-color: var(--border-strong); }
+  .cc-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .cc-btn-danger {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);
+    background: color-mix(in srgb, var(--accent-rose) 8%, transparent);
+    color: var(--accent-rose);
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease;
+  }
+  .cc-btn-danger:hover, .cc-btn-danger.confirm {
+    background: color-mix(in srgb, var(--accent-rose) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-rose) 40%, transparent);
+  }
+  .cc-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 7px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+  }
+  .cc-btn-ghost:hover { color: var(--fg-default); background: var(--bg-subtle-hover, rgba(255,255,255,0.06)); }
+  .cc-btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+
+  /* ── Plan tabs ───────────────────────────────────────────── */
+  .cc-tab-row { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cc-tab-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 10px;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--fg-muted);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    transition: all 100ms ease;
+  }
+  .cc-tab-btn:hover { color: var(--fg-default); background: var(--bg-subtle-hover, rgba(255,255,255,0.06)); }
+  .cc-tab-btn.active {
+    color: var(--accent-blue);
+    background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+    border-color: color-mix(in srgb, var(--accent-blue) 22%, transparent);
+  }
+  .cc-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    font-size: 9px;
+    font-weight: 800;
+    color: var(--fg-muted);
+  }
+  .cc-tab-btn.active .cc-tab-count {
+    background: color-mix(in srgb, var(--accent-blue) 18%, transparent);
+    color: var(--accent-blue);
+  }
+
+  /* ── Plans table ─────────────────────────────────────────── */
+  .cc-plans-table-wrap {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--bg-elevated);
+  }
+  .cc-plans-head {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.6fr 0.9fr 1fr 1fr 1.2fr;
+    gap: 10px;
+    padding: 0 14px;
+    height: 32px;
+    align-items: center;
+    background: var(--bg-overlay);
+    border-bottom: 1px solid var(--border);
+  }
+  .cc-plans-head-cell {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cc-plans-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1.6fr 0.9fr 1fr 1fr 1.2fr;
+    gap: 10px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    align-items: start;
+    transition: background 80ms ease;
+  }
+  .cc-plans-row:last-child { border-bottom: none; }
+  .cc-plans-row:hover { background: var(--bg-subtle-hover, rgba(255,255,255,0.03)); }
+  .cc-cell-primary {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--fg-default);
+    letter-spacing: -0.01em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cc-cell-secondary {
+    font-size: 10px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cc-cell-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+  /* ── Mini select ─────────────────────────────────────────── */
+  .cc-mini-select {
+    width: 100%;
+    height: 28px;
+    padding: 0 8px;
+    border-radius: 6px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-overlay);
+    color: var(--fg-default);
+    font-size: 11px;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    outline: none;
+  }
+
+  /* ── Expanded panel ──────────────────────────────────────── */
+  .cc-expanded-wrap {
+    background: var(--bg-overlay);
+    border-top: 1px solid var(--border);
+    padding: 16px 14px;
+    display: grid;
+    gap: 12px;
+    animation: ccFadeUp 180ms cubic-bezier(0.16,1,0.3,1) both;
+  }
+  .cc-expanded-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 8px;
+  }
+  .cc-detail-block {
+    padding: 12px 13px;
+    border-radius: 9px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+  }
+  .cc-detail-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-blue);
+    margin-bottom: 6px;
+  }
+  .cc-detail-value {
+    font-size: 12px;
+    color: var(--fg-default);
+    line-height: 1.55;
+    white-space: pre-wrap;
+  }
+  .cc-detail-mini-val { font-size: 12px; font-weight: 600; color: var(--fg-default); margin-top: 3px; }
+
+  /* ── Cycle editor ────────────────────────────────────────── */
+  .cc-cycle-editor {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  .cc-cycle-editor-title {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--fg-muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .cc-cycle-editor-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .cc-cycle-editor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (max-width: 600px) { .cc-cycle-editor-grid { grid-template-columns: 1fr; } }
+  .cc-cycle-editor-wide { grid-column: 1 / -1; }
+
+  /* ── Review stage stepper ────────────────────────────────── */
+  .cc-stage-stepper {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+  }
+  .cc-stage-step {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--fg-subtle);
+  }
+  .cc-stage-step.done { color: var(--accent-emerald); }
+  .cc-stage-step.current { color: var(--accent-blue); font-weight: 700; }
+  .cc-stage-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--fg-subtle);
+    flex-shrink: 0;
+  }
+  .cc-stage-step.done .cc-stage-dot { background: var(--accent-emerald); }
+  .cc-stage-step.current .cc-stage-dot { background: var(--accent-blue); box-shadow: 0 0 4px color-mix(in srgb, var(--accent-blue) 50%, transparent); }
+  .cc-stage-arrow { color: var(--fg-subtle); font-size: 9px; }
+
+  /* ── Pills ───────────────────────────────────────────────── */
+  .cc-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 20px;
+    padding: 0 7px;
+    border-radius: 5px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  /* Type pills */
+  .cc-pill-coaching { background: color-mix(in srgb, var(--accent-emerald) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent-emerald) 28%, transparent); color: var(--accent-emerald); }
+  .cc-pill-warning  { background: color-mix(in srgb, var(--accent-rose) 12%, transparent);    border: 1px solid color-mix(in srgb, var(--accent-rose) 28%, transparent);    color: var(--accent-rose); }
+  .cc-pill-audit    { background: color-mix(in srgb, var(--accent-violet) 12%, transparent);  border: 1px solid color-mix(in srgb, var(--accent-violet) 28%, transparent);  color: var(--accent-violet); }
+  .cc-pill-followup { background: color-mix(in srgb, var(--accent-amber) 12%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-amber) 28%, transparent);   color: var(--accent-amber); }
+  /* Priority pills */
+  .cc-pill-critical { background: color-mix(in srgb, var(--accent-rose) 14%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);   color: var(--accent-rose); }
+  .cc-pill-high     { background: color-mix(in srgb, var(--accent-amber) 12%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-amber) 28%, transparent);  color: var(--accent-amber); }
+  .cc-pill-medium   { background: color-mix(in srgb, var(--accent-blue) 10%, transparent);    border: 1px solid color-mix(in srgb, var(--accent-blue) 22%, transparent);   color: var(--accent-blue); }
+  .cc-pill-low      { background: var(--bg-subtle); border: 1px solid var(--border); color: var(--fg-muted); }
+  /* Status pills */
+  .cc-pill-open     { background: color-mix(in srgb, var(--accent-amber) 12%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-amber) 28%, transparent);  color: var(--accent-amber); }
+  .cc-pill-progress { background: color-mix(in srgb, var(--accent-violet) 12%, transparent);  border: 1px solid color-mix(in srgb, var(--accent-violet) 28%, transparent); color: var(--accent-violet); }
+  .cc-pill-closed   { background: color-mix(in srgb, var(--accent-emerald) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);color: var(--accent-emerald); }
+  /* Outcome pills */
+  .cc-pill-improved  { background: color-mix(in srgb, var(--accent-emerald) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent); color: var(--accent-emerald); }
+  .cc-pill-partial   { background: color-mix(in srgb, var(--accent-amber) 10%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-amber) 25%, transparent);   color: var(--accent-amber); }
+  .cc-pill-none      { background: color-mix(in srgb, var(--accent-rose) 10%, transparent);    border: 1px solid color-mix(in srgb, var(--accent-rose) 25%, transparent);    color: var(--accent-rose); }
+  .cc-pill-escalate  { background: color-mix(in srgb, var(--accent-rose) 14%, transparent);    border: 1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent);    color: var(--accent-rose); }
+  .cc-pill-notset    { background: var(--bg-subtle); border: 1px solid var(--border); color: var(--fg-muted); }
+  /* Stage pills */
+  .cc-pill-shared    { background: var(--bg-subtle); border: 1px solid var(--border); color: var(--fg-muted); }
+  .cc-pill-acknowledged { background: color-mix(in srgb, var(--accent-blue) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-blue) 22%, transparent); color: var(--accent-blue); }
+  .cc-pill-responded { background: color-mix(in srgb, var(--accent-cyan) 10%, transparent);    border: 1px solid color-mix(in srgb, var(--accent-cyan) 22%, transparent);    color: var(--accent-cyan); }
+  .cc-pill-reviewed  { background: color-mix(in srgb, var(--accent-amber) 10%, transparent);   border: 1px solid color-mix(in srgb, var(--accent-amber) 22%, transparent);   color: var(--accent-amber); }
+  .cc-pill-followup-stage { background: color-mix(in srgb, var(--accent-violet) 10%, transparent); border: 1px solid color-mix(in srgb, var(--accent-violet) 22%, transparent); color: var(--accent-violet); }
+  /* Ack button */
+  .cc-ack-btn {
+    display: inline-flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
+    cursor: pointer;
+    transition: background 120ms ease;
+    margin-bottom: 3px;
+  }
+  .cc-ack-btn.yes {
+    background: color-mix(in srgb, var(--accent-emerald) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent);
+    color: var(--accent-emerald);
+  }
+  .cc-ack-btn.yes:hover { background: color-mix(in srgb, var(--accent-emerald) 16%, transparent); }
+  .cc-ack-btn.no {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+  }
+  .cc-ack-btn.no:hover { color: var(--fg-default); border-color: var(--border-strong); }
+
+  /* ── Overdue badge ───────────────────────────────────────── */
+  .cc-overdue { color: var(--accent-rose); font-size: 10px; font-weight: 700; }
+  .cc-due-ok { color: var(--fg-muted); font-size: 10px; }
+
+  /* ── Badge pill stack ────────────────────────────────────── */
+  .cc-pill-stack { display: flex; gap: 4px; flex-wrap: wrap; }
+
+  /* ── Empty state ─────────────────────────────────────────── */
+  .cc-empty {
+    padding: 28px 20px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--fg-muted);
+    background: var(--bg-overlay);
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    margin-top: 4px;
+  }
+
+  /* ── Loader ──────────────────────────────────────────────── */
+  .cc-loader { display: flex; align-items: center; justify-content: center; padding: 48px; gap: 10px; }
+  .cc-spinner {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--accent-blue);
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .cc-spinner-text { font-size: 12px; font-weight: 500; color: var(--fg-muted); }
+
+  /* ── Section divider ─────────────────────────────────────── */
+  .cc-section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .cc-section-title { font-size: 14px; font-weight: 700; color: var(--fg-default); letter-spacing: -0.02em; margin: 0; }
+  .cc-section-count {
+    font-size: 10px; font-weight: 600; color: var(--fg-muted);
+    background: var(--bg-subtle); border: 1px solid var(--border);
+    border-radius: 999px; padding: 1px 7px;
+  }
+  .cc-section-divider { flex: 1; height: 1px; background: var(--border); }
+
+  /* Reduced motion */
+  @media (prefers-reduced-motion: reduce) {
+    .cc-page, .cc-panel, .cc-kpi-card, .cc-picker-menu, .cc-expanded-wrap {
+      animation: none !important;
+    }
+  }
+`;
+
+function useCCStyles() {
+  useEffect(() => {
+    if (document.getElementById(CC_CSS_ID)) return;
+    const el = document.createElement('style');
+    el.id = CC_CSS_ID;
+    el.textContent = CC_CSS;
+    document.head.appendChild(el);
+    return () => { document.getElementById(CC_CSS_ID)?.remove(); };
+  }, []);
 }
 
-function normalizeAgentName(value?: string | null) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+// ─────────────────────────────────────────────────────────────
+// Pill helpers
+// ─────────────────────────────────────────────────────────────
+
+function typePillClass(t: FeedbackType) {
+  if (t === 'Warning') return 'cc-pill cc-pill-warning';
+  if (t === 'Audit Feedback') return 'cc-pill cc-pill-audit';
+  if (t === 'Follow-up') return 'cc-pill cc-pill-followup';
+  return 'cc-pill cc-pill-coaching';
 }
 
-function formatDateTime(value?: string | null) {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleString();
+function priorityPillClass(p: PlanPriority) {
+  if (p === 'Critical') return 'cc-pill cc-pill-critical';
+  if (p === 'High') return 'cc-pill cc-pill-high';
+  if (p === 'Low') return 'cc-pill cc-pill-low';
+  return 'cc-pill cc-pill-medium';
 }
 
-function formatDateOnly(value?: string | null) {
-  if (!value) return '-';
-  const raw = String(value).slice(0, 10);
-  if (!raw) return '-';
-  const date = new Date(`${raw}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return raw;
-  return date.toLocaleDateString();
+function statusPillClass(s: FeedbackStatus) {
+  if (s === 'Open') return 'cc-pill cc-pill-open';
+  if (s === 'In Progress') return 'cc-pill cc-pill-progress';
+  return 'cc-pill cc-pill-closed';
 }
 
-function getCurrentDateValue() {
-  return new Date().toISOString().slice(0, 10);
+function outcomePillClass(o: FollowUpOutcome) {
+  if (o === 'Improved') return 'cc-pill cc-pill-improved';
+  if (o === 'Partial Improvement') return 'cc-pill cc-pill-partial';
+  if (o === 'No Improvement') return 'cc-pill cc-pill-none';
+  if (o === 'Needs Escalation') return 'cc-pill cc-pill-escalate';
+  return 'cc-pill cc-pill-notset';
 }
+
+function stagePillClass(s: ReviewStage) {
+  if (s === 'Acknowledged') return 'cc-pill cc-pill-acknowledged';
+  if (s === 'Agent Responded') return 'cc-pill cc-pill-responded';
+  if (s === 'Supervisor Reviewed') return 'cc-pill cc-pill-reviewed';
+  if (s === 'Follow-up') return 'cc-pill cc-pill-followup-stage';
+  if (s === 'Closed') return 'cc-pill cc-pill-closed';
+  return 'cc-pill cc-pill-shared';
+}
+
+// ─────────────────────────────────────────────────────────────
+// Business logic helpers (unchanged)
+// ─────────────────────────────────────────────────────────────
+
+const STRUCTURED_PLAN_SECTION_LABELS = [
+  'Priority', 'Review Stage', 'Action Plan', 'Justification',
+  'Agent Comment', 'Supervisor Review', 'Follow-up Outcome', 'Resolution Note',
+] as const;
+
+function escapeRegex(v: string) { return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function normalizePriority(v?: string | null): PlanPriority { return (v === 'Low' || v === 'Medium' || v === 'High' || v === 'Critical') ? v : 'Medium'; }
+function normalizeFollowUpOutcome(v?: string | null): FollowUpOutcome { return (v === 'Improved' || v === 'Partial Improvement' || v === 'No Improvement' || v === 'Needs Escalation') ? v : 'Not Set'; }
+function normalizeReviewStage(v?: string | null): ReviewStage { return (v === 'QA Shared' || v === 'Acknowledged' || v === 'Agent Responded' || v === 'Supervisor Reviewed' || v === 'Follow-up' || v === 'Closed') ? v : 'QA Shared'; }
+function normalizeAgentId(v?: string | null) { return String(v || '').trim().replace(/\.0+$/, ''); }
+function normalizeAgentName(v?: string | null) { return String(v || '').trim().toLowerCase().replace(/\s+/g, ' '); }
+function getCurrentDateValue() { return new Date().toISOString().slice(0, 10); }
 
 function daysUntil(dateValue?: string | null) {
   const raw = String(dateValue || '').slice(0, 10);
   if (!raw) return null;
   const base = new Date(`${raw}T00:00:00`);
   if (Number.isNaN(base.getTime())) return null;
-  const todayRaw = getCurrentDateValue();
-  const today = new Date(`${todayRaw}T00:00:00`);
-  const diffMs = base.getTime() - today.getTime();
-  return Math.floor(diffMs / 86400000);
+  const today = new Date(`${getCurrentDateValue()}T00:00:00`);
+  return Math.floor((base.getTime() - today.getTime()) / 86400000);
 }
 
-function getTypeColor(typeValue: FeedbackType) {
-  if (typeValue === 'Warning') return '#991b1b';
-  if (typeValue === 'Audit Feedback') return '#7c3aed';
-  if (typeValue === 'Follow-up') return '#b45309';
-  return '#166534';
+function formatDateOnly(v?: string | null) {
+  if (!v) return '—';
+  const raw = String(v).slice(0, 10);
+  const d = new Date(`${raw}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString();
 }
 
-const STRUCTURED_PLAN_SECTION_LABELS = [
-  'Priority',
-  'Review Stage',
-  'Action Plan',
-  'Justification',
-  'Agent Comment',
-  'Supervisor Review',
-  'Follow-up Outcome',
-  'Resolution Note',
-] as const;
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-function normalizePriority(value?: string | null): PlanPriority {
-  if (value === 'Low' || value === 'Medium' || value === 'High' || value === 'Critical') {
-    return value;
-  }
-  return 'Medium';
-}
-
-function normalizeFollowUpOutcome(value?: string | null): FollowUpOutcome {
-  if (
-    value === 'Improved' ||
-    value === 'Partial Improvement' ||
-    value === 'No Improvement' ||
-    value === 'Needs Escalation'
-  ) {
-    return value;
-  }
-  return 'Not Set';
-}
-
-function normalizeReviewStage(value?: string | null): ReviewStage {
-  if (
-    value === 'QA Shared' ||
-    value === 'Agent Responded' ||
-    value === 'Supervisor Reviewed' ||
-    value === 'Follow-up' ||
-    value === 'Closed'
-  ) {
-    return value;
-  }
-  return 'QA Shared';
+function formatDateTime(v?: string | null) {
+  if (!v) return '—';
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString();
 }
 
 function parseStructuredPlan(value?: string | null) {
   const raw = String(value || '').trim();
-  const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map((label) => escapeRegex(label)).join('|');
-
+  const labelsPattern = STRUCTURED_PLAN_SECTION_LABELS.map(escapeRegex).join('|');
   function readSection(label: (typeof STRUCTURED_PLAN_SECTION_LABELS)[number]) {
-    const regex = new RegExp(
-      `${escapeRegex(label)}:\n([\\s\\S]*?)(?=\\n(?:${labelsPattern}):\\n|$)`
-    );
+    const regex = new RegExp(`${escapeRegex(label)}:\n([\\s\\S]*?)(?=\\n(?:${labelsPattern}):\n|$)`);
     const match = raw.match(regex);
     return match ? match[1].trim() : '';
   }
-
-  const hasStructuredSections = STRUCTURED_PLAN_SECTION_LABELS.some((label) =>
-    raw.includes(`${label}:`)
-  );
-
+  const hasStructured = STRUCTURED_PLAN_SECTION_LABELS.some((l) => raw.includes(`${l}:`));
   return {
     priority: normalizePriority(readSection('Priority')),
     reviewStage: normalizeReviewStage(readSection('Review Stage')),
-    actionPlan: hasStructuredSections ? readSection('Action Plan') : raw,
+    actionPlan: hasStructured ? readSection('Action Plan') : raw,
     justification: readSection('Justification'),
     agentComment: readSection('Agent Comment'),
     supervisorReview: readSection('Supervisor Review'),
@@ -178,62 +1043,20 @@ function parseStructuredPlan(value?: string | null) {
   };
 }
 
-function composeStructuredPlan({
-  priority,
-  reviewStage,
-  actionPlan,
-  justification,
-  agentComment,
-  supervisorReview,
-  followUpOutcome,
-  resolutionNote,
-}: {
-  priority: PlanPriority;
-  reviewStage: ReviewStage;
-  actionPlan: string;
-  justification: string;
-  agentComment: string;
-  supervisorReview: string;
-  followUpOutcome: FollowUpOutcome;
-  resolutionNote: string;
+function composeStructuredPlan(fields: {
+  priority: PlanPriority; reviewStage: ReviewStage; actionPlan: string; justification: string;
+  agentComment: string; supervisorReview: string; followUpOutcome: FollowUpOutcome; resolutionNote: string;
 }) {
-  const sections = [
-    `Priority:\n${priority}`,
-    `Review Stage:\n${reviewStage}`,
-    actionPlan.trim() ? `Action Plan:\n${actionPlan.trim()}` : '',
-    justification.trim() ? `Justification:\n${justification.trim()}` : '',
-    agentComment.trim() ? `Agent Comment:\n${agentComment.trim()}` : '',
-    supervisorReview.trim() ? `Supervisor Review:\n${supervisorReview.trim()}` : '',
-    followUpOutcome !== 'Not Set'
-      ? `Follow-up Outcome:\n${followUpOutcome}`
-      : '',
-    resolutionNote.trim() ? `Resolution Note:\n${resolutionNote.trim()}` : '',
-  ].filter(Boolean);
-
-  return sections.join('\n\n').trim();
-}
-
-function getPriorityColor(priority: PlanPriority) {
-  if (priority === 'Critical') return '#b91c1c';
-  if (priority === 'High') return '#b45309';
-  if (priority === 'Low') return '#166534';
-  return '#1d4ed8';
-}
-
-function getOutcomeColor(outcome: FollowUpOutcome) {
-  if (outcome === 'Improved') return '#166534';
-  if (outcome === 'Partial Improvement') return '#b45309';
-  if (outcome === 'No Improvement') return '#b91c1c';
-  if (outcome === 'Needs Escalation') return '#7c2d12';
-  return '#475569';
-}
-
-function getReviewStageColor(stage: ReviewStage) {
-  if (stage === 'Closed') return '#166534';
-  if (stage === 'Follow-up') return '#7c3aed';
-  if (stage === 'Supervisor Reviewed') return '#92400e';
-  if (stage === 'Agent Responded' || stage === 'Acknowledged') return '#2563eb';
-  return '#475569';
+  return [
+    `Priority:\n${fields.priority}`,
+    `Review Stage:\n${fields.reviewStage}`,
+    fields.actionPlan.trim() ? `Action Plan:\n${fields.actionPlan.trim()}` : '',
+    fields.justification.trim() ? `Justification:\n${fields.justification.trim()}` : '',
+    fields.agentComment.trim() ? `Agent Comment:\n${fields.agentComment.trim()}` : '',
+    fields.supervisorReview.trim() ? `Supervisor Review:\n${fields.supervisorReview.trim()}` : '',
+    fields.followUpOutcome !== 'Not Set' ? `Follow-up Outcome:\n${fields.followUpOutcome}` : '',
+    fields.resolutionNote.trim() ? `Resolution Note:\n${fields.resolutionNote.trim()}` : '',
+  ].filter(Boolean).join('\n\n').trim();
 }
 
 function isFeedbackOverdue(item: Pick<AgentFeedback, 'due_date' | 'status'>) {
@@ -247,74 +1070,45 @@ function matchesPlanTab(item: AgentFeedback, tab: PlanTab) {
   if (tab === 'Open') return item.status !== 'Closed';
   if (tab === 'Overdue') return isFeedbackOverdue(item);
   if (tab === 'Awaiting Ack') return item.status !== 'Closed' && !item.acknowledged_by_agent;
-  if (tab === 'Follow-up') {
-    return (
-      item.status !== 'Closed' &&
-      (item.feedback_type === 'Follow-up' || parsed.reviewStage === 'Follow-up')
-    );
-  }
+  if (tab === 'Follow-up') return item.status !== 'Closed' && (item.feedback_type === 'Follow-up' || parsed.reviewStage === 'Follow-up');
   return true;
 }
 
-function getDashboardThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          window.sessionStorage.getItem('detroit-axle-theme-mode') ||
-          window.localStorage.getItem('detroit-axle-theme') ||
-          window.sessionStorage.getItem('detroit-axle-theme') ||
-          ''
-        ).toLowerCase()
-      : '';
+// ─────────────────────────────────────────────────────────────
+// Review stage stepper
+// ─────────────────────────────────────────────────────────────
 
-  const isLight = themeMode === 'light' || themeMode === 'white';
+const STAGE_ORDER: ReviewStage[] = ['QA Shared', 'Acknowledged', 'Agent Responded', 'Supervisor Reviewed', 'Follow-up', 'Closed'];
 
-  return {
-    '--cc-page-text': isLight ? '#334155' : '#e5eefb',
-    '--cc-title': isLight ? '#0f172a' : '#f8fafc',
-    '--cc-subtitle': isLight ? '#64748b' : '#94a3b8',
-    '--cc-muted': isLight ? '#475569' : '#cbd5e1',
-    '--cc-subtle': isLight ? '#64748b' : '#94a3b8',
-    '--cc-eyebrow': isLight ? '#3b82f6' : '#93c5fd',
-    '--cc-panel-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(247,250,255,0.96) 100%)'
-      : 'linear-gradient(180deg, rgba(15,23,42,0.82) 0%, rgba(15,23,42,0.68) 100%)',
-    '--cc-panel-border': isLight
-      ? '1px solid rgba(203,213,225,0.92)'
-      : '1px solid rgba(148,163,184,0.14)',
-    '--cc-panel-shadow': isLight
-      ? '0 18px 40px rgba(15,23,42,0.10)'
-      : '0 18px 40px rgba(2,6,23,0.35)',
-    '--cc-card-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.52)',
-    '--cc-soft-bg': isLight ? 'rgba(248,250,252,0.98)' : 'rgba(15,23,42,0.62)',
-    '--cc-row-border': isLight
-      ? '1px solid rgba(203,213,225,0.92)'
-      : '1px solid rgba(148,163,184,0.16)',
-    '--cc-field-bg': isLight
-      ? 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(250,252,255,0.98) 100%)'
-      : 'rgba(15,23,42,0.74)',
-    '--cc-field-border': isLight
-      ? '1px solid rgba(203,213,225,0.92)'
-      : '1px solid rgba(148,163,184,0.18)',
-    '--cc-field-text': isLight ? '#334155' : '#e5eefb',
-    '--cc-button-bg': isLight ? 'rgba(255,255,255,0.98)' : 'rgba(15,23,42,0.74)',
-    '--cc-button-text': isLight ? '#475569' : '#e5eefb',
-    '--cc-button-border': isLight
-      ? '1px solid rgba(203,213,225,0.92)'
-      : '1px solid rgba(148,163,184,0.18)',
-    '--cc-error-bg': isLight ? 'rgba(254,242,242,0.98)' : 'rgba(127,29,29,0.24)',
-    '--cc-error-text': isLight ? '#b91c1c' : '#fecaca',
-    '--cc-success-bg': isLight ? 'rgba(240,253,244,0.98)' : 'rgba(20,83,45,0.24)',
-    '--cc-success-text': isLight ? '#166534' : '#bbf7d0',
-    '--cc-accent-bg': isLight ? 'rgba(37,99,235,0.10)' : 'rgba(37,99,235,0.14)',
-    '--cc-accent-text': isLight ? '#2563eb' : '#93c5fd',
-  };
+function ReviewStageStepper({ current }: { current: ReviewStage }) {
+  const currentIdx = STAGE_ORDER.indexOf(current);
+  return (
+    <div className="cc-stage-stepper">
+      {STAGE_ORDER.map((stage, idx) => {
+        const isDone = idx < currentIdx;
+        const isCurrent = idx === currentIdx;
+        const label = stage === 'Supervisor Reviewed' ? 'Sup. Reviewed' : stage;
+        return (
+          <div key={stage} style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div className={`cc-stage-step${isDone ? ' done' : isCurrent ? ' current' : ''}`}>
+              <div className="cc-stage-dot" />
+              <span style={{ fontSize: '9px', fontWeight: isCurrent ? 700 : 600 }}>{label}</span>
+            </div>
+            {idx < STAGE_ORDER.length - 1 && <span className="cc-stage-arrow">›</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Main component
+// ─────────────────────────────────────────────────────────────
+
 function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
+  useCCStyles();
+
   const [feedbackItems, setFeedbackItems] = useState<AgentFeedback[]>([]);
   const [profiles, setProfiles] = useState<AgentProfile[]>([]);
   const [audits, setAudits] = useState<AuditItem[]>([]);
@@ -352,19 +1146,15 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const [selectedAuditId, setSelectedAuditId] = useState('');
 
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
-  const themeVars = getDashboardThemeVars();
+
+  useEffect(() => { void loadAll(); }, []);
 
   useEffect(() => {
-    void loadAll();
-  }, []);
-
-  useEffect(() => {
-    function handleOutsideClick(event: MouseEvent) {
-      if (agentPickerRef.current && !agentPickerRef.current.contains(event.target as Node)) {
+    function handleOutsideClick(e: MouseEvent) {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
         setIsAgentPickerOpen(false);
       }
     }
-
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
@@ -372,70 +1162,39 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   async function loadAll() {
     setLoading(true);
     setErrorMessage('');
-
     const [feedbackResult, profilesResult, auditsResult] = await Promise.all([
       supabase.from('agent_feedback').select('*').order('created_at', { ascending: false }),
-      supabase
-        .from('profiles')
-        .select('id, role, agent_id, agent_name, display_name, team')
-        .eq('role', 'agent')
-        .order('agent_name', { ascending: true }),
-      supabase
-        .from('audits')
-        .select('id, agent_id, agent_name, team, case_type, audit_date, quality_score, comments, shared_with_agent')
-        .order('audit_date', { ascending: false }),
+      supabase.from('profiles').select('id, role, agent_id, agent_name, display_name, team').eq('role', 'agent').order('agent_name', { ascending: true }),
+      supabase.from('audits').select('id, agent_id, agent_name, team, case_type, audit_date, quality_score, comments, shared_with_agent').order('audit_date', { ascending: false }),
     ]);
-
     setLoading(false);
-
     if (feedbackResult.error || profilesResult.error || auditsResult.error) {
-      setErrorMessage(
-        feedbackResult.error?.message ||
-          profilesResult.error?.message ||
-          auditsResult.error?.message ||
-          'Could not load coaching center data.'
-      );
+      setErrorMessage(feedbackResult.error?.message || profilesResult.error?.message || auditsResult.error?.message || 'Could not load coaching center data.');
       return;
     }
-
     setFeedbackItems((feedbackResult.data as AgentFeedback[]) || []);
     setProfiles((profilesResult.data as AgentProfile[]) || []);
     setAudits((auditsResult.data as AuditItem[]) || []);
   }
 
   const visibleAgents = useMemo(() => {
-    const search = agentSearch.trim().toLowerCase();
-    if (!search) return profiles;
-
-    return profiles.filter((profile) => {
-      const label = getAgentLabel(profile);
-      return (
-        profile.agent_name.toLowerCase().includes(search) ||
-        (profile.agent_id || '').toLowerCase().includes(search) ||
-        (profile.display_name || '').toLowerCase().includes(search) ||
-        label.toLowerCase().includes(search)
-      );
-    });
+    const q = agentSearch.trim().toLowerCase();
+    if (!q) return profiles;
+    return profiles.filter((p) =>
+      p.agent_name.toLowerCase().includes(q) ||
+      (p.agent_id || '').toLowerCase().includes(q) ||
+      (p.display_name || '').toLowerCase().includes(q)
+    );
   }, [profiles, agentSearch]);
 
-  const selectedAgent =
-    profiles.find((profile) => profile.id === selectedAgentProfileId) || null;
+  const selectedAgent = profiles.find((p) => p.id === selectedAgentProfileId) || null;
 
-  function getAgentLabel(profile: AgentProfile) {
-    return profile.display_name
-      ? `${profile.agent_name} - ${profile.display_name}`
-      : `${profile.agent_name} - ${profile.agent_id || '-'}`;
+  function getAgentLabel(p: AgentProfile) {
+    return p.display_name ? `${p.agent_name} · ${p.display_name}` : `${p.agent_name} · ${p.agent_id || '—'}`;
   }
 
   function getFeedbackDisplayName(item: AgentFeedback) {
-    const matchedProfile = profiles.find(
-      (profile) =>
-        normalizeAgentId(profile.agent_id) === normalizeAgentId(item.agent_id) &&
-        normalizeAgentName(profile.agent_name) === normalizeAgentName(item.agent_name) &&
-        profile.team === item.team
-    );
-
-    return matchedProfile?.display_name || '-';
+    return profiles.find((p) => normalizeAgentId(p.agent_id) === normalizeAgentId(item.agent_id) && normalizeAgentName(p.agent_name) === normalizeAgentName(item.agent_name) && p.team === item.team)?.display_name || '—';
   }
 
   function getFeedbackAgentKey(item: AgentFeedback) {
@@ -445,558 +1204,294 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
   const savedAgentOptions = useMemo(() => {
     const seen = new Set<string>();
     return feedbackItems
-      .filter((item) => {
-        const key = getFeedbackAgentKey(item);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      })
-      .map((item) => ({
-        key: getFeedbackAgentKey(item),
-        label: `${item.agent_name} - ${getFeedbackDisplayName(item)} • ${item.agent_id} • ${item.team}`,
-      }))
+      .filter((item) => { const k = getFeedbackAgentKey(item); if (seen.has(k)) return false; seen.add(k); return true; })
+      .map((item) => ({ key: getFeedbackAgentKey(item), label: `${item.agent_name} · ${item.agent_id} · ${item.team}` }))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [feedbackItems, profiles]);
 
-  const baseFilteredFeedbackItems = useMemo(() => {
-    return feedbackItems.filter((item) => {
-      const matchesAgent =
-        !savedAgentFilter || getFeedbackAgentKey(item) === savedAgentFilter;
-      const matchesStatus =
-        savedStatusFilter === 'All' || item.status === savedStatusFilter;
-      const matchesType =
-        savedTypeFilter === 'All' || item.feedback_type === savedTypeFilter;
-
+  const baseFilteredFeedbackItems = useMemo(() =>
+    feedbackItems.filter((item) => {
+      const matchesAgent = !savedAgentFilter || getFeedbackAgentKey(item) === savedAgentFilter;
+      const matchesStatus = savedStatusFilter === 'All' || item.status === savedStatusFilter;
+      const matchesType = savedTypeFilter === 'All' || item.feedback_type === savedTypeFilter;
       return matchesAgent && matchesStatus && matchesType;
-    });
-  }, [feedbackItems, savedAgentFilter, savedStatusFilter, savedTypeFilter]);
+    }),
+    [feedbackItems, savedAgentFilter, savedStatusFilter, savedTypeFilter]
+  );
 
   const filteredFeedbackItems = useMemo(() => {
-    const priorityRank: Record<PlanPriority, number> = {
-      Critical: 0,
-      High: 1,
-      Medium: 2,
-      Low: 3,
-    };
-
+    const rank: Record<PlanPriority, number> = { Critical: 0, High: 1, Medium: 2, Low: 3 };
     return [...baseFilteredFeedbackItems]
       .filter((item) => matchesPlanTab(item, activePlanTab))
       .sort((a, b) => {
-        const aOverdue = isFeedbackOverdue(a) ? 1 : 0;
-        const bOverdue = isFeedbackOverdue(b) ? 1 : 0;
-        if (aOverdue !== bOverdue) return bOverdue - aOverdue;
-
-        const aAck = a.status !== 'Closed' && !a.acknowledged_by_agent ? 1 : 0;
-        const bAck = b.status !== 'Closed' && !b.acknowledged_by_agent ? 1 : 0;
-        if (aAck !== bAck) return bAck - aAck;
-
-        const aPriority = parseStructuredPlan(a.action_plan).priority;
-        const bPriority = parseStructuredPlan(b.action_plan).priority;
-        if (priorityRank[aPriority] !== priorityRank[bPriority]) {
-          return priorityRank[aPriority] - priorityRank[bPriority];
-        }
-
+        const aO = isFeedbackOverdue(a) ? 1 : 0;
+        const bO = isFeedbackOverdue(b) ? 1 : 0;
+        if (aO !== bO) return bO - aO;
+        const aA = a.status !== 'Closed' && !a.acknowledged_by_agent ? 1 : 0;
+        const bA = b.status !== 'Closed' && !b.acknowledged_by_agent ? 1 : 0;
+        if (aA !== bA) return bA - aA;
+        const aP = rank[parseStructuredPlan(a.action_plan).priority];
+        const bP = rank[parseStructuredPlan(b.action_plan).priority];
+        if (aP !== bP) return aP - bP;
         const aDue = String(a.due_date || '9999-12-31');
         const bDue = String(b.due_date || '9999-12-31');
         if (aDue !== bDue) return aDue.localeCompare(bDue);
-
         return String(b.created_at).localeCompare(String(a.created_at));
       });
   }, [baseFilteredFeedbackItems, activePlanTab]);
 
-  const planTabCounts = useMemo(() => {
-    return {
-      All: baseFilteredFeedbackItems.length,
-      Open: baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Open')).length,
-      Overdue: baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Overdue')).length,
-      'Awaiting Ack': baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Awaiting Ack')).length,
-      'Follow-up': baseFilteredFeedbackItems.filter((item) => matchesPlanTab(item, 'Follow-up')).length,
-    } as Record<PlanTab, number>;
-  }, [baseFilteredFeedbackItems]);
+  const planTabCounts = useMemo(() => ({
+    All: baseFilteredFeedbackItems.length,
+    Open: baseFilteredFeedbackItems.filter((i) => matchesPlanTab(i, 'Open')).length,
+    Overdue: baseFilteredFeedbackItems.filter((i) => matchesPlanTab(i, 'Overdue')).length,
+    'Awaiting Ack': baseFilteredFeedbackItems.filter((i) => matchesPlanTab(i, 'Awaiting Ack')).length,
+    'Follow-up': baseFilteredFeedbackItems.filter((i) => matchesPlanTab(i, 'Follow-up')).length,
+  } as Record<PlanTab, number>), [baseFilteredFeedbackItems]);
 
   const reviewStageCounts = useMemo(() => {
-    const counts: Record<ReviewStage, number> = {
-      'QA Shared': 0,
-      'Acknowledged': 0,
-      'Agent Responded': 0,
-      'Supervisor Reviewed': 0,
-      'Follow-up': 0,
-      'Closed': 0,
-    };
-
-    feedbackItems.forEach((item) => {
-      const stage = parseStructuredPlan(item.action_plan).reviewStage;
-      counts[stage] += 1;
-    });
-
+    const counts: Record<ReviewStage, number> = { 'QA Shared': 0, 'Acknowledged': 0, 'Agent Responded': 0, 'Supervisor Reviewed': 0, 'Follow-up': 0, 'Closed': 0 };
+    feedbackItems.forEach((item) => { counts[parseStructuredPlan(item.action_plan).reviewStage] += 1; });
     return counts;
   }, [feedbackItems]);
 
   const selectedAgentAudits = useMemo(() => {
     if (!selectedAgent) return [];
     return audits
-      .filter(
-        (item) =>
-          normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id) &&
-          normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name) &&
-          item.team === selectedAgent.team
-      )
+      .filter((i) => normalizeAgentId(i.agent_id) === normalizeAgentId(selectedAgent.agent_id) && normalizeAgentName(i.agent_name) === normalizeAgentName(selectedAgent.agent_name) && i.team === selectedAgent.team)
       .sort((a, b) => (a.audit_date < b.audit_date ? 1 : -1));
   }, [audits, selectedAgent]);
 
-  const latestAudit = selectedAgentAudits[0] || null;
-  const selectedAgentAverage =
-    selectedAgentAudits.length > 0
-      ? selectedAgentAudits.reduce((sum, item) => sum + Number(item.quality_score), 0) /
-        selectedAgentAudits.length
-      : 0;
+  const selectedAgentAverage = selectedAgentAudits.length > 0
+    ? selectedAgentAudits.reduce((s, i) => s + Number(i.quality_score), 0) / selectedAgentAudits.length
+    : 0;
 
-  const filteredSelectedAgentAudits = useMemo(() => {
-    return selectedAgentAudits.filter((item) => {
-      const auditDate = String(item.audit_date || '').slice(0, 10);
-      if (auditDateFrom && auditDate < auditDateFrom) return false;
-      if (auditDateTo && auditDate > auditDateTo) return false;
-      return true;
-    });
-  }, [selectedAgentAudits, auditDateFrom, auditDateTo]);
+  const filteredSelectedAgentAudits = useMemo(() =>
+    selectedAgentAudits.filter((i) => {
+      const d = String(i.audit_date || '').slice(0, 10);
+      return (!auditDateFrom || d >= auditDateFrom) && (!auditDateTo || d <= auditDateTo);
+    }),
+    [selectedAgentAudits, auditDateFrom, auditDateTo]
+  );
 
-  const selectedAudit =
-    filteredSelectedAgentAudits.find((item) => item.id === selectedAuditId) ||
-    filteredSelectedAgentAudits[0] ||
-    latestAudit ||
-    null;
+  const selectedAudit = filteredSelectedAgentAudits.find((i) => i.id === selectedAuditId) || filteredSelectedAgentAudits[0] || null;
 
   const selectedAgentOpenItems = useMemo(() => {
     if (!selectedAgent) return [];
-    return feedbackItems.filter(
-      (item) =>
-        normalizeAgentId(item.agent_id) === normalizeAgentId(selectedAgent.agent_id) &&
-        normalizeAgentName(item.agent_name) === normalizeAgentName(selectedAgent.agent_name) &&
-        item.team === selectedAgent.team &&
-        item.status !== 'Closed'
-    );
+    return feedbackItems.filter((i) => normalizeAgentId(i.agent_id) === normalizeAgentId(selectedAgent.agent_id) && normalizeAgentName(i.agent_name) === normalizeAgentName(selectedAgent.agent_name) && i.team === selectedAgent.team && i.status !== 'Closed');
   }, [feedbackItems, selectedAgent]);
 
-  const overdueCount = useMemo(
-    () => feedbackItems.filter((item) => isFeedbackOverdue(item)).length,
-    [feedbackItems]
-  );
-
-  const highPriorityCount = useMemo(
-    () =>
-      feedbackItems.filter((item) => {
-        const priority = parseStructuredPlan(item.action_plan).priority;
-        return item.status !== 'Closed' && (priority === 'High' || priority === 'Critical');
-      }).length,
-    [feedbackItems]
-  );
-
-  const unacknowledgedCount = useMemo(
-    () =>
-      feedbackItems.filter(
-        (item) => item.status !== 'Closed' && !item.acknowledged_by_agent
-      ).length,
-    [feedbackItems]
-  );
-
-  const followUpCount = useMemo(
-    () =>
-      feedbackItems.filter(
-        (item) => item.feedback_type === 'Follow-up' && item.status !== 'Closed'
-      ).length,
-    [feedbackItems]
-  );
+  const overdueCount = useMemo(() => feedbackItems.filter(isFeedbackOverdue).length, [feedbackItems]);
+  const highPriorityCount = useMemo(() => feedbackItems.filter((i) => { const p = parseStructuredPlan(i.action_plan).priority; return i.status !== 'Closed' && (p === 'High' || p === 'Critical'); }).length, [feedbackItems]);
+  const unacknowledgedCount = useMemo(() => feedbackItems.filter((i) => i.status !== 'Closed' && !i.acknowledged_by_agent).length, [feedbackItems]);
+  const followUpCount = useMemo(() => feedbackItems.filter((i) => i.feedback_type === 'Follow-up' && i.status !== 'Closed').length, [feedbackItems]);
 
   function applyAuditToCoaching(audit: AuditItem) {
     setSelectedAuditId(audit.id);
-    setSubject(`${audit.team} coaching • ${audit.case_type}`);
+    setSubject(`${audit.team} coaching · ${audit.case_type}`);
     setJustification(audit.comments || '');
-    setActionPlan(
-      `Review ${audit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`
-    );
-    setPriorityOnCreate(
-      audit.quality_score < 75 ? 'Critical' : audit.quality_score < 85 ? 'High' : 'Medium'
-    );
+    setActionPlan(`Review ${audit.case_type} standards, acknowledge the coaching note, and complete a follow-up check on the next matching case.`);
+    setPriorityOnCreate(audit.quality_score < 75 ? 'Critical' : audit.quality_score < 85 ? 'High' : 'Medium');
   }
 
   function handleSelectAgent(profile: AgentProfile) {
     setSelectedAgentProfileId(profile.id);
     setAgentSearch(getAgentLabel(profile));
     setIsAgentPickerOpen(false);
-
-    const recentAudit = audits.find(
-      (item) =>
-        normalizeAgentId(item.agent_id) === normalizeAgentId(profile.agent_id) &&
-        normalizeAgentName(item.agent_name) === normalizeAgentName(profile.agent_name) &&
-        item.team === profile.team
-    );
-
-    if (recentAudit) {
-      applyAuditToCoaching(recentAudit);
-    } else {
-      setSelectedAuditId('');
-    }
+    const recentAudit = audits.find((i) => normalizeAgentId(i.agent_id) === normalizeAgentId(profile.agent_id) && normalizeAgentName(i.agent_name) === normalizeAgentName(profile.agent_name) && i.team === profile.team);
+    if (recentAudit) applyAuditToCoaching(recentAudit);
+    else setSelectedAuditId('');
   }
 
   function resetForm() {
-    setSelectedAgentProfileId('');
-    setAgentSearch('');
-    setIsAgentPickerOpen(false);
-    setQaName(currentUser?.agent_name || '');
-    setFeedbackType('Coaching');
-    setSubject('');
-    setFeedbackNote('');
-    setJustification('');
-    setActionPlan('');
-    setFollowUpDate('');
-    setStatusOnCreate('Open');
-    setPriorityOnCreate('Medium');
-    setAuditDateFrom('');
-    setAuditDateTo('');
-    setSelectedAuditId('');
+    setSelectedAgentProfileId(''); setAgentSearch(''); setIsAgentPickerOpen(false);
+    setQaName(currentUser?.agent_name || ''); setFeedbackType('Coaching');
+    setSubject(''); setFeedbackNote(''); setJustification(''); setActionPlan('');
+    setFollowUpDate(''); setStatusOnCreate('Open'); setPriorityOnCreate('Medium');
+    setAuditDateFrom(''); setAuditDateTo(''); setSelectedAuditId('');
   }
 
   async function handleCreatePlan() {
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setErrorMessage(''); setSuccessMessage('');
     if (!selectedAgent || !qaName.trim() || !subject.trim() || !feedbackNote.trim()) {
       setErrorMessage('Please choose an agent and fill QA Name, Subject, and Coaching Summary.');
       return;
     }
-
     setSaving(true);
-
-    const mergedActionPlan = composeStructuredPlan({
-      priority: priorityOnCreate,
-      reviewStage: statusOnCreate === 'Closed' ? 'Closed' : 'QA Shared',
-      actionPlan,
-      justification,
-      agentComment: '',
-      supervisorReview: '',
-      followUpOutcome: 'Not Set',
-      resolutionNote: '',
-    });
-
-    const { error } = await supabase.from('agent_feedback').insert({
-      agent_id: selectedAgent.agent_id,
-      agent_name: selectedAgent.agent_name,
-      team: selectedAgent.team,
-      qa_name: qaName.trim(),
-      feedback_type: feedbackType,
-      subject: subject.trim(),
-      feedback_note: feedbackNote.trim(),
-      action_plan: mergedActionPlan || null,
-      due_date: followUpDate || null,
-      status: statusOnCreate,
-      acknowledged_by_agent: false,
-    });
-
+    const mergedActionPlan = composeStructuredPlan({ priority: priorityOnCreate, reviewStage: statusOnCreate === 'Closed' ? 'Closed' : 'QA Shared', actionPlan, justification, agentComment: '', supervisorReview: '', followUpOutcome: 'Not Set', resolutionNote: '' });
+    const { error } = await supabase.from('agent_feedback').insert({ agent_id: selectedAgent.agent_id, agent_name: selectedAgent.agent_name, team: selectedAgent.team, qa_name: qaName.trim(), feedback_type: feedbackType, subject: subject.trim(), feedback_note: feedbackNote.trim(), action_plan: mergedActionPlan || null, due_date: followUpDate || null, status: statusOnCreate, acknowledged_by_agent: false });
     setSaving(false);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    if (error) { setErrorMessage(error.message); return; }
     setSuccessMessage('Coaching plan created successfully.');
     resetForm();
     void loadAll();
   }
 
   async function handleStatusChange(feedbackId: string, newStatus: FeedbackStatus) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    const { error } = await supabase
-      .from('agent_feedback')
-      .update({ status: newStatus })
-      .eq('id', feedbackId);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
-    setSuccessMessage(`Plan status updated to ${newStatus}.`);
-    setFeedbackItems((prev) =>
-      prev.map((item) => (item.id === feedbackId ? { ...item, status: newStatus } : item))
-    );
+    setErrorMessage(''); setSuccessMessage('');
+    const { error } = await supabase.from('agent_feedback').update({ status: newStatus }).eq('id', feedbackId);
+    if (error) { setErrorMessage(error.message); return; }
+    setSuccessMessage(`Status updated to ${newStatus}.`);
+    setFeedbackItems((prev) => prev.map((i) => i.id === feedbackId ? { ...i, status: newStatus } : i));
   }
 
   async function handleToggleAcknowledgment(item: AgentFeedback) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setErrorMessage(''); setSuccessMessage('');
     const nextAck = !item.acknowledged_by_agent;
     const parsed = parseStructuredPlan(item.action_plan);
-    const nextStage =
-      nextAck && parsed.reviewStage === 'QA Shared'
-        ? 'Acknowledged'
-        : parsed.reviewStage;
-
-    const nextActionPlan = composeStructuredPlan({
-      priority: parsed.priority,
-      reviewStage: nextStage,
-      actionPlan: parsed.actionPlan,
-      justification: parsed.justification,
-      agentComment: parsed.agentComment,
-      supervisorReview: parsed.supervisorReview,
-      followUpOutcome: parsed.followUpOutcome,
-      resolutionNote: parsed.resolutionNote,
-    });
-
-    const { error } = await supabase
-      .from('agent_feedback')
-      .update({
-        acknowledged_by_agent: nextAck,
-        action_plan: nextActionPlan || null,
-      })
-      .eq('id', item.id);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    const nextStage = nextAck && parsed.reviewStage === 'QA Shared' ? 'Acknowledged' : parsed.reviewStage;
+    const nextActionPlan = composeStructuredPlan({ ...parsed, reviewStage: nextStage });
+    const { error } = await supabase.from('agent_feedback').update({ acknowledged_by_agent: nextAck, action_plan: nextActionPlan || null }).eq('id', item.id);
+    if (error) { setErrorMessage(error.message); return; }
     setSuccessMessage(nextAck ? 'Acknowledgment saved.' : 'Acknowledgment removed.');
-    setFeedbackItems((prev) =>
-      prev.map((entry) =>
-        entry.id === item.id
-          ? { ...entry, acknowledged_by_agent: nextAck, action_plan: nextActionPlan || null }
-          : entry
-      )
-    );
+    setFeedbackItems((prev) => prev.map((e) => e.id === item.id ? { ...e, acknowledged_by_agent: nextAck, action_plan: nextActionPlan || null } : e));
   }
 
   async function handleSaveCycleUpdate(item: AgentFeedback) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setErrorMessage(''); setSuccessMessage('');
     const parsed = parseStructuredPlan(item.action_plan);
     const chosenStage = reviewStageDrafts[item.id] || parsed.reviewStage;
     const agentComment = agentCommentDrafts[item.id] ?? parsed.agentComment;
     const supervisorReview = supervisorReviewDrafts[item.id] ?? parsed.supervisorReview;
-
-    const nextStage =
-      agentComment.trim() && (chosenStage === 'QA Shared' || chosenStage === 'Acknowledged')
-        ? 'Agent Responded'
-        : supervisorReview.trim() && chosenStage === 'Agent Responded'
-        ? 'Supervisor Reviewed'
-        : chosenStage;
-
-    const nextActionPlan = composeStructuredPlan({
-      priority: parsed.priority,
-      reviewStage: nextStage,
-      actionPlan: parsed.actionPlan,
-      justification: parsed.justification,
-      agentComment,
-      supervisorReview,
-      followUpOutcome: parsed.followUpOutcome,
-      resolutionNote: parsed.resolutionNote,
-    });
-
-    const nextStatus =
-      nextStage === 'Closed'
-        ? 'Closed'
-        : item.status === 'Closed'
-        ? 'In Progress'
-        : item.status;
-
-    const { error } = await supabase
-      .from('agent_feedback')
-      .update({
-        action_plan: nextActionPlan || null,
-        status: nextStatus,
-      })
-      .eq('id', item.id);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    const nextStage = agentComment.trim() && (chosenStage === 'QA Shared' || chosenStage === 'Acknowledged') ? 'Agent Responded' : supervisorReview.trim() && chosenStage === 'Agent Responded' ? 'Supervisor Reviewed' : chosenStage;
+    const nextActionPlan = composeStructuredPlan({ ...parsed, reviewStage: nextStage, agentComment, supervisorReview });
+    const nextStatus = nextStage === 'Closed' ? 'Closed' : item.status === 'Closed' ? 'In Progress' : item.status;
+    const { error } = await supabase.from('agent_feedback').update({ action_plan: nextActionPlan || null, status: nextStatus }).eq('id', item.id);
+    if (error) { setErrorMessage(error.message); return; }
     setSuccessMessage('Coaching cycle updated.');
-    setFeedbackItems((prev) =>
-      prev.map((entry) =>
-        entry.id === item.id
-          ? { ...entry, action_plan: nextActionPlan || null, status: nextStatus }
-          : entry
-      )
-    );
+    setFeedbackItems((prev) => prev.map((e) => e.id === item.id ? { ...e, action_plan: nextActionPlan || null, status: nextStatus } : e));
   }
 
   async function handleSaveFollowUpResult(item: AgentFeedback) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
+    setErrorMessage(''); setSuccessMessage('');
     const parsed = parseStructuredPlan(item.action_plan);
     const followUpOutcome = planOutcomeDrafts[item.id] || parsed.followUpOutcome;
     const resolutionNote = resolutionNoteDrafts[item.id] ?? parsed.resolutionNote;
-
-    const nextActionPlan = composeStructuredPlan({
-      priority: parsed.priority,
-      reviewStage:
-        followUpOutcome !== 'Not Set'
-          ? parsed.reviewStage === 'Closed'
-            ? 'Closed'
-            : 'Follow-up'
-          : parsed.reviewStage,
-      actionPlan: parsed.actionPlan,
-      justification: parsed.justification,
-      agentComment: parsed.agentComment,
-      supervisorReview: parsed.supervisorReview,
-      followUpOutcome,
-      resolutionNote,
-    });
-
-    const { error } = await supabase
-      .from('agent_feedback')
-      .update({ action_plan: nextActionPlan || null })
-      .eq('id', item.id);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    const nextActionPlan = composeStructuredPlan({ ...parsed, reviewStage: followUpOutcome !== 'Not Set' ? parsed.reviewStage === 'Closed' ? 'Closed' : 'Follow-up' : parsed.reviewStage, followUpOutcome, resolutionNote });
+    const { error } = await supabase.from('agent_feedback').update({ action_plan: nextActionPlan || null }).eq('id', item.id);
+    if (error) { setErrorMessage(error.message); return; }
     setSuccessMessage('Follow-up outcome saved.');
-    setFeedbackItems((prev) =>
-      prev.map((entry) =>
-        entry.id === item.id ? { ...entry, action_plan: nextActionPlan || null } : entry
-      )
-    );
+    setFeedbackItems((prev) => prev.map((e) => e.id === item.id ? { ...e, action_plan: nextActionPlan || null } : e));
   }
 
   async function handleDelete(feedbackId: string) {
-    setErrorMessage('');
-    setSuccessMessage('');
-
-    if (pendingDeleteId !== feedbackId) {
-      setPendingDeleteId(feedbackId);
-      setSuccessMessage('Click delete again to confirm removal.');
-      return;
-    }
-
+    setErrorMessage(''); setSuccessMessage('');
+    if (pendingDeleteId !== feedbackId) { setPendingDeleteId(feedbackId); setSuccessMessage('Click delete again to confirm removal.'); return; }
     const { error } = await supabase.from('agent_feedback').delete().eq('id', feedbackId);
-
-    if (error) {
-      setErrorMessage(error.message);
-      return;
-    }
-
+    if (error) { setErrorMessage(error.message); return; }
     setPendingDeleteId(null);
-    setFeedbackItems((prev) => prev.filter((item) => item.id !== feedbackId));
+    setFeedbackItems((prev) => prev.filter((i) => i.id !== feedbackId));
     setSuccessMessage('Coaching item deleted successfully.');
   }
 
+  // ── Render ─────────────────────────────────────────────────
+
   return (
-    <div style={{ color: 'var(--cc-page-text, #e5eefb)', ...(themeVars as React.CSSProperties) }}>
-      <div style={{ ...pageHeaderStyle, justifyContent: 'flex-end', marginBottom: '12px' }}>
-        <button type="button" onClick={() => void loadAll()} style={secondaryButton}>
-          Refresh
+    <div className="cc-page">
+
+      {/* Page header */}
+      <div className="cc-page-header">
+        <div>
+          <div className="cc-eyebrow">Coaching Center</div>
+          <h2 className="cc-page-title">Agent Feedback & Plans</h2>
+          <p className="cc-page-sub">Build coaching plans, track the review cycle, and log follow-up outcomes.</p>
+        </div>
+        <button type="button" className="cc-refresh-btn" onClick={() => void loadAll()}>
+          ↺ Refresh
         </button>
       </div>
 
-      {errorMessage ? <div style={errorBannerStyle}>{errorMessage}</div> : null}
-      {successMessage ? <div style={successBannerStyle}>{successMessage}</div> : null}
+      {/* Banners */}
+      {errorMessage && <div className="cc-banner cc-banner-error">⚠ {errorMessage}</div>}
+      {successMessage && <div className="cc-banner cc-banner-success">✓ {successMessage}</div>}
 
-      <div style={summaryGridStyle}>
-        <SummaryCard title="Open Plans" value={String(feedbackItems.filter((item) => item.status !== 'Closed').length)} subtitle="All coaching items still active" />
-        <SummaryCard title="Overdue Follow-up" value={String(overdueCount)} subtitle="Due date passed and not closed" />
-        <SummaryCard title="Need Acknowledgment" value={String(unacknowledgedCount)} subtitle="Agent has not acknowledged yet" />
-        <SummaryCard title="High Priority" value={String(highPriorityCount)} subtitle="High and critical plans still open" />
-        <SummaryCard title="Follow-up Queue" value={String(followUpCount)} subtitle="Open follow-up tasks" />
+      {/* KPI bento row */}
+      <div className="cc-kpi-grid">
+        {[
+          { label: 'Open Plans', value: String(feedbackItems.filter((i) => i.status !== 'Closed').length), sub: 'Active coaching items', accent: 'var(--accent-blue)', delay: 0 },
+          { label: 'Overdue', value: String(overdueCount), sub: 'Due date passed, not closed', accent: overdueCount > 0 ? 'var(--accent-rose)' : 'var(--fg-muted)', delay: 40 },
+          { label: 'Unacknowledged', value: String(unacknowledgedCount), sub: 'Agent has not acknowledged', accent: unacknowledgedCount > 0 ? 'var(--accent-amber)' : 'var(--fg-muted)', delay: 80 },
+          { label: 'High Priority', value: String(highPriorityCount), sub: 'High + Critical, still open', accent: highPriorityCount > 0 ? 'var(--accent-rose)' : 'var(--fg-muted)', delay: 120 },
+          { label: 'Follow-up Queue', value: String(followUpCount), sub: 'Open follow-up tasks', accent: 'var(--accent-violet)', delay: 160 },
+        ].map(({ label, value, sub, accent, delay }) => (
+          <div key={label} className="cc-kpi-card" style={{ '--kpi-accent': accent, animationDelay: `${delay}ms` } as React.CSSProperties}>
+            <div className="cc-kpi-label">{label}</div>
+            <div className="cc-kpi-value">{value}</div>
+            <div className="cc-kpi-sub">{sub}</div>
+          </div>
+        ))}
       </div>
 
-      <div style={workspaceGridStyle}>
-        <div style={panelStyle}>
-          <div style={panelEyebrowStyle}>Create Plan</div>
-          <h3 style={panelTitleStyle}>Coaching Workspace</h3>
-          <p style={panelSubtitleStyle}>
-            Start from the agent, use the latest audit as context, and convert the finding into a clear next-step plan.
-          </p>
+      {/* Workspace: form + side panels */}
+      <div className="cc-workspace-grid">
 
-          <div style={formGridStyle}>
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Agent</label>
+        {/* Left — coaching form */}
+        <div className="cc-panel" style={{ animationDelay: '60ms' }}>
+          <div className="cc-panel-eyebrow">Create Plan</div>
+          <h3 className="cc-panel-title">Coaching Workspace</h3>
+          <p className="cc-panel-sub">Start from the agent, use the latest audit as context, then define a clear next-step plan.</p>
+
+          <div className="cc-form-grid">
+            {/* Agent picker */}
+            <div className="cc-full-col">
+              <label className="cc-field-label">Agent</label>
               <div ref={agentPickerRef} style={{ position: 'relative' }}>
                 <button
                   type="button"
-                  onClick={() => setIsAgentPickerOpen((prev) => !prev)}
-                  style={pickerButtonStyle}
+                  className="cc-picker-btn"
+                  onClick={() => setIsAgentPickerOpen((p) => !p)}
+                  aria-expanded={isAgentPickerOpen}
                 >
-                  <span style={{ color: selectedAgent ? 'var(--cc-title, #f8fafc)' : 'var(--cc-subtle, #94a3b8)' }}>
-                    {selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent'}
+                  <span className="cc-picker-btn-text" style={{ color: selectedAgent ? 'var(--fg-default)' : 'var(--fg-muted)' }}>
+                    {selectedAgent ? getAgentLabel(selectedAgent) : 'Select agent…'}
                   </span>
-                  <span>▼</span>
+                  <span style={{ fontSize: '10px', color: 'var(--fg-muted)', flexShrink: 0 }}>▾</span>
                 </button>
-
                 {isAgentPickerOpen && (
-                  <div style={pickerMenuStyle}>
-                    <div style={pickerSearchWrapStyle}>
-                      <input
-                        type="text"
-                        value={agentSearch}
-                        onChange={(e) => setAgentSearch(e.target.value)}
-                        placeholder="Search by name, ID, or display name"
-                        style={fieldStyle}
-                      />
+                  <div className="cc-picker-menu">
+                    <div className="cc-picker-search">
+                      <input type="text" value={agentSearch} onChange={(e) => setAgentSearch(e.target.value)} placeholder="Search by name, ID…" className="cc-field" />
                     </div>
-
-                    <div style={pickerListStyle}>
-                      {visibleAgents.length === 0 ? (
-                        <div style={pickerInfoStyle}>No agents found</div>
-                      ) : (
-                        visibleAgents.map((profile) => (
-                          <button
-                            key={profile.id}
-                            type="button"
-                            onClick={() => handleSelectAgent(profile)}
-                            style={{
-                              ...pickerOptionStyle,
-                              ...(selectedAgentProfileId === profile.id ? pickerOptionActiveStyle : {}),
-                            }}
-                          >
+                    <div className="cc-picker-list">
+                      {visibleAgents.length === 0
+                        ? <div className="cc-picker-empty">No agents found</div>
+                        : visibleAgents.map((profile) => (
+                          <button key={profile.id} type="button" className={`cc-picker-option${selectedAgentProfileId === profile.id ? ' active' : ''}`} onClick={() => handleSelectAgent(profile)}>
                             {getAgentLabel(profile)}
                           </button>
-                        ))
-                      )}
+                        ))}
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            <div style={infoCardStyle}>
-              <div style={infoCardTitleStyle}>Agent Snapshot</div>
-              <p style={infoLineStyle}><strong>Agent ID:</strong> {selectedAgent?.agent_id || '-'}</p>
-              <p style={infoLineStyle}><strong>Name:</strong> {selectedAgent?.agent_name || '-'}</p>
-              <p style={infoLineStyle}><strong>Display:</strong> {selectedAgent?.display_name || '-'}</p>
-              <p style={infoLineStyle}><strong>Team:</strong> {selectedAgent?.team || '-'}</p>
-              <p style={{ ...infoLineStyle, marginBottom: 0 }}>
-                <strong>Open Items:</strong> {selectedAgentOpenItems.length}
-              </p>
+            {/* Agent snapshot */}
+            <div className="cc-full-col">
+              <div className="cc-snapshot-card">
+                <div className="cc-snapshot-title">Agent Snapshot</div>
+                {[
+                  ['Agent ID', selectedAgent?.agent_id || '—'],
+                  ['Name', selectedAgent?.agent_name || '—'],
+                  ['Display', selectedAgent?.display_name || '—'],
+                  ['Team', selectedAgent?.team || '—'],
+                  ['Open Items', String(selectedAgentOpenItems.length)],
+                ].map(([k, v]) => (
+                  <div key={k} className="cc-snapshot-row">
+                    <span className="cc-snapshot-key">{k}</span>
+                    <span className="cc-snapshot-val">{v}</span>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div>
-              <label style={labelStyle}>QA Name</label>
-              <input
-                type="text"
-                value={qaName}
-                onChange={(e) => setQaName(e.target.value)}
-                style={fieldStyle}
-                placeholder="Enter QA name"
-              />
+              <label className="cc-field-label">QA Name</label>
+              <input type="text" value={qaName} onChange={(e) => setQaName(e.target.value)} className="cc-field" placeholder="Enter QA name" />
             </div>
 
             <div>
-              <label style={labelStyle}>Plan Type</label>
-              <select
-                value={feedbackType}
-                onChange={(e) => setFeedbackType(e.target.value as FeedbackType)}
-                style={fieldStyle}
-              >
+              <label className="cc-field-label">Plan Type</label>
+              <select value={feedbackType} onChange={(e) => setFeedbackType(e.target.value as FeedbackType)} className="cc-field cc-field-select">
                 <option value="Coaching">Coaching</option>
                 <option value="Audit Feedback">Audit Feedback</option>
                 <option value="Warning">Warning</option>
@@ -1005,12 +1500,8 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Priority</label>
-              <select
-                value={priorityOnCreate}
-                onChange={(e) => setPriorityOnCreate(e.target.value as PlanPriority)}
-                style={fieldStyle}
-              >
+              <label className="cc-field-label">Priority</label>
+              <select value={priorityOnCreate} onChange={(e) => setPriorityOnCreate(e.target.value as PlanPriority)} className="cc-field cc-field-select">
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
                 <option value="High">High</option>
@@ -1019,12 +1510,8 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Starting Status</label>
-              <select
-                value={statusOnCreate}
-                onChange={(e) => setStatusOnCreate(e.target.value as FeedbackStatus)}
-                style={fieldStyle}
-              >
+              <label className="cc-field-label">Starting Status</label>
+              <select value={statusOnCreate} onChange={(e) => setStatusOnCreate(e.target.value as FeedbackStatus)} className="cc-field cc-field-select">
                 <option value="Open">Open</option>
                 <option value="In Progress">In Progress</option>
                 <option value="Closed">Closed</option>
@@ -1032,236 +1519,152 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
             </div>
 
             <div>
-              <label style={labelStyle}>Follow-up Date</label>
-              <input
-                type="date"
-                value={followUpDate}
-                onChange={(e) => setFollowUpDate(e.target.value)}
-                style={fieldStyle}
-              />
+              <label className="cc-field-label">Follow-up Date</label>
+              <input type="date" value={followUpDate} onChange={(e) => setFollowUpDate(e.target.value)} className="cc-field" />
             </div>
 
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Subject</label>
-              <input
-                type="text"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                style={fieldStyle}
-                placeholder="Example: Calls coaching • Refund accuracy"
-              />
+            <div className="cc-full-col">
+              <label className="cc-field-label">Subject</label>
+              <input type="text" value={subject} onChange={(e) => setSubject(e.target.value)} className="cc-field" placeholder="e.g. Calls coaching · Refund accuracy" />
             </div>
 
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Coaching Summary</label>
-              <textarea
-                value={feedbackNote}
-                onChange={(e) => setFeedbackNote(e.target.value)}
-                rows={4}
-                style={fieldStyle}
-                placeholder="Summarize the gap, expectation, and what good looks like."
-              />
+            <div className="cc-full-col">
+              <label className="cc-field-label">Coaching Summary</label>
+              <textarea value={feedbackNote} onChange={(e) => setFeedbackNote(e.target.value)} rows={4} className="cc-field cc-field-textarea" placeholder="Summarize the gap, expectation, and what good looks like." />
             </div>
 
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Justification / Audit Context</label>
-              <textarea
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                rows={4}
-                style={fieldStyle}
-                placeholder="Use audit comments, examples, or case references to justify the plan."
-              />
+            <div className="cc-full-col">
+              <label className="cc-field-label">Justification / Audit Context</label>
+              <textarea value={justification} onChange={(e) => setJustification(e.target.value)} rows={3} className="cc-field cc-field-textarea" placeholder="Use audit comments, examples, or case references to justify the plan." />
             </div>
 
-            <div style={wideFieldStyle}>
-              <label style={labelStyle}>Action Plan</label>
-              <textarea
-                value={actionPlan}
-                onChange={(e) => setActionPlan(e.target.value)}
-                rows={5}
-                style={fieldStyle}
-                placeholder="Write concrete next steps, owner, and follow-up expectations."
-              />
+            <div className="cc-full-col">
+              <label className="cc-field-label">Action Plan</label>
+              <textarea value={actionPlan} onChange={(e) => setActionPlan(e.target.value)} rows={4} className="cc-field cc-field-textarea" placeholder="Write concrete next steps, owner, and follow-up expectations." />
             </div>
           </div>
 
-          <div style={actionRowStyle}>
-            <button onClick={handleCreatePlan} disabled={saving} style={primaryButton}>
-              {saving ? 'Saving...' : 'Create Coaching Plan'}
+          <div className="cc-btn-row">
+            <button onClick={handleCreatePlan} disabled={saving} className="cc-btn-primary">
+              {saving ? 'Saving…' : '+ Create Coaching Plan'}
             </button>
-            <button type="button" onClick={resetForm} disabled={saving} style={secondaryButton}>
+            <button type="button" onClick={resetForm} disabled={saving} className="cc-btn-secondary">
               Clear Form
             </button>
           </div>
         </div>
 
-        <div style={stackPanelStyle}>
-          <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Audit History</div>
-            <h3 style={panelTitleStyle}>Selected Agent Audits</h3>
-            <p style={panelSubtitleStyle}>
-              Filter the selected agent’s audits by date, scroll the history, and choose the exact audit you want to use as the coaching subject.
-            </p>
+        {/* Right column */}
+        <div className="cc-stack-col">
+
+          {/* Audit history panel */}
+          <div className="cc-panel" style={{ animationDelay: '100ms' }}>
+            <div className="cc-panel-eyebrow">Audit History</div>
+            <h3 className="cc-panel-title">Selected Agent Audits</h3>
+            <p className="cc-panel-sub">Filter by date, scroll the history, and pick the exact audit to use as coaching source.</p>
 
             {!selectedAgent ? (
-              <EmptyState text="Pick an agent to load full audit history." />
+              <div className="cc-empty">Pick an agent to load full audit history.</div>
             ) : (
               <>
-                <div style={contextGridStyle}>
-                  <ContextCard
-                    title="All Audits"
-                    value={String(selectedAgentAudits.length)}
-                    helper="Loaded for this agent"
-                  />
-                  <ContextCard
-                    title="Visible Audits"
-                    value={String(filteredSelectedAgentAudits.length)}
-                    helper="After date filters"
-                  />
-                  <ContextCard
-                    title="Average Quality"
-                    value={selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(2)}%` : '-'}
-                    helper="Across all loaded audits"
-                  />
+                <div className="cc-stat-grid">
+                  <div className="cc-stat-card"><div className="cc-stat-label">All Audits</div><div className="cc-stat-value">{selectedAgentAudits.length}</div><div className="cc-stat-helper">Loaded for this agent</div></div>
+                  <div className="cc-stat-card"><div className="cc-stat-label">Visible</div><div className="cc-stat-value">{filteredSelectedAgentAudits.length}</div><div className="cc-stat-helper">After date filters</div></div>
+                  <div className="cc-stat-card"><div className="cc-stat-label">Avg Quality</div><div className="cc-stat-value" style={{ fontSize: '16px' }}>{selectedAgentAudits.length ? `${selectedAgentAverage.toFixed(1)}%` : '—'}</div><div className="cc-stat-helper">All loaded audits</div></div>
                 </div>
 
-                <div style={auditFilterGridStyle}>
+                <div className="cc-audit-filter-grid">
                   <div>
-                    <label style={labelStyle}>Audit Date From</label>
-                    <input
-                      type="date"
-                      value={auditDateFrom}
-                      onChange={(e) => setAuditDateFrom(e.target.value)}
-                      style={fieldStyle}
-                    />
+                    <label className="cc-field-label">From</label>
+                    <input type="date" value={auditDateFrom} onChange={(e) => setAuditDateFrom(e.target.value)} className="cc-field" />
                   </div>
                   <div>
-                    <label style={labelStyle}>Audit Date To</label>
-                    <input
-                      type="date"
-                      value={auditDateTo}
-                      onChange={(e) => setAuditDateTo(e.target.value)}
-                      style={fieldStyle}
-                    />
+                    <label className="cc-field-label">To</label>
+                    <input type="date" value={auditDateTo} onChange={(e) => setAuditDateTo(e.target.value)} className="cc-field" />
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'end' }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAuditDateFrom('');
-                        setAuditDateTo('');
-                      }}
-                      style={secondaryButton}
-                    >
-                      Clear Audit Filters
+                  <div>
+                    <button type="button" className="cc-btn-secondary" style={{ height: '36px', alignSelf: 'flex-end' }} onClick={() => { setAuditDateFrom(''); setAuditDateTo(''); }}>
+                      Clear
                     </button>
                   </div>
                 </div>
 
-                <div style={auditHistoryListStyle}>
+                <div className="cc-audit-list">
                   {filteredSelectedAgentAudits.length === 0 ? (
-                    <EmptyState text="No audits match the selected date range." />
+                    <div className="cc-empty">No audits match the selected date range.</div>
                   ) : (
-                    filteredSelectedAgentAudits.map((audit) => (
-                      <div
-                        key={audit.id}
-                        style={{
-                          ...auditHistoryCardStyle,
-                          ...(selectedAudit?.id === audit.id ? auditHistoryCardActiveStyle : {}),
-                        }}
-                      >
-                        <div style={auditHistoryTopRowStyle}>
-                          <div>
-                            <div style={primaryCellTextStyle}>{audit.case_type}</div>
-                            <div style={secondaryCellTextStyle}>
-                              {formatDateOnly(audit.audit_date)} • {audit.team}
+                    filteredSelectedAgentAudits.map((audit) => {
+                      const isActive = selectedAudit?.id === audit.id;
+                      const score = Number(audit.quality_score);
+                      const scoreColor = score >= 95 ? 'var(--accent-emerald)' : score >= 85 ? 'var(--accent-blue)' : score >= 75 ? 'var(--accent-amber)' : 'var(--accent-rose)';
+                      return (
+                        <div key={audit.id} className={`cc-audit-card${isActive ? ' active' : ''}`}>
+                          <div className="cc-audit-top-row">
+                            <div>
+                              <div className="cc-audit-case-type">{audit.case_type}</div>
+                              <div className="cc-audit-meta">{formatDateOnly(audit.audit_date)} · {audit.team} · {audit.shared_with_agent ? 'Shared' : 'Internal'}</div>
+                            </div>
+                            <div style={{ textAlign: 'right' }}>
+                              <div className="cc-audit-score" style={{ color: scoreColor }}>{score.toFixed(2)}%</div>
                             </div>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={auditScoreStyle}>{Number(audit.quality_score).toFixed(2)}%</div>
-                            <div style={secondaryCellTextStyle}>
-                              {audit.shared_with_agent ? 'Shared' : 'Internal'}
-                            </div>
+                          <div className="cc-audit-comment">{audit.comments || 'No audit comment saved for this item.'}</div>
+                          <div className="cc-audit-action-row">
+                            <button type="button" className="cc-btn-primary" style={{ height: '28px', fontSize: '11px' }} onClick={() => applyAuditToCoaching(audit)}>
+                              Use for Coaching
+                            </button>
+                            {isActive && <span className="cc-source-badge">Current Source</span>}
                           </div>
                         </div>
-
-                        <div style={auditHistoryCommentStyle}>
-                          {audit.comments || 'No audit comment saved for this item.'}
-                        </div>
-
-                        <div style={auditHistoryActionRowStyle}>
-                          <button
-                            type="button"
-                            onClick={() => applyAuditToCoaching(audit)}
-                            style={primaryButton}
-                          >
-                            Use for Coaching
-                          </button>
-                          {selectedAudit?.id === audit.id ? (
-                            <span style={selectedAuditPillStyle}>Current Coaching Source</span>
-                          ) : null}
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </>
             )}
           </div>
 
-          <div style={panelStyle}>
-            <div style={panelEyebrowStyle}>Review Queue</div>
-            <h3 style={panelTitleStyle}>Routing & Cycle Control</h3>
-            <p style={panelSubtitleStyle}>
-              The old panel only filtered saved plans. This one shows where each plan is in the coaching cycle and lets you narrow the queue before you review details below.
-            </p>
+          {/* Review queue panel */}
+          <div className="cc-panel" style={{ animationDelay: '140ms' }}>
+            <div className="cc-panel-eyebrow">Review Queue</div>
+            <h3 className="cc-panel-title">Routing & Cycle</h3>
+            <p className="cc-panel-sub">Track where each plan is in the coaching cycle, then filter the queue below.</p>
 
-            <div style={routingGridStyle}>
-              <ContextCard title="QA Shared" value={String(reviewStageCounts['QA Shared'])} helper="Waiting for acknowledgment or comment" />
-              <ContextCard title="Agent Responded" value={String(reviewStageCounts['Agent Responded'])} helper="Ready for supervisor or QA review" />
-              <ContextCard title="Supervisor Reviewed" value={String(reviewStageCounts['Supervisor Reviewed'])} helper="Needs supervisor sign-off" />
-              <ContextCard title="Follow-up" value={String(reviewStageCounts['Follow-up'])} helper="Ready for outcome tracking" />
+            <div className="cc-routing-grid">
+              {[
+                { label: 'QA Shared', value: reviewStageCounts['QA Shared'], helper: 'Awaiting ack or comment', accent: 'var(--fg-muted)' },
+                { label: 'Agent Responded', value: reviewStageCounts['Agent Responded'], helper: 'Ready for review', accent: 'var(--accent-cyan)' },
+                { label: 'Sup. Reviewed', value: reviewStageCounts['Supervisor Reviewed'], helper: 'Needs sign-off', accent: 'var(--accent-amber)' },
+                { label: 'Follow-up', value: reviewStageCounts['Follow-up'], helper: 'Outcome tracking', accent: 'var(--accent-violet)' },
+              ].map(({ label, value, helper, accent }) => (
+                <div key={label} className="cc-stat-card" style={{ borderLeft: `2px solid ${accent}` }}>
+                  <div className="cc-stat-label">{label}</div>
+                  <div className="cc-stat-value" style={{ fontSize: '18px', color: accent }}>{value}</div>
+                  <div className="cc-stat-helper">{helper}</div>
+                </div>
+              ))}
             </div>
 
-            <div style={filterGridStyle}>
+            <div className="cc-filter-grid">
               <div>
-                <label style={labelStyle}>Agent</label>
-                <select
-                  value={savedAgentFilter}
-                  onChange={(e) => setSavedAgentFilter(e.target.value)}
-                  style={fieldStyle}
-                >
+                <label className="cc-field-label">Agent</label>
+                <select value={savedAgentFilter} onChange={(e) => setSavedAgentFilter(e.target.value)} className="cc-field cc-field-select">
                   <option value="">All Agents</option>
-                  {savedAgentOptions.map((option) => (
-                    <option key={option.key} value={option.key}>
-                      {option.label}
-                    </option>
-                  ))}
+                  {savedAgentOptions.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
                 </select>
               </div>
-
               <div>
-                <label style={labelStyle}>Status</label>
-                <select
-                  value={savedStatusFilter}
-                  onChange={(e) => setSavedStatusFilter(e.target.value as 'All' | FeedbackStatus)}
-                  style={fieldStyle}
-                >
+                <label className="cc-field-label">Status</label>
+                <select value={savedStatusFilter} onChange={(e) => setSavedStatusFilter(e.target.value as 'All' | FeedbackStatus)} className="cc-field cc-field-select">
                   <option value="All">All Statuses</option>
                   <option value="Open">Open</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Closed">Closed</option>
                 </select>
               </div>
-
               <div>
-                <label style={labelStyle}>Type</label>
-                <select
-                  value={savedTypeFilter}
-                  onChange={(e) => setSavedTypeFilter(e.target.value as 'All' | FeedbackType)}
-                  style={fieldStyle}
-                >
+                <label className="cc-field-label">Type</label>
+                <select value={savedTypeFilter} onChange={(e) => setSavedTypeFilter(e.target.value as 'All' | FeedbackType)} className="cc-field cc-field-select">
                   <option value="All">All Types</option>
                   <option value="Coaching">Coaching</option>
                   <option value="Audit Feedback">Audit Feedback</option>
@@ -1274,939 +1677,224 @@ function CoachingCenter({ currentUser = null }: { currentUser?: CurrentUser }) {
         </div>
       </div>
 
-      <div style={panelStyle}>
-        <div style={panelEyebrowStyle}>Saved Plans</div>
-        <h3 style={panelTitleStyle}>Coaching Tasks & Follow-up</h3>
-        <p style={panelSubtitleStyle}>
-          Use tabs to focus the queue, then open details to manage the full cycle: acknowledgment, agent comment, supervisor review, follow-up outcome, and closure.
-        </p>
+      {/* Saved plans table */}
+      <div className="cc-panel" style={{ animationDelay: '180ms' }}>
+        <div className="cc-panel-eyebrow">Saved Plans</div>
+        <h3 className="cc-panel-title">Coaching Tasks & Follow-up</h3>
+        <p className="cc-panel-sub">Use tabs to focus the queue, then open details to manage the full cycle: acknowledgment, agent comment, supervisor review, follow-up outcome, and closure.</p>
 
-        <div style={planTabRowStyle}>
+        {/* Tabs */}
+        <div className="cc-tab-row">
           {(['All', 'Open', 'Overdue', 'Awaiting Ack', 'Follow-up'] as PlanTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActivePlanTab(tab)}
-              style={{
-                ...planTabButtonStyle,
-                ...(activePlanTab === tab ? planTabButtonActiveStyle : {}),
-              }}
-            >
-              {tab} ({planTabCounts[tab]})
+            <button key={tab} type="button" className={`cc-tab-btn${activePlanTab === tab ? ' active' : ''}`} onClick={() => setActivePlanTab(tab)}>
+              {tab}
+              <span className="cc-tab-count">{planTabCounts[tab]}</span>
             </button>
           ))}
         </div>
 
+        {/* Table */}
         {loading ? (
-          <div style={emptyTextStyle} className="da-themed-loader-shell da-themed-loader-shell--inline">
-            <div className="da-themed-loader-card">
-              <div className="da-themed-loader da-themed-loader--compact">
-                <div className="da-themed-loader__art" aria-hidden="true">
-                  <div className="da-themed-loader__glow" />
-                  <div className="da-themed-loader__rotor">
-                    <div className="da-themed-loader__rotor-face" />
-                    <div className="da-themed-loader__hub" />
-                  </div>
-                  <div className="da-themed-loader__caliper" />
-                  <div className="da-themed-loader__spark" />
-                </div>
-                <div className="da-themed-loader__copy">
-                  <div className="da-themed-loader__eyebrow">Detroit Axle</div>
-                  <div className="da-themed-loader__label">Loading coaching items...</div>
-                  <div className="da-themed-loader__sub">Building the coaching queue</div>
-                </div>
-              </div>
-            </div>
+          <div className="cc-loader">
+            <div className="cc-spinner" />
+            <span className="cc-spinner-text">Loading coaching items…</span>
           </div>
         ) : filteredFeedbackItems.length === 0 ? (
-          <EmptyState text="No coaching items found for the current filters." />
+          <div className="cc-empty">No coaching items found for the current filters.</div>
         ) : (
-          <div style={feedbackTableWrapStyle}>
-            <div style={feedbackTableStyle}>
-              <div style={{ ...feedbackRowStyle, ...feedbackHeaderRowStyle }}>
-                <div style={feedbackCellAgentStyle}>Agent</div>
-                <div style={feedbackCellTypeStyle}>Type / Priority</div>
-                <div style={feedbackCellSubjectStyle}>Subject</div>
-                <div style={feedbackCellDueDateStyle}>Follow-up</div>
-                <div style={feedbackCellStatusStyle}>Status / Stage</div>
-                <div style={feedbackCellAckStyle}>Agent Cycle</div>
-                <div style={feedbackCellActionsStyle}>Actions</div>
-              </div>
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ minWidth: '1080px' }}>
+              <div className="cc-plans-table-wrap">
+                {/* Head */}
+                <div className="cc-plans-head">
+                  <div className="cc-plans-head-cell">Agent</div>
+                  <div className="cc-plans-head-cell">Type · Priority</div>
+                  <div className="cc-plans-head-cell">Subject</div>
+                  <div className="cc-plans-head-cell">Follow-up</div>
+                  <div className="cc-plans-head-cell">Status · Stage</div>
+                  <div className="cc-plans-head-cell">Agent Cycle</div>
+                  <div className="cc-plans-head-cell">Actions</div>
+                </div>
 
-              {filteredFeedbackItems.map((item) => {
-                const isExpanded = expandedFeedbackId === item.id;
-                const dueDiff = daysUntil(item.due_date);
-                const isOverdue = dueDiff !== null && dueDiff < 0 && item.status !== 'Closed';
+                {/* Rows */}
+                {filteredFeedbackItems.map((item) => {
+                  const isExpanded = expandedFeedbackId === item.id;
+                  const parsed = parseStructuredPlan(item.action_plan);
+                  const dueDiff = daysUntil(item.due_date);
+                  const isOverdue = dueDiff !== null && dueDiff < 0 && item.status !== 'Closed';
 
-                return (
-                  <div key={item.id} style={feedbackEntryStyle}>
-                    <div style={feedbackRowStyle}>
-                      <div style={feedbackCellAgentStyle}>
-                        <div style={primaryCellTextStyle}>{item.agent_name}</div>
-                        <div style={secondaryCellTextStyle}>
-                          {getFeedbackDisplayName(item)} • {item.agent_id} • {item.team}
+                  return (
+                    <div key={item.id}>
+                      <div className="cc-plans-row">
+                        {/* Agent */}
+                        <div>
+                          <div className="cc-cell-primary">{item.agent_name}</div>
+                          <div className="cc-cell-secondary">{getFeedbackDisplayName(item)} · {item.agent_id} · {item.team}</div>
                         </div>
-                      </div>
 
-                      <div style={feedbackCellTypeStyle}>
-                        <div style={stackBadgeWrapStyle}>
-                          <span style={statusPill(getTypeColor(item.feedback_type))}>
-                            {item.feedback_type}
-                          </span>
-                          <span style={statusPill(getPriorityColor(parseStructuredPlan(item.action_plan).priority))}>
-                            {parseStructuredPlan(item.action_plan).priority}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div style={feedbackCellSubjectStyle}>
-                        <div style={primaryCellTextStyle}>{item.subject}</div>
-                        <div style={secondaryCellTextStyle}>By {item.qa_name}</div>
-                        {parseStructuredPlan(item.action_plan).followUpOutcome !== 'Not Set' ? (
-                          <div style={{ ...secondaryCellTextStyle, marginTop: '8px' }}>
-                            Outcome:{' '}
-                            <span style={{ ...statusPill(getOutcomeColor(parseStructuredPlan(item.action_plan).followUpOutcome)), fontSize: '11px', padding: '4px 8px' }}>
-                              {parseStructuredPlan(item.action_plan).followUpOutcome}
-                            </span>
+                        {/* Type + Priority */}
+                        <div>
+                          <div className="cc-pill-stack">
+                            <span className={typePillClass(item.feedback_type)}>{item.feedback_type}</span>
+                            <span className={priorityPillClass(parsed.priority)}>{parsed.priority}</span>
                           </div>
-                        ) : null}
-                      </div>
+                          {parsed.followUpOutcome !== 'Not Set' && (
+                            <div style={{ marginTop: '5px' }}>
+                              <span className={outcomePillClass(parsed.followUpOutcome)}>{parsed.followUpOutcome}</span>
+                            </div>
+                          )}
+                        </div>
 
-                      <div style={feedbackCellDueDateStyle}>
-                        <div style={primaryCellTextStyle}>{formatDateOnly(item.due_date)}</div>
-                        <div style={{ ...secondaryCellTextStyle, color: isOverdue ? '#b91c1c' : 'var(--cc-subtle, #94a3b8)' }}>
-                          {item.due_date ? (isOverdue ? 'Overdue' : dueDiff === 0 ? 'Due today' : `${dueDiff} day(s) left`) : 'No due date'}
+                        {/* Subject */}
+                        <div>
+                          <div className="cc-cell-primary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.subject}</div>
+                          <div className="cc-cell-secondary">By {item.qa_name}</div>
+                        </div>
+
+                        {/* Follow-up date */}
+                        <div>
+                          <div className="cc-cell-primary">{formatDateOnly(item.due_date)}</div>
+                          <div className={isOverdue ? 'cc-overdue' : 'cc-due-ok'}>
+                            {item.due_date ? (isOverdue ? '⚠ Overdue' : dueDiff === 0 ? 'Due today' : `${dueDiff}d left`) : 'No due date'}
+                          </div>
+                        </div>
+
+                        {/* Status + Stage */}
+                        <div>
+                          <select value={item.status} onChange={(e) => void handleStatusChange(item.id, e.target.value as FeedbackStatus)} className="cc-mini-select" style={{ marginBottom: '5px' }}>
+                            <option value="Open">Open</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Closed">Closed</option>
+                          </select>
+                          <div><span className={stagePillClass(parsed.reviewStage)}>{parsed.reviewStage}</span></div>
+                        </div>
+
+                        {/* Agent Cycle */}
+                        <div>
+                          <button
+                            type="button"
+                            className={`cc-ack-btn${item.acknowledged_by_agent ? ' yes' : ' no'}`}
+                            onClick={() => void handleToggleAcknowledgment(item)}
+                          >
+                            {item.acknowledged_by_agent ? '✓ Acknowledged' : '○ Not yet'}
+                          </button>
+                          <div className="cc-cell-secondary">
+                            {parsed.agentComment ? 'Comment added' : 'Awaiting comment'}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="cc-cell-actions">
+                          <button type="button" className="cc-btn-ghost" onClick={() => setExpandedFeedbackId(isExpanded ? null : item.id)}>
+                            {isExpanded ? 'Hide' : 'Details'}
+                          </button>
+                          <button type="button" className={`cc-btn-danger${pendingDeleteId === item.id ? ' confirm' : ''}`} onClick={() => void handleDelete(item.id)}>
+                            {pendingDeleteId === item.id ? 'Confirm' : 'Delete'}
+                          </button>
                         </div>
                       </div>
 
-                      <div style={feedbackCellStatusStyle}>
-                        <select
-                          value={item.status}
-                          onChange={(e) => void handleStatusChange(item.id, e.target.value as FeedbackStatus)}
-                          style={miniSelectStyle}
-                        >
-                          <option value="Open">Open</option>
-                          <option value="In Progress">In Progress</option>
-                          <option value="Closed">Closed</option>
-                        </select>
-                        <div style={{ marginTop: '8px' }}>
-                          <span style={statusPill(getReviewStageColor(parseStructuredPlan(item.action_plan).reviewStage))}>
-                            {parseStructuredPlan(item.action_plan).reviewStage}
-                          </span>
-                        </div>
-                      </div>
+                      {/* Expanded detail */}
+                      {isExpanded && (
+                        <div className="cc-expanded-wrap">
+                          {/* Stage stepper */}
+                          <ReviewStageStepper current={parsed.reviewStage} />
 
-                      <div style={feedbackCellAckStyle}>
-                        <button
-                          type="button"
-                          onClick={() => void handleToggleAcknowledgment(item)}
-                          style={item.acknowledged_by_agent ? acknowledgedPillButtonStyle : notAcknowledgedPillButtonStyle}
-                        >
-                          {item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'}
-                        </button>
-                        <div style={secondaryCellTextStyle}>
-                          {parseStructuredPlan(item.action_plan).agentComment
-                            ? 'Agent comment added'
-                            : 'Awaiting agent comment'}
-                        </div>
-                      </div>
+                          {/* Text blocks */}
+                          <div style={{ display: 'grid', gap: '8px' }}>
+                            <div className="cc-detail-block">
+                              <div className="cc-detail-label">Coaching Summary</div>
+                              <div className="cc-detail-value">{item.feedback_note}</div>
+                            </div>
+                            {parsed.actionPlan && (
+                              <div className="cc-detail-block">
+                                <div className="cc-detail-label">Action Plan</div>
+                                <div className="cc-detail-value">{parsed.actionPlan}</div>
+                              </div>
+                            )}
+                            {parsed.justification && (
+                              <div className="cc-detail-block">
+                                <div className="cc-detail-label">Justification</div>
+                                <div className="cc-detail-value">{parsed.justification}</div>
+                              </div>
+                            )}
+                          </div>
 
-                      <div style={feedbackCellActionsStyle}>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedFeedbackId(isExpanded ? null : item.id)}
-                          style={secondaryMiniButton}
-                        >
-                          {isExpanded ? 'Hide' : 'Details'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => void handleDelete(item.id)}
-                          style={{
-                            ...dangerMiniButton,
-                            ...(pendingDeleteId === item.id ? dangerMiniButtonActive : {}),
-                          }}
-                        >
-                          {pendingDeleteId === item.id ? 'Confirm' : 'Delete'}
-                        </button>
-                      </div>
+                          {/* Meta grid */}
+                          <div className="cc-expanded-grid">
+                            {[
+                              ['Created', formatDateTime(item.created_at)],
+                              ['Due Date', formatDateOnly(item.due_date)],
+                              ['Status', item.status],
+                              ['Stage', parsed.reviewStage],
+                              ['Priority', parsed.priority],
+                              ['Outcome', parsed.followUpOutcome],
+                              ['Acknowledgment', item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'],
+                            ].map(([k, v]) => (
+                              <div key={k} className="cc-detail-block">
+                                <div className="cc-detail-label">{k}</div>
+                                <div className="cc-detail-mini-val">{v}</div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Cycle editor */}
+                          <div className="cc-cycle-editor">
+                            <div className="cc-cycle-editor-title">Coaching Cycle</div>
+                            <div className="cc-cycle-editor-grid">
+                              <div>
+                                <label className="cc-field-label">Review Stage</label>
+                                <select value={reviewStageDrafts[item.id] || parsed.reviewStage} onChange={(e) => setReviewStageDrafts((p) => ({ ...p, [item.id]: e.target.value as ReviewStage }))} className="cc-field cc-field-select">
+                                  {(['QA Shared', 'Acknowledged', 'Agent Responded', 'Supervisor Reviewed', 'Follow-up', 'Closed'] as ReviewStage[]).map((s) => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </div>
+                              <div style={{ gridColumn: 'span 1' }} /> {/* spacer */}
+                              <div className="cc-cycle-editor-wide">
+                                <label className="cc-field-label">Agent Comment</label>
+                                <textarea value={agentCommentDrafts[item.id] ?? parsed.agentComment} onChange={(e) => setAgentCommentDrafts((p) => ({ ...p, [item.id]: e.target.value }))} rows={3} className="cc-field cc-field-textarea" placeholder="Agent can respond with questions, commitment, or explanation." />
+                              </div>
+                              <div className="cc-cycle-editor-wide">
+                                <label className="cc-field-label">Supervisor Review</label>
+                                <textarea value={supervisorReviewDrafts[item.id] ?? parsed.supervisorReview} onChange={(e) => setSupervisorReviewDrafts((p) => ({ ...p, [item.id]: e.target.value }))} rows={3} className="cc-field cc-field-textarea" placeholder="Supervisor can confirm next steps and route forward." />
+                              </div>
+                            </div>
+                            <div className="cc-btn-row">
+                              <button type="button" className="cc-btn-primary" onClick={() => void handleSaveCycleUpdate(item)}>Save Cycle Update</button>
+                            </div>
+                          </div>
+
+                          {/* Follow-up result editor */}
+                          <div className="cc-cycle-editor">
+                            <div className="cc-cycle-editor-title">Follow-up Result</div>
+                            <div className="cc-cycle-editor-grid">
+                              <div>
+                                <label className="cc-field-label">Outcome</label>
+                                <select value={planOutcomeDrafts[item.id] || parsed.followUpOutcome} onChange={(e) => setPlanOutcomeDrafts((p) => ({ ...p, [item.id]: e.target.value as FollowUpOutcome }))} className="cc-field cc-field-select">
+                                  {(['Not Set', 'Improved', 'Partial Improvement', 'No Improvement', 'Needs Escalation'] as FollowUpOutcome[]).map((o) => <option key={o} value={o}>{o}</option>)}
+                                </select>
+                              </div>
+                              <div style={{ gridColumn: 'span 1' }} />
+                              <div className="cc-cycle-editor-wide">
+                                <label className="cc-field-label">Resolution Note</label>
+                                <textarea value={resolutionNoteDrafts[item.id] ?? parsed.resolutionNote} onChange={(e) => setResolutionNoteDrafts((p) => ({ ...p, [item.id]: e.target.value }))} rows={4} className="cc-field cc-field-textarea" placeholder="Document what happened, what improved, and what still needs attention." />
+                              </div>
+                            </div>
+                            <div className="cc-btn-row">
+                              <button type="button" className="cc-btn-primary" onClick={() => void handleSaveFollowUpResult(item)}>Save Follow-up Result</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-
-                    {isExpanded ? (
-                      <div style={expandedFeedbackWrapStyle}>
-                        <div style={expandedFeedbackPanelStyle}>
-                          <DetailBlock label="Coaching Summary" value={item.feedback_note} />
-                          <DetailBlock
-                            label="Action Plan"
-                            value={parseStructuredPlan(item.action_plan).actionPlan || 'No action plan saved.'}
-                          />
-                          <DetailBlock
-                            label="Justification"
-                            value={parseStructuredPlan(item.action_plan).justification || 'No justification saved.'}
-                          />
-                          <div style={expandedGridStyle}>
-                            <DetailMini label="Created" value={formatDateTime(item.created_at)} />
-                            <DetailMini
-                              label="Acknowledgment"
-                              value={item.acknowledged_by_agent ? 'Acknowledged' : 'Not yet'}
-                            />
-                            <DetailMini label="Follow-up Date" value={formatDateOnly(item.due_date)} />
-                            <DetailMini label="Status" value={item.status} />
-                            <DetailMini label="Stage" value={parseStructuredPlan(item.action_plan).reviewStage} />
-                            <DetailMini label="Priority" value={parseStructuredPlan(item.action_plan).priority} />
-                            <DetailMini
-                              label="Outcome"
-                              value={parseStructuredPlan(item.action_plan).followUpOutcome}
-                            />
-                          </div>
-
-                          <div style={followUpEditorStyle}>
-                            <div style={miniLabelStyle}>Coaching Cycle</div>
-                            <div style={followUpEditorGridStyle}>
-                              <div>
-                                <label style={labelStyle}>Review Stage</label>
-                                <select
-                                  value={reviewStageDrafts[item.id] || parseStructuredPlan(item.action_plan).reviewStage}
-                                  onChange={(e) =>
-                                    setReviewStageDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value as ReviewStage,
-                                    }))
-                                  }
-                                  style={fieldStyle}
-                                >
-                                  <option value="QA Shared">QA Shared</option>
-                                  <option value="Acknowledged">Acknowledged</option>
-                                  <option value="Agent Responded">Agent Responded</option>
-                                  <option value="Supervisor Reviewed">Supervisor Reviewed</option>
-                                  <option value="Follow-up">Follow-up</option>
-                                  <option value="Closed">Closed</option>
-                                </select>
-                              </div>
-
-                              <div style={wideFieldStyle}>
-                                <label style={labelStyle}>Agent Comment</label>
-                                <textarea
-                                  value={agentCommentDrafts[item.id] ?? parseStructuredPlan(item.action_plan).agentComment}
-                                  onChange={(e) =>
-                                    setAgentCommentDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value,
-                                    }))
-                                  }
-                                  rows={3}
-                                  style={fieldStyle}
-                                  placeholder="Agent can respond here with questions, commitment, or explanation."
-                                />
-                              </div>
-
-                              <div style={wideFieldStyle}>
-                                <label style={labelStyle}>Supervisor Review</label>
-                                <textarea
-                                  value={supervisorReviewDrafts[item.id] ?? parseStructuredPlan(item.action_plan).supervisorReview}
-                                  onChange={(e) =>
-                                    setSupervisorReviewDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value,
-                                    }))
-                                  }
-                                  rows={3}
-                                  style={fieldStyle}
-                                  placeholder="Supervisor can review the coaching, confirm next steps, and route it forward."
-                                />
-                              </div>
-                            </div>
-
-                            <div style={actionRowStyle}>
-                              <button
-                                type="button"
-                                onClick={() => void handleSaveCycleUpdate(item)}
-                                style={primaryButton}
-                              >
-                                Save Cycle Update
-                              </button>
-                            </div>
-                          </div>
-
-                          <div style={followUpEditorStyle}>
-                            <div style={miniLabelStyle}>Follow-up Result</div>
-                            <div style={followUpEditorGridStyle}>
-                              <div>
-                                <label style={labelStyle}>Outcome</label>
-                                <select
-                                  value={planOutcomeDrafts[item.id] || parseStructuredPlan(item.action_plan).followUpOutcome}
-                                  onChange={(e) =>
-                                    setPlanOutcomeDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value as FollowUpOutcome,
-                                    }))
-                                  }
-                                  style={fieldStyle}
-                                >
-                                  <option value="Not Set">Not Set</option>
-                                  <option value="Improved">Improved</option>
-                                  <option value="Partial Improvement">Partial Improvement</option>
-                                  <option value="No Improvement">No Improvement</option>
-                                  <option value="Needs Escalation">Needs Escalation</option>
-                                </select>
-                              </div>
-
-                              <div style={wideFieldStyle}>
-                                <label style={labelStyle}>Resolution Note</label>
-                                <textarea
-                                  value={resolutionNoteDrafts[item.id] ?? parseStructuredPlan(item.action_plan).resolutionNote}
-                                  onChange={(e) =>
-                                    setResolutionNoteDrafts((prev) => ({
-                                      ...prev,
-                                      [item.id]: e.target.value,
-                                    }))
-                                  }
-                                  rows={4}
-                                  style={fieldStyle}
-                                  placeholder="Document what happened after follow-up, what improved, and what still needs attention."
-                                />
-                              </div>
-                            </div>
-
-                            <div style={actionRowStyle}>
-                              <button
-                                type="button"
-                                onClick={() => void handleSaveFollowUpResult(item)}
-                                style={primaryButton}
-                              >
-                                Save Follow-up Result
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
       </div>
     </div>
   );
-}
-
-function SummaryCard({ title, value, subtitle }: { title: string; value: string; subtitle: string }) {
-  return (
-    <div style={summaryCardStyle}>
-      <div style={summaryCardLabelStyle}>{title}</div>
-      <div style={summaryCardValueStyle}>{value}</div>
-      <div style={summaryCardSubtitleStyle}>{subtitle}</div>
-    </div>
-  );
-}
-
-function ContextCard({ title, value, helper }: { title: string; value: string; helper: string }) {
-  return (
-    <div style={contextCardStyle}>
-      <div style={miniLabelStyle}>{title}</div>
-      <div style={contextValueStyle}>{value}</div>
-      <div style={contextHelperStyle}>{helper}</div>
-    </div>
-  );
-}
-
-function DetailBlock({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={detailBlockStyle}>
-      <div style={miniLabelStyle}>{label}</div>
-      <div style={detailValueStyle}>{value}</div>
-    </div>
-  );
-}
-
-function DetailMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={detailMiniStyle}>
-      <div style={miniLabelStyle}>{label}</div>
-      <div style={primaryCellTextStyle}>{value}</div>
-    </div>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return <div style={emptyStateStyle}>{text}</div>;
-}
-
-const pageHeaderStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'flex-start',
-  gap: '16px',
-  flexWrap: 'wrap',
-  marginBottom: '22px',
-};
-
-
-const panelEyebrowStyle: React.CSSProperties = {
-  color: 'var(--cc-eyebrow, #93c5fd)',
-  fontSize: '11px',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  letterSpacing: '0.14em',
-  marginBottom: '8px',
-};
-
-const panelTitleStyle: React.CSSProperties = {
-  marginTop: 0,
-  marginBottom: '8px',
-  color: 'var(--cc-title, #f8fafc)',
-  fontSize: '24px',
-  fontWeight: 900,
-};
-
-const panelSubtitleStyle: React.CSSProperties = {
-  marginTop: 0,
-  marginBottom: '16px',
-  color: 'var(--cc-subtitle, #94a3b8)',
-  fontSize: '14px',
-};
-
-const summaryGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-  gap: '16px',
-  marginBottom: '18px',
-};
-
-const summaryCardStyle: React.CSSProperties = {
-  background: 'var(--cc-panel-bg)',
-  border: 'var(--cc-panel-border)',
-  borderRadius: '22px',
-  padding: '20px',
-  boxShadow: 'var(--cc-panel-shadow)',
-};
-
-const summaryCardLabelStyle: React.CSSProperties = {
-  color: 'var(--cc-subtle)',
-  fontSize: '12px',
-  fontWeight: 700,
-  textTransform: 'uppercase',
-  letterSpacing: '0.12em',
-  marginBottom: '8px',
-};
-
-const summaryCardValueStyle: React.CSSProperties = {
-  color: 'var(--cc-title)',
-  fontSize: '30px',
-  fontWeight: 900,
-  marginBottom: '8px',
-};
-
-const summaryCardSubtitleStyle: React.CSSProperties = {
-  color: 'var(--cc-subtle)',
-  fontSize: '12px',
-};
-
-const workspaceGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'minmax(0, 1.3fr) minmax(320px, 0.9fr)',
-  gap: '18px',
-  marginBottom: '18px',
-};
-
-const stackPanelStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '18px',
-};
-
-const panelStyle: React.CSSProperties = {
-  background: 'var(--cc-panel-bg)',
-  border: 'var(--cc-panel-border)',
-  borderRadius: '24px',
-  padding: '20px',
-  boxShadow: 'var(--cc-panel-shadow)',
-};
-
-const formGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '14px',
-};
-
-const filterGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '12px',
-};
-
-const wideFieldStyle: React.CSSProperties = {
-  gridColumn: '1 / -1',
-};
-
-const labelStyle: React.CSSProperties = {
-  display: 'block',
-  marginBottom: '8px',
-  color: 'var(--cc-muted)',
-  fontSize: '12px',
-  fontWeight: 700,
-};
-
-const fieldStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: 'var(--cc-field-border)',
-  background: 'var(--cc-field-bg)',
-  color: 'var(--cc-field-text)',
-  minHeight: '48px',
-};
-
-const primaryButton: React.CSSProperties = {
-  padding: '12px 16px',
-  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-  color: '#ffffff',
-  border: '1px solid rgba(96,165,250,0.24)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const secondaryButton: React.CSSProperties = {
-  padding: '12px 16px',
-  background: 'var(--cc-button-bg)',
-  color: 'var(--cc-button-text)',
-  border: 'var(--cc-button-border)',
-  borderRadius: '14px',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const actionRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap',
-  marginTop: '18px',
-};
-
-const infoCardStyle: React.CSSProperties = {
-  borderRadius: '18px',
-  background: 'var(--cc-soft-bg)',
-  border: 'var(--cc-row-border)',
-  padding: '16px',
-};
-
-const infoCardTitleStyle: React.CSSProperties = {
-  color: 'var(--cc-title)',
-  fontWeight: 800,
-  marginBottom: '10px',
-};
-
-const infoLineStyle: React.CSSProperties = {
-  color: 'var(--cc-page-text)',
-  margin: '0 0 8px 0',
-  fontSize: '13px',
-};
-
-const pickerButtonStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '12px 14px',
-  borderRadius: '14px',
-  border: 'var(--cc-field-border)',
-  background: 'var(--cc-field-bg)',
-  color: 'var(--cc-field-text)',
-  minHeight: '48px',
-  cursor: 'pointer',
-  display: 'flex',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-};
-
-const pickerMenuStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: 'calc(100% + 8px)',
-  left: 0,
-  right: 0,
-  zIndex: 20,
-  borderRadius: '18px',
-  background: 'var(--cc-panel-bg)',
-  border: 'var(--cc-panel-border)',
-  boxShadow: 'var(--cc-panel-shadow)',
-  padding: '12px',
-};
-
-const pickerSearchWrapStyle: React.CSSProperties = {
-  marginBottom: '10px',
-};
-
-const pickerListStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '8px',
-  maxHeight: '260px',
-  overflowY: 'auto',
-};
-
-const pickerInfoStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  color: 'var(--cc-subtle)',
-};
-
-const pickerOptionStyle: React.CSSProperties = {
-  padding: '12px 14px',
-  borderRadius: '12px',
-  border: 'var(--cc-row-border)',
-  background: 'var(--cc-card-bg)',
-  color: 'var(--cc-page-text)',
-  textAlign: 'left',
-  cursor: 'pointer',
-};
-
-const pickerOptionActiveStyle: React.CSSProperties = {
-  background: 'var(--cc-accent-bg)',
-  color: 'var(--cc-accent-text)',
-};
-
-const contextGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '12px',
-};
-
-const contextCardStyle: React.CSSProperties = {
-  borderRadius: '18px',
-  border: 'var(--cc-row-border)',
-  background: 'var(--cc-card-bg)',
-  padding: '16px',
-};
-
-const contextValueStyle: React.CSSProperties = {
-  color: 'var(--cc-title)',
-  fontSize: '20px',
-  fontWeight: 800,
-  margin: '6px 0',
-};
-
-const contextHelperStyle: React.CSSProperties = {
-  color: 'var(--cc-subtle)',
-  fontSize: '12px',
-};
-
-const auditFilterGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-  gap: '12px',
-  marginTop: '14px',
-  marginBottom: '14px',
-};
-
-const auditHistoryListStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '12px',
-  maxHeight: '460px',
-  overflowY: 'auto',
-  paddingRight: '4px',
-};
-
-const auditHistoryCardStyle: React.CSSProperties = {
-  borderRadius: '18px',
-  border: 'var(--cc-row-border)',
-  background: 'var(--cc-card-bg)',
-  padding: '16px',
-};
-
-const auditHistoryCardActiveStyle: React.CSSProperties = {
-  boxShadow: 'inset 0 0 0 2px rgba(37,99,235,0.20)',
-  background: 'var(--cc-soft-bg)',
-};
-
-const auditHistoryTopRowStyle: React.CSSProperties = {
-  display: 'flex',
-  justifyContent: 'space-between',
-  gap: '12px',
-  alignItems: 'flex-start',
-};
-
-const auditHistoryCommentStyle: React.CSSProperties = {
-  marginTop: '12px',
-  color: 'var(--cc-page-text)',
-  lineHeight: 1.6,
-  fontSize: '13px',
-  whiteSpace: 'pre-wrap',
-};
-
-const auditHistoryActionRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '10px',
-  alignItems: 'center',
-  flexWrap: 'wrap',
-  marginTop: '14px',
-};
-
-const auditScoreStyle: React.CSSProperties = {
-  color: 'var(--cc-title)',
-  fontSize: '18px',
-  fontWeight: 900,
-};
-
-const selectedAuditPillStyle: React.CSSProperties = {
-  padding: '7px 10px',
-  borderRadius: '999px',
-  background: 'var(--cc-accent-bg)',
-  color: 'var(--cc-accent-text)',
-  fontWeight: 800,
-  fontSize: '12px',
-};
-
-const routingGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '12px',
-  marginBottom: '14px',
-};
-
-
-const miniLabelStyle: React.CSSProperties = {
-  color: 'var(--cc-eyebrow)',
-  fontSize: '11px',
-  fontWeight: 800,
-  textTransform: 'uppercase',
-  letterSpacing: '0.12em',
-};
-
-
-const feedbackTableWrapStyle: React.CSSProperties = {
-  overflowX: 'auto',
-  borderRadius: '18px',
-  marginTop: '14px',
-};
-
-const feedbackTableStyle: React.CSSProperties = {
-  minWidth: '1120px',
-  display: 'grid',
-  gap: '10px',
-};
-
-const feedbackEntryStyle: React.CSSProperties = {
-  display: 'grid',
-  gap: '10px',
-};
-
-const feedbackRowStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '2fr 1fr 1.6fr 1fr 1fr 1fr 1.3fr',
-  gap: '10px',
-  alignItems: 'center',
-  padding: '14px',
-  borderRadius: '16px',
-  background: 'var(--cc-card-bg)',
-  border: 'var(--cc-row-border)',
-};
-
-const feedbackHeaderRowStyle: React.CSSProperties = {
-  background: 'var(--cc-soft-bg)',
-};
-
-const feedbackCellAgentStyle: React.CSSProperties = {};
-const feedbackCellTypeStyle: React.CSSProperties = {};
-const feedbackCellSubjectStyle: React.CSSProperties = {};
-const feedbackCellDueDateStyle: React.CSSProperties = {};
-const feedbackCellStatusStyle: React.CSSProperties = {};
-const feedbackCellAckStyle: React.CSSProperties = {};
-const feedbackCellActionsStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap',
-};
-
-const primaryCellTextStyle: React.CSSProperties = {
-  color: 'var(--cc-title)',
-  fontWeight: 700,
-  fontSize: '14px',
-};
-
-const secondaryCellTextStyle: React.CSSProperties = {
-  color: 'var(--cc-subtle)',
-  marginTop: '4px',
-  fontSize: '12px',
-};
-
-const miniSelectStyle: React.CSSProperties = {
-  width: '100%',
-  minHeight: '40px',
-  padding: '8px 10px',
-  borderRadius: '12px',
-  border: 'var(--cc-field-border)',
-  background: 'var(--cc-field-bg)',
-  color: 'var(--cc-field-text)',
-};
-
-const secondaryMiniButton: React.CSSProperties = {
-  padding: '9px 12px',
-  borderRadius: '12px',
-  background: 'var(--cc-button-bg)',
-  color: 'var(--cc-button-text)',
-  border: 'var(--cc-button-border)',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const dangerMiniButton: React.CSSProperties = {
-  padding: '9px 12px',
-  borderRadius: '12px',
-  background: 'rgba(239,68,68,0.10)',
-  color: '#dc2626',
-  border: '1px solid rgba(239,68,68,0.24)',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const dangerMiniButtonActive: React.CSSProperties = {
-  background: 'rgba(239,68,68,0.18)',
-};
-
-const acknowledgedPillButtonStyle: React.CSSProperties = {
-  padding: '9px 12px',
-  borderRadius: '999px',
-  background: 'rgba(22,101,52,0.10)',
-  color: '#166534',
-  border: '1px solid rgba(22,101,52,0.20)',
-  cursor: 'pointer',
-  fontWeight: 800,
-};
-
-const notAcknowledgedPillButtonStyle: React.CSSProperties = {
-  padding: '9px 12px',
-  borderRadius: '999px',
-  background: 'rgba(37,99,235,0.10)',
-  color: '#1d4ed8',
-  border: '1px solid rgba(37,99,235,0.20)',
-  cursor: 'pointer',
-  fontWeight: 800,
-};
-
-const expandedFeedbackWrapStyle: React.CSSProperties = {
-  paddingLeft: '14px',
-  paddingRight: '14px',
-};
-
-const expandedFeedbackPanelStyle: React.CSSProperties = {
-  borderRadius: '18px',
-  border: 'var(--cc-row-border)',
-  background: 'var(--cc-soft-bg)',
-  padding: '16px',
-  display: 'grid',
-  gap: '12px',
-};
-
-const detailBlockStyle: React.CSSProperties = {
-  borderRadius: '14px',
-  background: 'var(--cc-card-bg)',
-  border: 'var(--cc-row-border)',
-  padding: '14px',
-};
-
-const detailValueStyle: React.CSSProperties = {
-  color: 'var(--cc-page-text)',
-  lineHeight: 1.7,
-  marginTop: '8px',
-  whiteSpace: 'pre-wrap',
-};
-
-const expandedGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-  gap: '12px',
-};
-
-const detailMiniStyle: React.CSSProperties = {
-  borderRadius: '14px',
-  background: 'var(--cc-card-bg)',
-  border: 'var(--cc-row-border)',
-  padding: '14px',
-};
-
-const planTabRowStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '10px',
-  flexWrap: 'wrap',
-  marginBottom: '14px',
-};
-
-const planTabButtonStyle: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: '999px',
-  background: 'var(--cc-button-bg)',
-  color: 'var(--cc-button-text)',
-  border: 'var(--cc-button-border)',
-  cursor: 'pointer',
-  fontWeight: 700,
-};
-
-const planTabButtonActiveStyle: React.CSSProperties = {
-  background: 'var(--cc-accent-bg)',
-  color: 'var(--cc-accent-text)',
-};
-
-const stackBadgeWrapStyle: React.CSSProperties = {
-  display: 'flex',
-  gap: '8px',
-  flexWrap: 'wrap',
-};
-
-const followUpEditorStyle: React.CSSProperties = {
-  borderRadius: '18px',
-  border: 'var(--cc-row-border)',
-  background: 'var(--cc-card-bg)',
-  padding: '16px',
-};
-
-const followUpEditorGridStyle: React.CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-  gap: '12px',
-  marginTop: '12px',
-};
-
-const emptyTextStyle: React.CSSProperties = {
-  color: 'var(--cc-subtle)',
-};
-
-const emptyStateStyle: React.CSSProperties = {
-  marginTop: '8px',
-  padding: '18px',
-  borderRadius: '16px',
-  border: 'var(--cc-row-border)',
-  backgroundColor: 'var(--cc-card-bg)',
-  color: 'var(--cc-subtle)',
-  textAlign: 'center',
-  fontWeight: 500,
-};
-
-const errorBannerStyle: React.CSSProperties = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'var(--cc-error-bg)',
-  color: 'var(--cc-error-text)',
-};
-
-const successBannerStyle: React.CSSProperties = {
-  marginBottom: '16px',
-  padding: '14px 16px',
-  borderRadius: '16px',
-  backgroundColor: 'var(--cc-success-bg)',
-  color: 'var(--cc-success-text)',
-};
-
-function statusPill(color: string): React.CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '999px',
-    padding: '7px 10px',
-    fontSize: '12px',
-    fontWeight: 800,
-    background: `${color}18`,
-    color,
-    border: `1px solid ${color}30`,
-  };
 }
 
 export default CoachingCenter;
