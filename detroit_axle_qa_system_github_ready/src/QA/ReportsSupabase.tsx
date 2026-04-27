@@ -188,6 +188,7 @@ const RPT_CSS = `
     font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
     color: var(--fg-default);
     animation: rptFadeUp 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+    overflow: visible;
   }
 
   /* ── Page header ───────────────────────────────────────── */
@@ -231,6 +232,9 @@ const RPT_CSS = `
 
   /* ── Filter panel ──────────────────────────────────────── */
   .rpt-filter-panel {
+    position: relative;
+    z-index: 20;
+    overflow: visible;
     background: var(--bg-elevated);
     border: 1px solid var(--border-strong);
     border-radius: 16px;
@@ -265,7 +269,11 @@ const RPT_CSS = `
     gap: 10px;
     align-items: flex-start;
   }
-  .rpt-agent-picker-wrap { flex: 1; position: relative; }
+  .rpt-agent-picker-wrap {
+    flex: 1;
+    position: relative;
+    z-index: 30;
+  }
 
   /* Input / Select / Picker */
   .rpt-field {
@@ -329,7 +337,7 @@ const RPT_CSS = `
     border: 1px solid var(--border-strong);
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
-    z-index: 50;
+    z-index: 9999;
     overflow: hidden;
     animation: rptScaleIn 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
@@ -402,6 +410,8 @@ const RPT_CSS = `
 
   /* ── Export bar ────────────────────────────────────────── */
   .rpt-export-bar {
+    position: relative;
+    z-index: 1;
     display: flex;
     gap: 6px;
     flex-wrap: wrap;
@@ -1974,7 +1984,10 @@ function ReportsSupabase() {
       </div>
 
       {/* Filter panel */}
-      <div className="rpt-filter-panel">
+      <div
+        className="rpt-filter-panel"
+        style={{ zIndex: isAgentPickerOpen ? 1000 : 20 }}
+      >
         <div className="rpt-filter-grid">
           <div>
             <label className="rpt-filter-label">Date From</label>
