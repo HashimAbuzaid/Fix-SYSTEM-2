@@ -13,7 +13,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import { supabase } from "../lib/supabase";
