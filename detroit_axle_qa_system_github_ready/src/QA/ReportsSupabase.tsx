@@ -333,7 +333,7 @@ const RPT_CSS = `
     position: absolute;
     top: calc(100% + 6px);
     left: 0; right: 0;
-    background: var(--bg-overlay);
+    background: var(--bg-elevated);
     border: 1px solid var(--border-strong);
     border-radius: 12px;
     box-shadow: var(--shadow-lg);
@@ -348,23 +348,25 @@ const RPT_CSS = `
   .rpt-picker-list {
     max-height: 260px;
     overflow-y: auto;
-    padding: 6px;
+    padding: 8px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
   }
   .rpt-picker-option {
-    padding: 8px 10px;
-    border-radius: 7px;
+    min-height: 34px;
+    padding: 8px 12px;
+    border-radius: 8px;
     border: 1px solid transparent;
     background: transparent;
     text-align: left;
     cursor: pointer;
-    font-size: 12px;
-    font-weight: 500;
+    font-size: 13px;
+    line-height: 1.35;
+    font-weight: 600;
     color: var(--fg-default);
     font-family: var(--font-sans, 'Geist', system-ui, sans-serif);
-    transition: background 80ms ease, border-color 80ms ease;
+    transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
