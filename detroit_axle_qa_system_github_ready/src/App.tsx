@@ -83,7 +83,6 @@ import {
   memo,
   type CSSProperties,
   type ReactNode,
-  type Dispatch,
 } from "react";
 import {
   BrowserRouter,
@@ -181,13 +180,6 @@ const SIDEBAR_W_EXPANDED  = 252;
 const COMPACT_BP          = 1024;
 const RECENCY_KEY         = "da-nav-recency";
 const RECENCY_MAX         = 5;
-
-const EASING = {
-  smooth:  "cubic-bezier(0.16, 1, 0.3, 1)",
-  spring:  "cubic-bezier(0.34, 1.56, 0.64, 1)",
-  sharp:   "cubic-bezier(0.4, 0, 0.6, 1)",
-  linear:  "linear",
-} as const;
 
 // Navigation groups and their order
 const NAV_GROUP_ORDER = ["Core", "Audits", "Data", "Analytics", "Management", "Account"] as const;
@@ -1824,7 +1816,7 @@ const CommandPalette = memo(function CommandPalette({
 
   // Recency items (only shown when query is empty)
   const recentItems = useMemo<NavItem[]>(() => {
-    if (query.trim()) return [];
+    if (query.trim()) return [] as NavItem[];
     return recency
       .map(p => items.find(i => i.path === p))
       .filter((x): x is NavItem => !!x);
@@ -1833,7 +1825,7 @@ const CommandPalette = memo(function CommandPalette({
   // Filtered + grouped results
   const filtered = useMemo<NavItem[]>(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return items;
+    if (!q) return [...items];
     return items.filter(i =>
       i.label.toLowerCase().includes(q) || i.group.toLowerCase().includes(q)
     );
@@ -2487,7 +2479,7 @@ function AppShell() {
   // Scroll to top on route change + reset compact nav scroll
   const compactNavRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+    window.scrollTo({ top: 0, behavior: "auto" });
     if (compactNavRef.current) compactNavRef.current.scrollLeft = 0;
   }, [location.pathname]);
 
