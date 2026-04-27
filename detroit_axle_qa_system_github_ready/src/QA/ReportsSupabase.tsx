@@ -1700,7 +1700,7 @@ function PerformanceTrendsSection({
         </div>
       </div>
 
-      {!selectedAgent && !effectiveTeamFilter && (
+      {selectedAgents.length === 0 && !effectiveTeamFilter && (
         <div className="rpt-trend-helper" style={{ marginTop: '10px' }}>
           No team or agent selected — showing all visible audits vs overall baseline.
         </div>
@@ -1728,7 +1728,7 @@ function ReportsSupabase() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
-  const [selectedAgentProfileIdss, setSelectedAgentProfileIds] = useState<string[]>([]);
+  const [selectedAgentProfileIds, setSelectedAgentProfileIds] = useState<string[]>([]);
   const [agentSearch, setAgentSearch] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
 
@@ -1781,8 +1781,8 @@ function ReportsSupabase() {
   }
 
   const selectedAgents = useMemo(
-    () => profiles.filter((p) => selectedAgentProfileIdss.includes(p.id)),
-    [profiles, selectedAgentProfileIdss]
+    () => profiles.filter((p) => selectedAgentProfileIds.includes(p.id)),
+    [profiles, selectedAgentProfileIds]
   );
 
   const selectedAgent = selectedAgents.length === 1 ? selectedAgents[0] : null;
