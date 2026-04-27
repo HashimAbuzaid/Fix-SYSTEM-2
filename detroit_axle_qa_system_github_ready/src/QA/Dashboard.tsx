@@ -459,10 +459,15 @@ const DASH_CSS = `
   border-radius: var(--dv-radius-xl) var(--dv-radius-xl) 0 0;
 }
 .dv6-kpi-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-.dv6-kpi-value {
-  font-family: var(--dv-font-display); font-size: 30px; font-weight: 700;
-  color: var(--dv-text); letter-spacing: -0.04em; line-height: 1;
+..dv6-kpi-value {
+  font-family: var(--dv-font-body); /* ← professional clean font */
+  font-size: 30px;
+  font-weight: 600; /* slightly less aggressive */
+  color: var(--dv-text);
+  letter-spacing: -0.01em; /* tighter, more corporate */
+  line-height: 1;
   margin-bottom: 8px;
+  font-variant-numeric: tabular-nums; /* aligned numbers */
   animation: dv6-number-in 400ms var(--dv-spring) var(--delay, 0ms) both;
 }
 .dv6-kpi-delta {
