@@ -537,6 +537,90 @@ function getTeamAccent(team: string): string {
   return 'var(--al-subtle)';
 }
 
+
+const RotorLoaderVisual = memo(function RotorLoaderVisual() {
+  const boltHoles = [0, 60, 120, 180, 240, 300];
+  const ventilationSlots = Array.from({ length: 12 }, (_, idx) => idx * 30);
+
+  return (
+    <div className="da-loader-visual" aria-hidden="true">
+      <div className="da-loader-disc-spin">
+        <svg viewBox="0 0 140 140" className="da-loader-svg">
+          <defs>
+            <radialGradient id="da-rotor-metal-audits" cx="48%" cy="40%" r="70%">
+              <stop offset="0%" stopColor="#f3f6fb" />
+              <stop offset="42%" stopColor="#a4acb8" />
+              <stop offset="72%" stopColor="#5d6470" />
+              <stop offset="100%" stopColor="#222831" />
+            </radialGradient>
+            <linearGradient id="da-rotor-edge-audits" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#eef2f7" />
+              <stop offset="45%" stopColor="#6d7480" />
+              <stop offset="100%" stopColor="#1b2028" />
+            </linearGradient>
+            <radialGradient id="da-rotor-hub-audits" cx="45%" cy="38%" r="75%">
+              <stop offset="0%" stopColor="#cfd6df" />
+              <stop offset="70%" stopColor="#47515e" />
+              <stop offset="100%" stopColor="#1a2028" />
+            </radialGradient>
+          </defs>
+
+          <circle cx="70" cy="70" r="61" fill="#0f1319" opacity="0.4" />
+          <circle cx="70" cy="70" r="58" fill="url(#da-rotor-edge-audits)" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
+          <circle cx="70" cy="70" r="46.5" fill="none" stroke="rgba(15,18,24,0.85)" strokeWidth="20" />
+          <circle cx="70" cy="70" r="46.5" fill="none" stroke="url(#da-rotor-metal-audits)" strokeWidth="16" />
+          <circle cx="70" cy="70" r="45.5" fill="none" stroke="rgba(255,255,255,0.24)" strokeWidth="1.6" opacity="0.75" />
+
+          {ventilationSlots.map((angle) => (
+            <rect
+              key={angle}
+              x="67"
+              y="15"
+              width="6"
+              height="22"
+              rx="3"
+              fill="rgba(12,16,24,0.62)"
+              transform={`rotate(${angle} 70 70)`}
+            />
+          ))}
+
+          <circle cx="70" cy="70" r="23" fill="url(#da-rotor-hub-audits)" stroke="rgba(255,255,255,0.18)" strokeWidth="1.4" />
+          <circle cx="70" cy="70" r="8.5" fill="#0b1016" stroke="rgba(255,255,255,0.18)" strokeWidth="1.2" />
+
+          {boltHoles.map((angle) => {
+            const radians = (angle * Math.PI) / 180;
+            const x = 70 + Math.cos(radians) * 15;
+            const y = 70 + Math.sin(radians) * 15;
+            return <circle key={angle} cx={x} cy={y} r="2.6" fill="#0d1218" stroke="rgba(255,255,255,0.12)" strokeWidth="0.8" />;
+          })}
+        </svg>
+      </div>
+
+      <svg viewBox="0 0 140 140" className="da-loader-svg da-loader-caliper">
+        <defs>
+          <linearGradient id="da-caliper-body-audits" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#d7dee7" />
+            <stop offset="35%" stopColor="#8a93a0" />
+            <stop offset="100%" stopColor="#353d49" />
+          </linearGradient>
+          <linearGradient id="da-caliper-accent-audits" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#4ba7ff" />
+            <stop offset="100%" stopColor="#235ec9" />
+          </linearGradient>
+        </defs>
+        <path d="M88 28 C104 28 114 39 114 55 V84 C114 97 105 108 91 108 H78 C74 108 72 105 72 101 V92 C72 88 70 85 66 84 L57 82 C53 81 50 77 50 73 V62 C50 58 53 54 57 53 L66 51 C70 50 72 47 72 43 V35 C72 31 75 28 79 28 H88 Z" fill="url(#da-caliper-body-audits)" stroke="rgba(255,255,255,0.22)" strokeWidth="1.5" />
+        <path d="M82 37 H96 C103 37 108 42 108 49 V89 C108 96 103 101 96 101 H82" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="2.2" />
+        <rect x="76" y="50" width="22" height="39" rx="9" fill="rgba(12,16,22,0.28)" />
+        <rect x="81" y="45" width="8" height="49" rx="4" fill="url(#da-caliper-accent-audits)" opacity="0.95" />
+        <circle cx="95" cy="48" r="3.4" fill="#171d25" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
+        <circle cx="95" cy="92" r="3.4" fill="#171d25" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
+        <path d="M57 58 H74" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" />
+        <path d="M57 78 H74" stroke="rgba(255,255,255,0.18)" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    </div>
+  );
+});
+
 /* ═════════════════════════════════════════════════════════════
    Main Component
    ═════════════════════════════════════════════════════════════ */
@@ -1608,25 +1692,16 @@ function AuditsListSupabase() {
         data-no-theme-invert="true"
         style={{ ...(themeVars as CSSProperties), ...S.loadingWrap }}
       >
-        <div className="da-themed-loader-shell da-themed-loader-shell--page">
-          <div className="da-themed-loader-card">
-            <div className="da-themed-loader">
-              <div className="da-themed-loader__art" aria-hidden="true">
-                <div className="da-themed-loader__glow" />
-                <div className="da-themed-loader__rotor">
-                  <div className="da-themed-loader__rotor-face" />
-                  <div className="da-themed-loader__hub" />
-                </div>
-                <div className="da-themed-loader__caliper" />
-                <div className="da-themed-loader__spark" />
-              </div>
-              <div className="da-themed-loader__copy">
-                <div className="da-themed-loader__eyebrow">Detroit Axle</div>
-                <div className="da-themed-loader__label">Loading audits...</div>
-                <div className="da-themed-loader__sub">
-                  Checking rotors, calipers, and release state
-                </div>
-              </div>
+        <div className="da-loader-card">
+          <RotorLoaderVisual />
+          <div className="da-loader-copy">
+            <div className="da-loader-eyebrow">Detroit Axle QA</div>
+            <div className="da-loader-headline">Loading audits...</div>
+            <div className="da-loader-sub">
+              Checking rotors, calipers, and release state.
+            </div>
+            <div className="da-loader-bar">
+              <div className="da-loader-bar-fill" />
             </div>
           </div>
         </div>
@@ -2822,12 +2897,12 @@ function AuditDetailView({
 const S: Record<string, CSSProperties> = {
   root: {
     color: 'var(--al-text)',
-    fontFamily: "'DM Sans', 'Syne', system-ui, sans-serif",
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
   },
   loadingWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
+    minHeight: 'calc(100vh - 120px)',
+    display: 'grid',
+    placeItems: 'center',
     padding: '40px',
     color: 'var(--al-subtle)',
   },
@@ -2854,7 +2929,7 @@ const S: Record<string, CSSProperties> = {
     fontWeight: 800,
     color: 'var(--al-heading-soft)',
     letterSpacing: '-0.02em',
-    fontFamily: "'Syne', system-ui, sans-serif",
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
   },
   pageSubtitle: {
     margin: 0,
@@ -3072,7 +3147,7 @@ const S: Record<string, CSSProperties> = {
     fontSize: '18px',
     fontWeight: 800,
     color: 'var(--al-heading-soft)',
-    fontFamily: "'Syne', system-ui, sans-serif",
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
   },
   statsRow: {
     display: 'flex',
@@ -3090,8 +3165,10 @@ const S: Record<string, CSSProperties> = {
   },
   statVal: {
     fontSize: '22px',
-    fontWeight: 800,
-    fontFamily: "'Syne', system-ui, sans-serif",
+    fontWeight: 750,
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: '-0.03em',
   },
   statLabel: {
     fontSize: '11px',
@@ -3162,9 +3239,12 @@ const S: Record<string, CSSProperties> = {
     minWidth: '76px',
     padding: '6px 10px',
     borderRadius: '999px',
-    fontWeight: 800,
+    fontWeight: 750,
     fontSize: '13px',
     border: '1px solid',
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: '-0.01em',
   },
   statusPill: {
     display: 'inline-flex',
@@ -3246,10 +3326,12 @@ const S: Record<string, CSSProperties> = {
   },
   scorePreviewVal: {
     fontSize: '32px',
-    fontWeight: 800,
+    fontWeight: 750,
     color: 'var(--al-heading-soft)',
     marginTop: '6px',
-    fontFamily: "'Syne', system-ui, sans-serif",
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: '-0.03em',
   },
 
   pickerBtn: {
@@ -3530,9 +3612,12 @@ const S: Record<string, CSSProperties> = {
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: '10px',
-    fontWeight: 800,
+    fontWeight: 750,
     fontSize: '13px',
     border: '1px solid',
+    fontFamily: "var(--font-sans, 'Geist', system-ui, sans-serif)",
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: '-0.01em',
   },
   evalOff: {
     background: 'var(--al-off-bg)',
