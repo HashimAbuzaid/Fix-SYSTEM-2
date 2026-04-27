@@ -160,13 +160,13 @@ const DASHBOARD_CACHE_TTL_MS = 1000 * 60 * 5;
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const DASH_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto+Mono:wght@400;500;600&display=swap');
 
 /* ── Token layer ── */
 .dv6-root {
-  --dv-font-display: 'Syne', sans-serif;
-  --dv-font-body: 'IBM Plex Sans', sans-serif;
-  --dv-font-mono: 'IBM Plex Mono', monospace;
+  --dv-font-display: 'Inter', system-ui, sans-serif;
+  --dv-font-body: 'Inter', system-ui, sans-serif;
+  --dv-font-mono: 'Roboto Mono', monospace;
 
   /* Geometry */
   --dv-radius-sm: 4px;
@@ -252,6 +252,7 @@ const DASH_CSS = `
   background-image: radial-gradient(var(--dv-grid-dot) 1px, transparent 1px);
   background-size: 24px 24px;
   -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
 }
 .dv6-root *, .dv6-root *::before, .dv6-root *::after { box-sizing: border-box; }
 .dv6-root button { font-family: var(--dv-font-body); cursor: pointer; }
@@ -290,10 +291,30 @@ const DASH_CSS = `
 .dv6-section-enter { animation: dv6-down 260ms var(--dv-ease) both; }
 
 /* ── Typography utilities ── */
-.dv6-display { font-family: var(--dv-font-display); letter-spacing: -0.03em; }
-.dv6-mono    { font-family: var(--dv-font-mono); font-variant-numeric: tabular-nums lining-nums; }
-.dv6-label   { font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dv-text-muted); }
-.dv6-label-sm { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--dv-text-muted); }
+.dv6-display {
+  font-family: var(--dv-font-display);
+  letter-spacing: -0.02em;
+  font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1;
+}
+.dv6-mono {
+  font-family: var(--dv-font-mono);
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+.dv6-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dv-text-muted);
+}
+.dv6-label-sm {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--dv-text-muted);
+}
 
 /* ── Card base ── */
 .dv6-card {
@@ -380,8 +401,9 @@ const DASH_CSS = `
 }
 .dv6-hero-title {
   font-family: var(--dv-font-display); font-size: clamp(28px, 4vw, 44px);
-  font-weight: 700; color: var(--dv-text); letter-spacing: -0.035em;
+  font-weight: 800; color: var(--dv-text); letter-spacing: -0.04em;
   line-height: 1.05; margin: 0 0 8px;
+  font-feature-settings: 'cv02' 1, 'cv03' 1, 'cv04' 1;
 }
 .dv6-hero-sub {
   font-size: 13px; color: var(--dv-text-sub); font-weight: 400;
@@ -459,15 +481,16 @@ const DASH_CSS = `
   border-radius: var(--dv-radius-xl) var(--dv-radius-xl) 0 0;
 }
 .dv6-kpi-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
-..dv6-kpi-value {
-  font-family: var(--dv-font-body); /* ← professional clean font */
+.dv6-kpi-value {
+  font-family: var(--dv-font-display);
   font-size: 30px;
-  font-weight: 600; /* slightly less aggressive */
+  font-weight: 700;
   color: var(--dv-text);
-  letter-spacing: -0.01em; /* tighter, more corporate */
+  letter-spacing: -0.025em;
   line-height: 1;
   margin-bottom: 8px;
-  font-variant-numeric: tabular-nums; /* aligned numbers */
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1;
   animation: dv6-number-in 400ms var(--dv-spring) var(--delay, 0ms) both;
 }
 .dv6-kpi-delta {
@@ -503,7 +526,15 @@ const DASH_CSS = `
 .dv6-team-body { padding: 16px 20px; }
 .dv6-team-stat { display: grid; gap: 2px; }
 .dv6-team-stat-label { font-family: var(--dv-font-mono); font-size: 10px; font-weight: 500; color: var(--dv-text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
-.dv6-team-stat-value { font-family: var(--dv-font-display); font-size: 22px; font-weight: 700; color: var(--dv-text); letter-spacing: -0.03em; }
+.dv6-team-stat-value {
+  font-family: var(--dv-font-display);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--dv-text);
+  letter-spacing: -0.025em;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1;
+}
 .dv6-team-meta { font-family: var(--dv-font-mono); font-size: 10px; font-weight: 500; }
 .dv6-quality-bar-track {
   height: 3px; border-radius: 999px;
@@ -560,7 +591,9 @@ const DASH_CSS = `
 .dv6-action-card:hover { border-color: var(--dv-border-mid); }
 .dv6-action-count {
   font-family: var(--dv-font-display); font-size: 40px; font-weight: 700;
-  letter-spacing: -0.04em; line-height: 1;
+  letter-spacing: -0.03em; line-height: 1;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1, 'cv02' 1, 'cv03' 1, 'cv04' 1;
 }
 
 /* ── Insights ── */
