@@ -129,6 +129,8 @@ type AgentPortalCachePayload = {
   monitoringItems: MonitoringItem[];
 };
 
+const AGENT_PORTAL_ROOT_STYLE: CSSProperties = {};
+
 const AGENT_PORTAL_CACHE_TTL_MS = 1000 * 60 * 3;
 const HIDDEN_AGENT_METRICS = new Set(['Issue was resolved']);
 
@@ -762,7 +764,7 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
   return (
     <div
       data-no-theme-invert="true"
-      style={{ color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
+      style={{ ...AGENT_PORTAL_ROOT_STYLE, color: 'var(--screen-text)', ...(themeVars as CSSProperties) }}
     >
       <div style={pageHeaderStyle}>
         <div>
