@@ -86,9 +86,6 @@ function buildAgentKey(agentId?: string | null, agentName?: string | null) {
 function getAgentLabel(profile: AgentProfile) {
   return profile.display_name ?? profile.agent_name;
 }
-function getAgentSub(profile: AgentProfile) {
-  return profile.agent_id ?? profile.display_name ?? '—';
-}
 function average(values: number[]) {
   if (values.length === 0) return null;
   return values.reduce((sum, v) => sum + v, 0) / values.length;
