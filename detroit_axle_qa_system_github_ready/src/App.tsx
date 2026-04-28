@@ -23,6 +23,7 @@ import {
   readStoredTheme,
 } from "./lib/theme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import HelpDrawer from "./components/HelpDrawer";
 import type { ThemeMode } from "./lib/theme";
 import type { UserProfile } from "./context/AuthContext";
 
@@ -139,6 +140,7 @@ const NAV_SHORTCUTS: Partial<Record<string, string>> = {
   Monitoring: "M",
   Reports: "R",
   Accounts: "A",
+  Help: "H",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1473,6 +1475,13 @@ const NavIcon = memo(function NavIcon({
         <circle cx="12" cy="7" r="4" />
       </svg>
     ),
+    Help: (
+      <svg {...p}>
+        <circle cx="12" cy="12" r="10" />
+        <path d="M9.1 9a3 3 0 1 1 5.8 1c-.5 1.4-2.4 2-2.7 3.5" />
+        <line x1="12" y1="17" x2="12.01" y2="17" />
+      </svg>
+    ),
   };
 
   return (
@@ -1671,6 +1680,7 @@ interface SidebarProps {
   onExpand: () => void;
   onCollapse: () => void;
   onLogout: () => void;
+  onOpenHelp: () => void;
 }
 
 const Sidebar = memo(
@@ -1684,6 +1694,7 @@ const Sidebar = memo(
     onExpand,
     onCollapse,
     onLogout,
+    onOpenHelp,
   }: SidebarProps) {
     const name =
       profile.display_name || profile.agent_name || profile.email || "";
@@ -1751,6 +1762,33 @@ const Sidebar = memo(
               })}
             </div>
           ))}
+
+          <div className="da-nav-section" style={{ marginTop: "auto" }}>
+            <div
+              className="da-nav-section-label"
+              style={{ color: "var(--accent-blue)" }}
+            >
+              Support
+            </div>
+            <button
+              type="button"
+              className="da-nav-item"
+              onClick={onOpenHelp}
+              title="Help"
+              aria-label="Open Help Center"
+              style={
+                {
+                  "--item-accent": "var(--accent-blue)",
+                } as CSSProperties
+              }
+            >
+              <div className="da-nav-pip" />
+              <span className="da-nav-icon">
+                <NavIcon label="Help" size={15} />
+              </span>
+              <span className="da-nav-label">Help</span>
+            </button>
+          </div>
         </div>
 
         {/* User */}
@@ -1799,7 +1837,8 @@ const Sidebar = memo(
     prev.onNavigate === next.onNavigate &&
     prev.onExpand === next.onExpand &&
     prev.onCollapse === next.onCollapse &&
-    prev.onLogout === next.onLogout
+    prev.onLogout === next.onLogout &&
+    prev.onOpenHelp === next.onOpenHelp
 );
 
 // ─────────────────────────────────────────────────────────────
@@ -2345,6 +2384,7 @@ function AppShell() {
   const [isSidebarPinned, setSidebarPinned] = useState(false);
   const [isSidebarHovered, setSidebarHovered] = useState(false);
   const [isCmdOpen, setCmdOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const pinnedRef = useRef(false);
 
   const isCompact = viewportWidth < COMPACT_BP;
@@ -2411,6 +2451,15 @@ function AppShell() {
   const handleLogout = useCallback(() => auth.logout(), [auth]);
   const handleOpenCmd = useCallback(() => setCmdOpen(true), []);
   const handleCloseCmd = useCallback(() => setCmdOpen(false), []);
+  const handleOpenHelp = useCallback(() => setHelpOpen(true), []);
+  const handleCloseHelp = useCallback(() => setHelpOpen(false), []);
+  const handleHelpNavigate = useCallback(
+    (path: string) => {
+      navigate(path);
+      setHelpOpen(false);
+    },
+    [navigate]
+  );
 
   // ── Derived ────────────────────────────────────────────────
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } =
@@ -2519,6 +2568,13 @@ function AppShell() {
         />
       )}
 
+      <HelpDrawer
+        open={helpOpen}
+        onClose={handleCloseHelp}
+        currentPage={activeLabel}
+        onNavigate={handleHelpNavigate}
+      />
+
       <div
         className="da-shell"
         style={
@@ -2540,6 +2596,7 @@ function AppShell() {
             onExpand={handleSidebarEnter}
             onCollapse={handleSidebarLeave}
             onLogout={handleLogout}
+            onOpenHelp={handleOpenHelp}
           />
         )}
 
@@ -2585,6 +2642,20 @@ function AppShell() {
                         </button>
                       );
                     })}
+                    <button
+                      type="button"
+                      className="da-compact-nav-item"
+                      onClick={handleOpenHelp}
+                      style={
+                        {
+                          "--item-accent": "var(--accent-blue)",
+                        } as CSSProperties
+                      }
+                      aria-label="Open Help Center"
+                    >
+                      <NavIcon label="Help" size={13} />
+                      Help
+                    </button>
                   </nav>
                 )}
                 <div className="da-content">
