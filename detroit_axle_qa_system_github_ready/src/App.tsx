@@ -46,6 +46,7 @@ import AgentFeedbackSupabase from "./QA/AgentFeedbackSupabase";
 import ReportsSupabase from "./QA/ReportsSupabase";
 import MonitoringSupabase from "./QA/MonitoringSupabase";
 import TeamHeatmapSupabase from "./QA/TeamHeatmapSupabase";
+import LearningCenter from "./QA/LearningCenter";
 
 // ─────────────────────────────────────────────────────────────
 // Constants & Types
@@ -67,6 +68,7 @@ const ROUTES = {
   supervisorRequests: "/supervisor-requests",
   reports: "/reports",
   teamHeatmap: "/team-heatmap",
+  learningCenter: "/learning-center",
   profile: "/profile",
   supervisorOverview: "/supervisor",
   supervisorTeamDashboard: "/supervisor/team-dashboard",
@@ -105,6 +107,7 @@ const NAV_GROUPS: Readonly<Record<string, readonly string[]>> = {
     "Sales Upload",
   ],
   Analytics: ["Agent Feedback", "Monitoring", "Team Heatmap"],
+  Learning: ["Learning Center"],
   Management: ["Accounts", "Supervisor Requests", "Reports"],
   Account: [
     "My Admin Profile",
@@ -140,6 +143,7 @@ const NAV_SHORTCUTS: Partial<Record<string, string>> = {
   Monitoring: "M",
   Reports: "R",
   Accounts: "A",
+  "Learning Center": "E",
   Help: "H",
 };
 
@@ -1178,6 +1182,7 @@ function buildNavItems(profile: UserProfile): NavItem[] {
       item(ROUTES.supervisorOverview, "Overview"),
       item(ROUTES.supervisorTeamDashboard, "Team Dashboard"),
       item(ROUTES.supervisorRequestsView, "Supervisor Requests"),
+      item(ROUTES.learningCenter, "Learning Center"),
       item(ROUTES.supervisorProfile, "My Supervisor Profile"),
     ];
   }
@@ -1197,6 +1202,7 @@ function buildNavItems(profile: UserProfile): NavItem[] {
     item(ROUTES.agentFeedback, "Agent Feedback"),
     item(ROUTES.monitoring, "Monitoring"),
     item(ROUTES.teamHeatmap, "Team Heatmap"),
+    item(ROUTES.learningCenter, "Learning Center"),
   ];
 
   if (isAdmin) {
@@ -2299,6 +2305,10 @@ const StaffRoutes = memo(function StaffRoutes({
         />
       )}
       <Route
+        path={ROUTES.learningCenter}
+        element={<LearningCenter currentUser={profile} />}
+      />
+      <Route
         path={ROUTES.profile}
         element={
           <ProfilePanel
@@ -2348,6 +2358,10 @@ const SupervisorRoutes = memo(function SupervisorRoutes({
             hideInternalTabs
           />
         }
+      />
+      <Route
+        path={ROUTES.learningCenter}
+        element={<LearningCenter currentUser={profile} />}
       />
       <Route
         path={ROUTES.supervisorProfile}
