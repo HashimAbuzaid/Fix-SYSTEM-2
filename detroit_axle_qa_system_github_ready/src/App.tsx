@@ -24,9 +24,6 @@ import {
 } from "./lib/theme";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import HelpDrawer from "./components/HelpDrawer";
-import HelpContentAdmin from "./components/HelpContentAdmin";
-import HelpTourOverlay from "./components/HelpTourOverlay";
-import SupportInbox from "./components/SupportInbox";
 import type { ThemeMode } from "./lib/theme";
 import type { UserProfile } from "./context/AuthContext";
 
@@ -57,6 +54,7 @@ import LearningCenter from "./QA/LearningCenter";
 
 const ROUTES = {
   dashboard: "/",
+  agentPortal: "/agent",
   newAudit: "/new-audit",
   auditsUpload: "/audits-upload",
   auditsList: "/audits-list",
@@ -70,8 +68,6 @@ const ROUTES = {
   accounts: "/accounts",
   supervisorRequests: "/supervisor-requests",
   reports: "/reports",
-  supportInbox: "/support-inbox",
-  helpAdmin: "/help-admin",
   teamHeatmap: "/team-heatmap",
   learningCenter: "/learning-center",
   profile: "/profile",
@@ -102,7 +98,7 @@ const EASE_OUT = "cubic-bezier(0.16, 1, 0.3, 1)";
 const DURATION_SIDEBAR = "260ms";
 
 const NAV_GROUPS: Readonly<Record<string, readonly string[]>> = {
-  Core: ["Dashboard", "Overview", "Team Dashboard"],
+  Core: ["Dashboard", "Overview", "Team Dashboard", "My Portal"],
   Audits: ["New Audit", "Audits Upload", "Audits List"],
   Data: [
     "Calls Upload",
@@ -113,7 +109,7 @@ const NAV_GROUPS: Readonly<Record<string, readonly string[]>> = {
   ],
   Analytics: ["Agent Feedback", "Monitoring", "Team Heatmap"],
   Learning: ["Learning Center"],
-  Management: ["Accounts", "Supervisor Requests", "Reports", "Support Inbox", "Help Admin"],
+  Management: ["Accounts", "Supervisor Requests", "Reports"],
   Account: [
     "My Admin Profile",
     "My QA Profile",
@@ -128,7 +124,6 @@ const GROUP_ACCENT: Readonly<Record<string, string>> = {
   Audits: "var(--accent-violet)",
   Data: "var(--accent-cyan)",
   Analytics: "var(--accent-amber)",
-  Learning: "var(--accent-cyan)",
   Management: "var(--accent-rose)",
   Account: "var(--accent-emerald)",
   Other: "var(--fg-muted)",
@@ -150,9 +145,7 @@ const NAV_SHORTCUTS: Partial<Record<string, string>> = {
   Reports: "R",
   Accounts: "A",
   "Learning Center": "E",
-  "Support Inbox": "S",
-  "Help Admin": "H",
-  Help: "?",
+  Help: "H",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1195,7 +1188,12 @@ function buildNavItems(profile: UserProfile): NavItem[] {
     ];
   }
 
-  if (!isStaff) return [];
+  if (!isStaff) {
+    return [
+      item(ROUTES.agentPortal, "My Portal"),
+      item(ROUTES.learningCenter, "Learning Center"),
+    ];
+  }
 
   const items: NavItem[] = [
     item(ROUTES.dashboard, "Dashboard"),
@@ -1216,9 +1214,7 @@ function buildNavItems(profile: UserProfile): NavItem[] {
   if (isAdmin) {
     items.push(
       item(ROUTES.accounts, "Accounts"),
-      item(ROUTES.supervisorRequests, "Supervisor Requests"),
-      item(ROUTES.supportInbox, "Support Inbox"),
-      item(ROUTES.helpAdmin, "Help Admin")
+      item(ROUTES.supervisorRequests, "Supervisor Requests")
     );
   }
 
@@ -1489,34 +1485,6 @@ const NavIcon = memo(function NavIcon({
       <svg {...p}>
         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
         <circle cx="12" cy="7" r="4" />
-      </svg>
-    ),
-    "Learning Center": (
-      <svg {...p}>
-        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-        <line x1="8" y1="7" x2="16" y2="7" />
-        <line x1="8" y1="11" x2="14" y2="11" />
-      </svg>
-    ),
-    "Support Inbox": (
-      <svg {...p}>
-        <path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-        <path d="M8 9h8" />
-        <path d="M8 13h5" />
-      </svg>
-    ),
-    "Help Admin": (
-      <svg {...p}>
-        <circle cx="12" cy="12" r="3" />
-        <path d="M12 1v4" />
-        <path d="M12 19v4" />
-        <path d="M4.22 4.22l2.83 2.83" />
-        <path d="M16.95 16.95l2.83 2.83" />
-        <path d="M1 12h4" />
-        <path d="M19 12h4" />
-        <path d="M4.22 19.78l2.83-2.83" />
-        <path d="M16.95 7.05l2.83-2.83" />
       </svg>
     ),
     Help: (
@@ -2336,18 +2304,6 @@ const StaffRoutes = memo(function StaffRoutes({
           element={<SupervisorRequestsSupabase currentUser={profile} />}
         />
       )}
-      {isAdmin && (
-        <Route
-          path={ROUTES.supportInbox}
-          element={<SupportInbox currentUser={profile} />}
-        />
-      )}
-      {isAdmin && (
-        <Route
-          path={ROUTES.helpAdmin}
-          element={<HelpContentAdmin currentUser={profile} />}
-        />
-      )}
       {isStaff && (
         <Route
           path={ROUTES.reports}
@@ -2430,9 +2386,31 @@ const SupervisorRoutes = memo(function SupervisorRoutes({
   );
 });
 
+
+const AgentRoutes = memo(function AgentRoutes({
+  profile,
+}: {
+  profile: UserProfile;
+}) {
+  return (
+    <Routes>
+      <Route
+        path={ROUTES.agentPortal}
+        element={<AgentPortal currentUser={profile} />}
+      />
+      <Route
+        path={ROUTES.learningCenter}
+        element={<LearningCenter currentUser={profile} />}
+      />
+      <Route path="*" element={<Navigate to={ROUTES.agentPortal} replace />} />
+    </Routes>
+  );
+});
+
 // ─────────────────────────────────────────────────────────────
 // AppShell — the orchestrator
 // ─────────────────────────────────────────────────────────────
+
 
 function AppShell() {
   const auth = useAuthState();
@@ -2449,7 +2427,6 @@ function AppShell() {
   const [isSidebarHovered, setSidebarHovered] = useState(false);
   const [isCmdOpen, setCmdOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [activeTourId, setActiveTourId] = useState<string | null>(null);
   const pinnedRef = useRef(false);
 
   const isCompact = viewportWidth < COMPACT_BP;
@@ -2525,11 +2502,6 @@ function AppShell() {
     },
     [navigate]
   );
-  const handleStartHelpTour = useCallback((tourId: string) => {
-    setActiveTourId(tourId);
-    setHelpOpen(false);
-  }, []);
-  const handleCloseHelpTour = useCallback(() => setActiveTourId(null), []);
 
   // ── Derived ────────────────────────────────────────────────
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete } =
@@ -2624,7 +2596,8 @@ function AppShell() {
   const isQA = profile.role === "qa";
   const isSupervisor = profile.role === "supervisor";
   const isStaff = isAdmin || isQA;
-  const hasSidebar = isStaff || isSupervisor;
+  const isAgent = profile.role === "agent";
+  const hasSidebar = isStaff || isSupervisor || isAgent;
   const userInitials = getUserInitials(profile);
 
   return (
@@ -2642,19 +2615,7 @@ function AppShell() {
         open={helpOpen}
         onClose={handleCloseHelp}
         currentPage={`${activeLabel} ${location.pathname}`}
-        currentRole={profile.role}
-        currentUserName={profile.display_name || profile.agent_name || profile.email || undefined}
-        currentUserEmail={profile.email || undefined}
         onNavigate={handleHelpNavigate}
-        onStartTour={handleStartHelpTour}
-      />
-
-      <HelpTourOverlay
-        tourId={activeTourId}
-        currentPage={`${activeLabel} ${location.pathname}`}
-        currentRole={profile.role}
-        onClose={handleCloseHelpTour}
-        onOpenHelp={handleOpenHelp}
       />
 
       <div
@@ -2743,8 +2704,10 @@ function AppShell() {
                 <div className="da-content">
                   {isStaff ? (
                     <StaffRoutes profile={profile} />
-                  ) : (
+                  ) : isSupervisor ? (
                     <SupervisorRoutes profile={profile} />
+                  ) : (
+                    <AgentRoutes profile={profile} />
                   )}
                 </div>
               </>

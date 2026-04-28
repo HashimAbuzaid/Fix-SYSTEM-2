@@ -518,8 +518,8 @@ const ModuleDetailPanel = memo(function ModuleDetailPanel({
 
 // ─── Tab components ───────────────────────────────────────────
 
-const HomeTab = memo(function HomeTab({ progress, onTabChange, onSelectModule }: { progress: UserProgress; onTabChange: (tab: LCTab) => void; onSelectModule: (mod: LearningModule) => void; }) {
-  const recommended = useMemo(() => MOCK_MODULES.filter((m) => !progress.completedModules.includes(m.id)).slice(0, 3), [progress]);
+const HomeTab = memo(function HomeTab({ progress, modules, quizzes, onTabChange, onSelectModule }: { progress: UserProgress; modules: LearningModule[]; quizzes: Quiz[]; onTabChange: (tab: LCTab) => void; onSelectModule: (mod: LearningModule) => void; }) {
+  const recommended = useMemo(() => modules.filter((m) => !progress.completedModules.includes(m.id)).slice(0, 3), [modules, progress]);
   const levelPct = useMemo(() => {
     const cur = LEVEL_THRESHOLDS[progress.level] ?? 0;
     const next = LEVEL_THRESHOLDS[progress.level + 1] ?? cur + 1000;
@@ -548,7 +548,7 @@ const HomeTab = memo(function HomeTab({ progress, onTabChange, onSelectModule }:
             <div className="lc-pinned-icon" style={{ background:"color-mix(in srgb,var(--accent-cyan) 12%,transparent)", color:"var(--accent-cyan)" }}>📝</div>
             <div>
               <div className="lc-pinned-item-title">Pending Quizzes</div>
-              <div className="lc-pinned-item-sub">{MOCK_QUIZZES.filter(q => !progress.completedQuizzes.includes(q.id)).length} remaining</div>
+              <div className="lc-pinned-item-sub">{quizzes.filter(q => !progress.completedQuizzes.includes(q.id)).length} remaining</div>
             </div>
           </div>
         </div>
@@ -595,20 +595,20 @@ const HomeTab = memo(function HomeTab({ progress, onTabChange, onSelectModule }:
   );
 });
 
-const ModulesTab = memo(function ModulesTab({ progress, onSelectModule }: { progress: UserProgress; onSelectModule: (mod: LearningModule) => void; }) {
+const ModulesTab = memo(function ModulesTab({ progress, modules, onSelectModule }: { progress: UserProgress; modules: LearningModule[]; onSelectModule: (mod: LearningModule) => void; }) {
   const [search, setSearch] = useState("");
   const [filterDiff, setFilterDiff] = useState("all");
-  const filtered = useMemo(() => MOCK_MODULES.filter((m) => {
+  const filtered = useMemo(() => modules.filter((m) => {
     const q = search.toLowerCase();
     const matchSearch = !q || m.title.toLowerCase().includes(q) || m.tags.some((t) => t.includes(q));
     const matchDiff = filterDiff === "all" || m.difficulty === filterDiff;
     return matchSearch && matchDiff;
-  }), [search, filterDiff]);
+  }), [modules, search, filterDiff]);
 
   return (
     <>
       <div className="lc-section-header">
-        <div><div className="lc-section-title">Training Modules</div><div className="lc-section-sub">{progress.completedModules.length}/{MOCK_MODULES.length} completed</div></div>
+        <div><div className="lc-section-title">Training Modules</div><div className="lc-section-sub">{progress.completedModules.filter((id) => modules.some((module) => module.id === id)).length}/{modules.length} completed</div></div>
       </div>
       <div className="lc-search-bar"><SearchSVG /><input className="lc-search-input" placeholder="Search modules…" value={search} onChange={(e) => setSearch(e.target.value)} /></div>
       <div style={{ display:"flex", gap:"6px", marginBottom:"16px", flexWrap:"wrap" }}>
@@ -802,7 +802,7 @@ const SUPERVISOR_ONBOARDING_STEPS = [
   { title:"Setting Team Quality Goals", desc:"Align team on performance targets", moduleId:null },
 ];
 
-const OnboardingTab = memo(function OnboardingTab({ progress, onSelectModule }: { progress: UserProgress; onSelectModule: (mod: LearningModule) => void; }) {
+const OnboardingTab = memo(function OnboardingTab({ progress, role, onSelectModule }: { progress: UserProgress; role: string; onSelectModule: (mod: LearningModule) => void; }) {
   return (
     <>
       <div className="lc-section-header"><div><div className="lc-section-title">Onboarding Materials</div><div className="lc-section-sub">Role-based onboarding tracks</div></div></div>
@@ -1076,6 +1076,50 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
 
   const isAdmin = resolvedUserRole === "admin" || resolvedUserRole === "qa";
   const isSupervisor = resolvedUserRole === "supervisor";
+  const isAgent = resolvedUserRole === "agent";
+  const roleLabel = isAgent
+    ? "Agent Learning"
+    : isSupervisor
+      ? "Supervisor Team Learning"
+      : "Learning Center";
+
+  const heroSubtitle = isAgent
+    ? "Your personal training hub — assigned modules, SOPs, quizzes, certifications, and refreshers."
+    : isSupervisor
+      ? "Team-focused training hub — coaching, team findings, assigned modules, and supervisor resources."
+      : "Centralized QA training hub — modules, SOPs, quizzes, certifications, analytics, and coaching.";
+
+  const agentAllowedTabs = useMemo<Set<LCTab>>(
+    () => new Set(["home", "modules", "sop", "work-instructions", "defects", "standards", "onboarding", "quizzes", "certifications", "lessons", "audit-findings", "best-practices"]),
+    []
+  );
+
+  const supervisorPriorityTabs = useMemo<Set<LCTab>>(
+    () => new Set(["home", "modules", "sop", "work-instructions", "defects", "standards", "onboarding", "quizzes", "certifications", "lessons", "audit-findings", "best-practices", "analytics", "coaching"]),
+    []
+  );
+
+  const roleModules = useMemo(
+    () => MOCK_MODULES.filter((module) => {
+      if (isAgent) return module.roles.includes("agent");
+      if (isSupervisor) return module.roles.includes("supervisor") || module.roles.includes("agent");
+      return true;
+    }),
+    [isAgent, isSupervisor]
+  );
+
+  const roleQuizzes = useMemo(
+    () => MOCK_QUIZZES.filter((quiz) => {
+      const module = quiz.moduleId ? MOCK_MODULES.find((item) => item.id === quiz.moduleId) : null;
+      if (!module) return true;
+      if (isAgent) return module.roles.includes("agent");
+      if (isSupervisor) return module.roles.includes("supervisor") || module.roles.includes("agent");
+      return true;
+    }),
+    [isAgent, isSupervisor]
+  );
+
+
 
   const levelPct = useMemo(() => {
     const cur = LEVEL_THRESHOLDS[progress.level] ?? 0;
@@ -1084,7 +1128,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
   }, [progress]);
 
   const handleCompleteModule = useCallback((moduleId: string) => {
-    const mod = MOCK_MODULES.find((m) => m.id === moduleId);
+    const mod = roleModules.find((m) => m.id === moduleId);
     if (!mod) return;
     setProgress((prev) => {
       if (prev.completedModules.includes(moduleId)) return prev;
@@ -1111,12 +1155,12 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     if (!search.trim()) return null;
     const q = search.toLowerCase();
     return {
-      mods: MOCK_MODULES.filter((m) => m.title.toLowerCase().includes(q) || m.tags.some((t) => t.includes(q))),
+      mods: roleModules.filter((m) => m.title.toLowerCase().includes(q) || m.tags.some((t) => t.includes(q))),
       sops: MOCK_SOPS.filter((s) => s.title.toLowerCase().includes(q)),
       wis: MOCK_WORK_INSTRUCTIONS.filter((w) => w.title.toLowerCase().includes(q)),
       lessons: MOCK_LESSONS.filter((l) => l.title.toLowerCase().includes(q) || l.insight.toLowerCase().includes(q)),
     };
-  }, [search]);
+  }, [roleModules, search]);
 
   const TABS: { id: LCTab; label: string; icon: string; roles?: string[] }[] = [
     { id:"home", label:"Home", icon:"🏠" },
@@ -1135,14 +1179,18 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     { id:"coaching", label:"Coaching", icon:"👔", roles:["supervisor","admin","qa"] },
   ];
 
-  const visibleTabs = TABS.filter((t) => !t.roles || t.roles.includes(resolvedUserRole));
+  const visibleTabs = TABS.filter((tab) => {
+    if (isAgent && !agentAllowedTabs.has(tab.id)) return false;
+    if (isSupervisor && !supervisorPriorityTabs.has(tab.id)) return false;
+    return !tab.roles || tab.roles.includes(resolvedUserRole);
+  });
 
   if (activeQuizId) {
-    const quiz = MOCK_QUIZZES.find((q) => q.id === activeQuizId);
+    const quiz = roleQuizzes.find((q) => q.id === activeQuizId);
     if (quiz) return <QuizEngine quiz={quiz} onComplete={(score) => handleQuizComplete(activeQuizId, score)} onBack={() => setActiveQuizId(null)} />;
   }
 
-  if (showCerts) return <CertificationTracker progress={progress} modules={MOCK_MODULES} quizzes={MOCK_QUIZZES} onBack={() => setShowCerts(false)} />;
+  if (showCerts) return <CertificationTracker progress={progress} modules={roleModules} quizzes={roleQuizzes} onBack={() => setShowCerts(false)} />;
 
   return (
     <div className="lc-root">
@@ -1150,9 +1198,9 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
       <div className="lc-hero">
         <div className="lc-hero-inner">
           <div>
-            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"var(--accent-violet)", marginBottom:"6px" }}>Learning Center</div>
+            <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"var(--accent-violet)", marginBottom:"6px" }}>{roleLabel}</div>
             <div className="lc-hero-title">Grow Your Skills 🚀</div>
-            <div className="lc-hero-sub">Your personal training hub — modules, SOPs, quizzes, certifications, and more.</div>
+            <div className="lc-hero-sub">{heroSubtitle}</div>
           </div>
           <div className="lc-hero-xp">
             <div className="lc-xp-card"><div className="lc-xp-val">{progress.xp}</div><div className="lc-xp-label">Total XP</div></div>
@@ -1235,18 +1283,18 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
             ))}
           </div>
 
-          {activeTab === "home" && <HomeTab progress={progress} onTabChange={(tab) => { if (tab === "certifications") { setShowCerts(true); return; } setActiveTab(tab); }} onSelectModule={setSelectedModule} />}
-          {activeTab === "modules" && <ModulesTab progress={progress} onSelectModule={setSelectedModule} />}
+          {activeTab === "home" && <HomeTab progress={progress} modules={roleModules} quizzes={roleQuizzes} onTabChange={(tab) => { if (tab === "certifications") { setShowCerts(true); return; } setActiveTab(tab); }} onSelectModule={setSelectedModule} />}
+          {activeTab === "modules" && <ModulesTab progress={progress} modules={roleModules} onSelectModule={setSelectedModule} />}
           {activeTab === "sop" && <SOPTab />}
           {activeTab === "work-instructions" && <WorkInstructionsTab />}
           {activeTab === "defects" && <DefectsTab />}
           {activeTab === "standards" && <StandardsTab />}
-          {activeTab === "onboarding" && <OnboardingTab progress={progress} onSelectModule={setSelectedModule} />}
+          {activeTab === "onboarding" && <OnboardingTab progress={progress} role={resolvedUserRole} onSelectModule={setSelectedModule} />}
           {activeTab === "quizzes" && (
             <div>
               <div className="lc-section-header"><div><div className="lc-section-title">Refresher Quizzes</div><div className="lc-section-sub">Test your knowledge and earn XP</div></div></div>
               <div className="lc-grid">
-                {MOCK_QUIZZES.map((quiz) => {
+                {roleQuizzes.map((quiz) => {
                   const done = progress.completedQuizzes.includes(quiz.id);
                   const score = progress.quizScores[quiz.id];
                   return (
