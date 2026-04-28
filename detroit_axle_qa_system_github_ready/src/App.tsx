@@ -2571,7 +2571,7 @@ function AppShell() {
       <HelpDrawer
         open={helpOpen}
         onClose={handleCloseHelp}
-        currentPage={activeLabel}
+        currentPage={`${activeLabel} ${location.pathname}`}
         onNavigate={handleHelpNavigate}
       />
 
