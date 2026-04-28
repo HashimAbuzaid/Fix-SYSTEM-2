@@ -36,6 +36,19 @@ interface PageHelp {
   readonly tips: readonly string[];
 }
 
+interface ManagedHelpRow {
+  readonly content_key: string;
+  readonly content_type: "guide" | "faq" | "page" | "support";
+  readonly title: string;
+  readonly content: unknown;
+  readonly sort_order?: number | null;
+}
+
+interface ManagedHelpContent {
+  readonly guides: readonly Guide[];
+  readonly faqs: readonly FaqItem[];
+}
+
 const QUICK_ACTIONS: readonly QuickAction[] = [
   {
     label: "New Audit",
@@ -181,6 +194,126 @@ const PAGE_HELP: Record<string, PageHelp> = {
       "Password reset actions help users recover access without changing QA data.",
     ],
   },
+  auditsUpload: {
+    title: "Audits Upload",
+    description:
+      "Use Audits Upload to import completed audit records while keeping mappings and validation clear.",
+    tips: [
+      "Confirm the upload file format before importing.",
+      "Review mapped columns, score fields, dates, agents, and teams before committing data.",
+      "Use errors or skipped rows as a checklist for file cleanup.",
+    ],
+  },
+  callsUpload: {
+    title: "Calls Upload",
+    description:
+      "Use Calls Upload to bring call interaction evidence into the QA workflow.",
+    tips: [
+      "Check that call identifiers and agent fields line up with the source file.",
+      "Use upload validation messages to catch missing or duplicated records.",
+      "After upload, confirm records are visible where the team expects them.",
+    ],
+  },
+  ticketsUpload: {
+    title: "Tickets Upload",
+    description:
+      "Use Tickets Upload to import ticket records for ticket-based QA review and reporting.",
+    tips: [
+      "Validate ticket IDs, dates, agents, teams, and channel fields before saving.",
+      "Keep ticket evidence aligned with the uploaded ticket record.",
+      "Use reports after upload to verify the data lands in the expected filters.",
+    ],
+  },
+  ticketEvidence: {
+    title: "Ticket Evidence",
+    description:
+      "Use Ticket Evidence to attach or manage supporting details for ticket QA review.",
+    tips: [
+      "Match evidence to the correct ticket before relying on it for scoring.",
+      "Keep notes factual and tied to the customer interaction.",
+      "Review missing evidence before starting an audit that depends on it.",
+    ],
+  },
+  ticketAiReview: {
+    title: "Ticket AI Review",
+    description:
+      "Use Ticket AI Review to triage AI-assisted ticket review output before it influences QA decisions.",
+    tips: [
+      "Review AI findings as assistance, not as final QA judgment.",
+      "Prioritize queues that show high-risk signals or missing evidence.",
+      "Confirm any coaching action against the original ticket context.",
+    ],
+  },
+  salesUpload: {
+    title: "Sales Upload",
+    description:
+      "Use Sales Upload to import sales interaction records that support sales QA scoring and trend review.",
+    tips: [
+      "Validate sales identifiers, agent details, dates, and channel values.",
+      "Check that uploaded rows connect to the right reporting period.",
+      "Use reports to confirm imported sales records appear under the correct filters.",
+    ],
+  },
+  agentFeedback: {
+    title: "Agent Feedback",
+    description:
+      "Use Agent Feedback to review agent-facing QA notes, coaching context, and response status.",
+    tips: [
+      "Look for patterns across feedback instead of reacting to one isolated note.",
+      "Use clear evidence-backed comments when feedback needs follow-up.",
+      "Confirm intended visibility before sharing sensitive coaching context.",
+    ],
+  },
+  teamHeatmap: {
+    title: "Team Heatmap",
+    description:
+      "Use Team Heatmap to compare quality patterns across teams, agents, or metric areas.",
+    tips: [
+      "Look for clusters of repeated issues rather than one-off misses.",
+      "Use filters to isolate the team or channel you are reviewing.",
+      "Pair heatmap patterns with audit notes before making coaching decisions.",
+    ],
+  },
+  supervisorRequests: {
+    title: "Supervisor Requests",
+    description:
+      "Use Supervisor Requests to review supervisor-submitted requests, feedback, or release-related follow-up.",
+    tips: [
+      "Check the request context before approving, rejecting, or escalating.",
+      "Use status filters to separate new requests from completed ones.",
+      "Keep response notes direct and tied to the request details.",
+    ],
+  },
+  supervisorOverview: {
+    title: "Supervisor Overview",
+    description:
+      "Use Supervisor Overview to monitor team QA status, coaching priorities, and request activity.",
+    tips: [
+      "Start with the highest-level team indicators before drilling into detail.",
+      "Use request and coaching context together to prioritize follow-up.",
+      "Compare trends over time before drawing conclusions from one audit.",
+    ],
+  },
+  supervisorTeamDashboard: {
+    title: "Team Dashboard",
+    description:
+      "Use Team Dashboard to review team-level QA performance and identify coaching opportunities.",
+    tips: [
+      "Use team filters to focus on the agents you supervise.",
+      "Look for recurring metric misses that need coaching or process review.",
+      "Pair dashboard trends with audit notes before taking action.",
+    ],
+  },
+  profile: {
+    title: "Profile",
+    description:
+      "Use Profile to confirm account information, role, team, and agent identifiers.",
+    tips: [
+      "Your role controls which navigation items and actions are available.",
+      "Check agent ID and team if reports or audits do not line up as expected.",
+      "Contact an admin if account details need correction.",
+    ],
+  },
   default: {
     title: "General QA System Help",
     description:
@@ -217,6 +350,48 @@ function resolvePageHelp(currentPage?: string): PageHelp {
   }
   if (value.includes("accounts") || value.includes("/accounts")) {
     return PAGE_HELP.accounts;
+  }
+
+
+  if (value.includes("audits upload") || value.includes("/audits-upload")) {
+    return PAGE_HELP.auditsUpload;
+  }
+  if (value.includes("calls upload") || value.includes("/calls-upload")) {
+    return PAGE_HELP.callsUpload;
+  }
+  if (value.includes("tickets upload") || value.includes("/tickets-upload")) {
+    return PAGE_HELP.ticketsUpload;
+  }
+  if (value.includes("ticket evidence") || value.includes("/ticket-evidence")) {
+    return PAGE_HELP.ticketEvidence;
+  }
+  if (value.includes("ticket ai review") || value.includes("/ticket-ai-review")) {
+    return PAGE_HELP.ticketAiReview;
+  }
+  if (value.includes("sales upload") || value.includes("/sales-upload")) {
+    return PAGE_HELP.salesUpload;
+  }
+  if (value.includes("agent feedback") || value.includes("/agent-feedback")) {
+    return PAGE_HELP.agentFeedback;
+  }
+  if (value.includes("team heatmap") || value.includes("/team-heatmap")) {
+    return PAGE_HELP.teamHeatmap;
+  }
+  if (
+    value.includes("supervisor requests") ||
+    value.includes("/supervisor-requests") ||
+    value.includes("/supervisor/requests")
+  ) {
+    return PAGE_HELP.supervisorRequests;
+  }
+  if (value.includes("team dashboard") || value.includes("/supervisor/team-dashboard")) {
+    return PAGE_HELP.supervisorTeamDashboard;
+  }
+  if (value.includes("overview") || value.includes("/supervisor")) {
+    return PAGE_HELP.supervisorOverview;
+  }
+  if (value.includes("profile") || value.includes("/profile")) {
+    return PAGE_HELP.profile;
   }
 
   return PAGE_HELP.default;
@@ -276,6 +451,144 @@ const smallLabelStyle: CSSProperties = {
   marginBottom: "8px",
 };
 
+
+function buildSupportDraft(label: string, currentPage?: string): string {
+  const path = typeof window === "undefined" ? "Unknown path" : window.location.pathname;
+  const timestamp = new Date().toISOString();
+  const browser = typeof window === "undefined" ? "Unknown browser" : window.navigator.userAgent;
+  const type = label.toLowerCase().includes("feature")
+    ? "Feature request"
+    : label.toLowerCase().includes("admin")
+      ? "Admin contact"
+      : "Issue report";
+
+  const prompt = type === "Feature request"
+    ? "Feature idea:\n\nWho needs it?\n\nWhat problem would it solve?\n\nSuggested workflow:\n1. \n2. \n3. "
+    : type === "Admin contact"
+      ? "Question for admin:\n\nWhat access, account, report, audit, or workflow needs attention?\n"
+      : "What happened?\n\nExpected result:\n\nActual result:\n\nSteps to reproduce:\n1. \n2. \n3. ";
+
+  return [
+    "Detroit Axle QA System Support Request",
+    `Type: ${type}`,
+    `Current page: ${currentPage || "Unknown page"}`,
+    `Current path: ${path}`,
+    `Timestamp: ${timestamp}`,
+    `Browser: ${browser}`,
+    "",
+    prompt,
+  ].join("\n");
+}
+
+async function copySupportDraft(value: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.setAttribute("readonly", "true");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return copied;
+    } catch {
+      return false;
+    }
+  }
+}
+
+function openSupportEmail(body: string) {
+  window.location.href = `mailto:?subject=${encodeURIComponent("Detroit Axle QA System support request")}&body=${encodeURIComponent(body)}`;
+}
+
+function getHelpContentEnv() {
+  const env = (import.meta as ImportMeta & {
+    readonly env?: Record<string, string | undefined>;
+  }).env;
+
+  return {
+    supabaseUrl: env?.VITE_SUPABASE_URL,
+    supabaseAnonKey: env?.VITE_SUPABASE_ANON_KEY,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readContentString(content: unknown, keys: readonly string[]): string {
+  if (!isRecord(content)) return "";
+  for (const key of keys) {
+    const value = content[key];
+    if (typeof value === "string") return value;
+  }
+  return "";
+}
+
+function normalizeManagedHelpRows(rows: readonly ManagedHelpRow[]): ManagedHelpContent {
+  const guides: Guide[] = [];
+  const faqs: FaqItem[] = [];
+
+  rows.forEach((row) => {
+    if (row.content_type === "guide") {
+      guides.push({
+        title: row.title,
+        description: readContentString(row.content, ["description", "body"]),
+      });
+    }
+
+    if (row.content_type === "faq") {
+      faqs.push({
+        id: row.content_key,
+        question: row.title,
+        answer: readContentString(row.content, ["answer", "body"]),
+      });
+    }
+  });
+
+  return { guides, faqs };
+}
+
+async function fetchManagedHelpContent(signal: AbortSignal): Promise<ManagedHelpContent | null> {
+  const { supabaseUrl, supabaseAnonKey } = getHelpContentEnv();
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  const baseUrl = supabaseUrl.replace(/\/$/, "");
+  const response = await fetch(
+    `${baseUrl}/rest/v1/qa_help_content?active=eq.true&content_type=in.(guide,faq)&select=content_key,content_type,title,content,sort_order&order=sort_order.asc`,
+    {
+      signal,
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+    }
+  );
+
+  if (!response.ok) return null;
+  const rows = (await response.json()) as ManagedHelpRow[];
+  return normalizeManagedHelpRows(rows);
+}
+
+function mergeGuides(managedGuides: readonly Guide[]): readonly Guide[] {
+  const byTitle = new Map<string, Guide>();
+  GUIDES.forEach((guide) => byTitle.set(guide.title, guide));
+  managedGuides.forEach((guide) => byTitle.set(guide.title, guide));
+  return Array.from(byTitle.values());
+}
+
+function mergeFaqs(managedFaqs: readonly FaqItem[]): readonly FaqItem[] {
+  const byQuestion = new Map<string, FaqItem>();
+  FAQS.forEach((faq) => byQuestion.set(faq.question, faq));
+  managedFaqs.forEach((faq) => byQuestion.set(faq.question, faq));
+  return Array.from(byQuestion.values());
+}
+
 function HelpDrawer({
   open,
   onClose,
@@ -284,10 +597,36 @@ function HelpDrawer({
 }: HelpDrawerProps) {
   const [query, setQuery] = useState("");
   const [openFaqId, setOpenFaqId] = useState<string>("hidden-audits");
+  const [supportMessage, setSupportMessage] = useState("");
+  const [managedHelp, setManagedHelp] = useState<ManagedHelpContent | null>(null);
+  const [managedHelpLoaded, setManagedHelpLoaded] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   const normalizedQuery = query.trim().toLowerCase();
   const pageHelp = useMemo(() => resolvePageHelp(currentPage), [currentPage]);
+  const allGuides = useMemo(
+    () => mergeGuides(managedHelp?.guides ?? []),
+    [managedHelp]
+  );
+  const allFaqs = useMemo(
+    () => mergeFaqs(managedHelp?.faqs ?? []),
+    [managedHelp]
+  );
+
+  useEffect(() => {
+    if (!open || managedHelpLoaded) return;
+
+    const controller = new AbortController();
+
+    fetchManagedHelpContent(controller.signal)
+      .then((content) => {
+        if (content) setManagedHelp(content);
+      })
+      .catch(() => undefined)
+      .finally(() => setManagedHelpLoaded(true));
+
+    return () => controller.abort();
+  }, [managedHelpLoaded, open]);
 
   const filteredQuickActions = useMemo(
     () =>
@@ -304,26 +643,26 @@ function HelpDrawer({
 
   const filteredGuides = useMemo(
     () =>
-      GUIDES.filter((guide) =>
+      allGuides.filter((guide) =>
         includesQuery(normalizedQuery, [
           guide.title,
           guide.description,
           "guides",
         ])
       ),
-    [normalizedQuery]
+    [allGuides, normalizedQuery]
   );
 
   const filteredFaqs = useMemo(
     () =>
-      FAQS.filter((faq) =>
+      allFaqs.filter((faq) =>
         includesQuery(normalizedQuery, [
           faq.question,
           faq.answer,
           "faq",
         ])
       ),
-    [normalizedQuery]
+    [allFaqs, normalizedQuery]
   );
 
   const filteredSupportActions = useMemo(
@@ -362,10 +701,39 @@ function HelpDrawer({
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+
+  useEffect(() => {
+    if (!open) {
+      setSupportMessage("");
+    }
+  }, [open]);
+
   const handleNavigate = (path: string) => {
     if (!onNavigate) return;
     onNavigate(path);
     onClose();
+  };
+
+
+  const handleSupportAction = async (label: string) => {
+    const draft = buildSupportDraft(label, currentPage);
+    const copied = await copySupportDraft(draft);
+
+    if (label === "Contact admin") {
+      openSupportEmail(draft);
+      setSupportMessage(
+        copied
+          ? "Email draft opened and details copied. Add the admin recipient before sending."
+          : "Email draft opened. Add the admin recipient before sending."
+      );
+      return;
+    }
+
+    setSupportMessage(
+      copied
+        ? "Draft copied. Paste it into your support channel, email, or ticket system."
+        : "Clipboard access was blocked. Use Contact admin to open an email draft instead."
+    );
   };
 
   return (
@@ -725,7 +1093,7 @@ function HelpDrawer({
                 }}
               >
                 {filteredFaqs.map((faq) => {
-                  const expanded = openFaqId === faq.id;
+                  const expanded = openFaqId === faq.id || Boolean(normalizedQuery);
                   const panelId = `help-faq-${faq.id}`;
                   return (
                     <div
@@ -802,8 +1170,25 @@ function HelpDrawer({
                 Need more help?
               </h3>
               <p style={sectionSubtitleStyle}>
-                These actions are ready for future support workflows.
+                Use these actions to capture page context, browser details, and a clean request template.
               </p>
+              {supportMessage && (
+                <div
+                  role="status"
+                  style={{
+                    marginTop: "10px",
+                    padding: "10px 12px",
+                    borderRadius: "12px",
+                    border: "1px solid color-mix(in srgb, var(--accent-emerald) 25%, transparent)",
+                    background: "color-mix(in srgb, var(--accent-emerald) 10%, transparent)",
+                    color: "var(--fg-default)",
+                    fontSize: "12px",
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {supportMessage}
+                </div>
+              )}
               <div
                 style={{
                   display: "grid",
@@ -816,6 +1201,7 @@ function HelpDrawer({
                   <button
                     key={label}
                     type="button"
+                    onClick={() => handleSupportAction(label)}
                     style={{
                       display: "flex",
                       alignItems: "center",
