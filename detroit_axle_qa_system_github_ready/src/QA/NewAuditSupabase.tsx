@@ -373,7 +373,7 @@ function useThemeRefresh() {
   return key;
 }
 
-function getThemeVars(): Record<string, string> & { isLight: boolean } {
+function getThemeVars(): { isLight: boolean } & Record<string, string | boolean> {
   const themeMode =
     typeof document !== 'undefined'
       ? (
@@ -1051,7 +1051,7 @@ const AgentStep = memo(function AgentStep({
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--na-text)' }}>{selectedAgent.agent_name}</div>
             <div style={{ fontSize: 12, color: 'var(--na-text-3)', marginTop: 1 }}>
-              {selectedAgent.display_name || selectedAgent.agent_id}
+              {getAgentLabel(selectedAgent)}
             </div>
           </div>
           <div style={{
@@ -1114,7 +1114,7 @@ const AgentStep = memo(function AgentStep({
                     {p.agent_name}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--na-text-3)', marginTop: 1 }}>
-                    {p.display_name || p.agent_id}
+                    {getAgentLabel(p)}
                   </div>
                 </div>
                 {draft.selectedAgentProfileId === p.id && (
@@ -1246,11 +1246,7 @@ const ScorecardStep = memo(function ScorecardStep({
   onMetricCommentChange: (name: string, val: string) => void;
   teamAccent: string;
 }) {
-  const scoreNum = parseFloat(adjustedData.qualityScore);
-  const scoreColor = adjustedData.hasAutoFail ? '#dc2626' : getScoreColor(scoreNum);
-
   const scoredMetrics = metrics.filter((m) => countsTowardScore(m));
-  const resolved = metrics.filter((m) => !countsTowardScore(m));
   const answeredCount = scoredMetrics.filter((m) => {
     const v = getMetricStoredValue(m, draft.scores);
     return v !== 'N/A' && v !== '';
@@ -1402,9 +1398,6 @@ const ReviewStep = memo(function ReviewStep({
   teamAccent: string;
   lastAudit: LastAuditSummary | null;
 }) {
-  const scoreNum = parseFloat(adjustedData.qualityScore);
-  const scoreColor = adjustedData.hasAutoFail ? '#dc2626' : getScoreColor(scoreNum);
-
   const flaggedMetrics = adjustedData.scoreDetails.filter(
     (d) => d.counts_toward_score && shouldShowMetricComment(d.result)
   );
@@ -1568,7 +1561,7 @@ function NewAuditSupabase() {
   const [lastAudit, setLastAudit] = useState<LastAuditSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [, setSaveSuccess] = useState(false);
 
   const themeRefreshKey = useThemeRefresh();
   const themeVarsRaw = useMemo(() => getThemeVars(), [themeRefreshKey]);
