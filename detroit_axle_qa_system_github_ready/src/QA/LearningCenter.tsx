@@ -803,13 +803,19 @@ const SUPERVISOR_ONBOARDING_STEPS = [
 ];
 
 const OnboardingTab = memo(function OnboardingTab({ progress, role, onSelectModule }: { progress: UserProgress; role: string; onSelectModule: (mod: LearningModule) => void; }) {
+  const tracks = role === "agent"
+    ? [{ label:"🎯 Agent Onboarding Track", sub:"6 steps · ~3 hours", badge:"Agent", badgeClass:"lc-badge-blue", steps:AGENT_ONBOARDING_STEPS }]
+    : role === "supervisor"
+    ? [{ label:"👔 Supervisor Onboarding Track", sub:"5 steps · ~4 hours", badge:"Supervisor", badgeClass:"lc-badge-violet", steps:SUPERVISOR_ONBOARDING_STEPS }]
+    : [
+        { label:"🎯 Agent Onboarding Track", sub:"6 steps · ~3 hours", badge:"Agent", badgeClass:"lc-badge-blue", steps:AGENT_ONBOARDING_STEPS },
+        { label:"👔 Supervisor Onboarding Track", sub:"5 steps · ~4 hours", badge:"Supervisor", badgeClass:"lc-badge-violet", steps:SUPERVISOR_ONBOARDING_STEPS },
+      ];
+
   return (
     <>
       <div className="lc-section-header"><div><div className="lc-section-title">Onboarding Materials</div><div className="lc-section-sub">Role-based onboarding tracks</div></div></div>
-      {[
-        { label:"🎯 Agent Onboarding Track", sub:"6 steps · ~3 hours", badge:"Agent", badgeClass:"lc-badge-blue", steps:AGENT_ONBOARDING_STEPS },
-        { label:"👔 Supervisor Onboarding Track", sub:"5 steps · ~4 hours", badge:"Supervisor", badgeClass:"lc-badge-violet", steps:SUPERVISOR_ONBOARDING_STEPS },
-      ].map(({ label, sub, badge, badgeClass, steps }) => (
+      {tracks.map(({ label, sub, badge, badgeClass, steps }) => (
         <div key={label} className="lc-onboarding-track">
           <div className="lc-onboarding-header">
             <div>
