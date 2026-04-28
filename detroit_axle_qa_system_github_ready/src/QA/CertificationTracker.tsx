@@ -1,78 +1,121 @@
-import { memo } from 'react';
-import type { UserRole } from './TrainingModule';
+import { memo, useMemo } from "react";
+import type { LearningModule, Quiz, UserProgress } from "./LearningCenter";
 
-export type CertificationRecord = {
-  id: string;
-  name: string;
-  description: string;
-  status: 'not-started' | 'in-progress' | 'certified' | 'expired';
-  progress: number;
-  requiredRole: UserRole;
-  expiresAt?: string | null;
-};
-
-type CertificationTrackerProps = {
-  certifications: CertificationRecord[];
-  role: UserRole;
-};
-
-function getStatusText(status: CertificationRecord['status']) {
-  if (status === 'not-started') return 'Not Started';
-  if (status === 'in-progress') return 'In Progress';
-  if (status === 'certified') return 'Certified';
-  return 'Expired';
+interface CertificationTrackerProps {
+  progress: UserProgress;
+  modules: LearningModule[];
+  quizzes: Quiz[];
+  onBack: () => void;
 }
 
-function CertificationTracker({ certifications, role }: CertificationTrackerProps) {
-  const visible = certifications.filter((certification) =>
-    certification.requiredRole === role ||
-    certification.requiredRole === 'agent' ||
-    role === 'admin' ||
-    role === 'qa'
-  );
+function CertificationTracker({ progress, modules, quizzes, onBack }: CertificationTrackerProps) {
+  const moduleCompletionRate = useMemo(() => {
+    if (modules.length === 0) return 0;
+    return Math.round((progress.completedModules.length / modules.length) * 100);
+  }, [modules.length, progress.completedModules.length]);
 
-  if (!visible.length) {
-    return <div className="lc-empty">No certifications are assigned yet.</div>;
-  }
+  const quizCompletionRate = useMemo(() => {
+    if (quizzes.length === 0) return 0;
+    return Math.round((progress.completedQuizzes.length / quizzes.length) * 100);
+  }, [progress.completedQuizzes.length, quizzes.length]);
+
+  const averageQuizScore = useMemo(() => {
+    const scores = Object.values(progress.quizScores);
+    if (scores.length === 0) return 0;
+    return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
+  }, [progress.quizScores]);
+
+  const certifications = [
+    {
+      id: "qa-foundations",
+      title: "QA Foundations",
+      description: "Complete core modules and one quiz to validate quality awareness.",
+      progress: Math.min(100, Math.round((moduleCompletionRate + quizCompletionRate) / 2)),
+      status: moduleCompletionRate >= 40 && quizCompletionRate >= 50 ? "Certified" : "In Progress",
+    },
+    {
+      id: "documentation-ready",
+      title: "Documentation Ready",
+      description: "Complete documentation training and maintain strong quiz performance.",
+      progress: Math.min(100, averageQuizScore),
+      status: averageQuizScore >= 80 ? "Certified" : "In Progress",
+    },
+    {
+      id: "learning-streak",
+      title: "Learning Streak",
+      description: "Maintain an active learning rhythm through modules, quizzes, and refreshers.",
+      progress: Math.min(100, progress.streak * 20),
+      status: progress.streak >= 5 ? "Certified" : "In Progress",
+    },
+  ];
 
   return (
-    <section className="lc-card lc-card-pad">
-      <h2 className="lc-section-title">Certification Tracking</h2>
+    <div className="lc-root">
+      <div className="lc-section-header">
+        <div>
+          <div className="lc-section-title">Certification Tracking</div>
+          <div className="lc-section-sub">
+            Track completed modules, passed quizzes, and readiness milestones.
+          </div>
+        </div>
+        <button className="lc-tab-btn" onClick={onBack}>
+          ← Back
+        </button>
+      </div>
+
+      <div className="lc-analytics-grid">
+        <div className="lc-stat-card">
+          <div className="lc-stat-val" style={{ color: "var(--accent-blue)" }}>
+            {moduleCompletionRate}%
+          </div>
+          <div className="lc-stat-label">Module Progress</div>
+        </div>
+        <div className="lc-stat-card">
+          <div className="lc-stat-val" style={{ color: "var(--accent-cyan)" }}>
+            {quizCompletionRate}%
+          </div>
+          <div className="lc-stat-label">Quiz Progress</div>
+        </div>
+        <div className="lc-stat-card">
+          <div className="lc-stat-val" style={{ color: "var(--accent-emerald)" }}>
+            {averageQuizScore || "—"}%
+          </div>
+          <div className="lc-stat-label">Average Score</div>
+        </div>
+        <div className="lc-stat-card">
+          <div className="lc-stat-val" style={{ color: "var(--accent-violet)" }}>
+            {progress.badges.length}
+          </div>
+          <div className="lc-stat-label">Badges Earned</div>
+        </div>
+      </div>
+
       <div className="lc-grid">
-        {visible.map((certification) => (
-          <article className="lc-card lc-card-pad lc-span-6" key={certification.id}>
-            <div className="lc-pill-row" style={{ marginBottom: 10 }}>
-              <span className="lc-pill">{getStatusText(certification.status)}</span>
-              <span className="lc-pill">{certification.requiredRole}</span>
-              {certification.expiresAt && <span className="lc-pill">{certification.expiresAt}</span>}
+        {certifications.map((certification) => (
+          <div key={certification.id} className="lc-card" style={{ cursor: "default" }}>
+            <div className="lc-card-header">
+              <div className="lc-card-title">{certification.title}</div>
+              <span className={`lc-badge ${certification.status === "Certified" ? "lc-badge-emerald" : "lc-badge-amber"}`}>
+                {certification.status}
+              </span>
             </div>
-            <h3 style={{ margin: 0, fontSize: 16, fontWeight: 850, letterSpacing: '-0.02em' }}>
-              {certification.name}
-            </h3>
-            <p className="lc-mini-copy" style={{ marginTop: 7 }}>{certification.description}</p>
-            <div style={{
-              height: 7,
-              borderRadius: 999,
-              background: 'var(--lc-soft)',
-              border: '1px solid var(--lc-border)',
-              overflow: 'hidden',
-              marginTop: 14,
-            }}>
+            <div className="lc-card-desc">{certification.description}</div>
+            <div className="lc-standard-bar">
               <div
+                className="lc-standard-bar-fill"
                 style={{
-                  height: '100%',
-                  width: `${Math.min(100, Math.max(0, certification.progress))}%`,
-                  background: certification.status === 'certified' ? 'var(--lc-success)' : 'var(--lc-accent)',
-                  borderRadius: 999,
-                  transition: 'width 240ms var(--ease-out, ease)',
+                  width: `${certification.progress}%`,
+                  background: certification.status === "Certified" ? "var(--accent-emerald)" : "var(--accent-violet)",
                 }}
               />
             </div>
-            <div className="lc-kpi-note">{certification.progress}% complete</div>
-          </article>
+            <div style={{ fontSize: "11px", color: "var(--fg-muted)", marginTop: "8px" }}>
+              {certification.progress}% complete
+            </div>
+          </div>
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 

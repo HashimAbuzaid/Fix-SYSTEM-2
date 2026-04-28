@@ -1,99 +1,129 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState } from "react";
+import type { Quiz } from "./LearningCenter";
 
-export type QuizQuestion = {
-  id: string;
-  prompt: string;
-  options: string[];
-  correctAnswer: string;
-  feedback: string;
-  topic: string;
-};
+interface QuizEngineProps {
+  quiz: Quiz;
+  onComplete: (score: number) => void;
+  onBack: () => void;
+}
 
-type QuizEngineProps = {
-  questions: QuizQuestion[];
-  onComplete?: (score: number) => void;
-};
-
-function QuizEngine({ questions, onComplete }: QuizEngineProps) {
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+function QuizEngine({ quiz, onComplete, onBack }: QuizEngineProps) {
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   const [submitted, setSubmitted] = useState(false);
 
-  const score = useMemo(() => {
-    if (!questions.length) return 0;
-    const correct = questions.filter((question) => answers[question.id] === question.correctAnswer).length;
-    return (correct / questions.length) * 100;
-  }, [answers, questions]);
+  const answeredCount = useMemo(
+    () => quiz.questions.filter((question) => answers[question.id] !== undefined).length,
+    [answers, quiz.questions]
+  );
 
-  const answeredCount = questions.filter((question) => answers[question.id]).length;
-  const canSubmit = answeredCount === questions.length && questions.length > 0;
+  const score = useMemo(() => {
+    if (quiz.questions.length === 0) return 0;
+    const correct = quiz.questions.filter(
+      (question) => answers[question.id] === question.correctIndex
+    ).length;
+    return Math.round((correct / quiz.questions.length) * 100);
+  }, [answers, quiz.questions]);
+
+  const canSubmit = answeredCount === quiz.questions.length && quiz.questions.length > 0;
 
   function handleSubmit() {
     setSubmitted(true);
-    onComplete?.(score);
-  }
-
-  if (!questions.length) {
-    return <div className="lc-empty">No quiz questions are available yet.</div>;
+    onComplete(score);
   }
 
   return (
-    <section className="lc-card lc-card-pad">
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 16 }}>
+    <div className="lc-root">
+      <div className="lc-section-header">
         <div>
-          <h2 className="lc-section-title">Refresher Quiz</h2>
-          <p className="lc-mini-copy">Scenario-based checks with instant feedback.</p>
+          <div className="lc-section-title">{quiz.title}</div>
+          <div className="lc-section-sub">
+            {quiz.questions.length} questions · Passing score {quiz.passingScore}%
+          </div>
         </div>
-        <span className="lc-pill">{answeredCount} / {questions.length} answered</span>
+        <button className="lc-tab-btn" onClick={onBack}>
+          ← Back
+        </button>
       </div>
 
-      <div className="lc-list">
-        {questions.map((question) => {
+      <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+        {quiz.questions.map((question, qIndex) => {
           const selected = answers[question.id];
-          const isCorrect = submitted && selected === question.correctAnswer;
-          const isWrong = submitted && !!selected && selected !== question.correctAnswer;
+          const isCorrect = submitted && selected === question.correctIndex;
+          const isWrong = submitted && selected !== undefined && selected !== question.correctIndex;
 
           return (
-            <div className="lc-card lc-card-pad" key={question.id}>
-              <div className="lc-pill-row" style={{ marginBottom: 10 }}>
-                <span className="lc-pill">{question.topic}</span>
-                {isCorrect && <span className="lc-pill">Correct</span>}
-                {isWrong && <span className="lc-pill">Review</span>}
+            <div key={question.id} className="lc-card" style={{ cursor: "default" }}>
+              <div className="lc-card-header">
+                <div className="lc-card-title">
+                  {qIndex + 1}. {question.question}
+                </div>
+                {isCorrect && <span className="lc-badge lc-badge-emerald">Correct</span>}
+                {isWrong && <span className="lc-badge lc-badge-rose">Review</span>}
               </div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>{question.prompt}</h3>
-              <div className="lc-list" style={{ marginTop: 12 }}>
-                {question.options.map((option) => (
-                  <button
-                    type="button"
-                    className={`lc-btn${selected === option ? ' lc-btn-primary' : ''}`}
-                    key={option}
-                    onClick={() => {
-                      if (!submitted) {
-                        setAnswers((prev) => ({ ...prev, [question.id]: option }));
-                      }
-                    }}
-                    style={{ justifyContent: 'flex-start', minHeight: 38 }}
-                  >
-                    {option}
-                  </button>
-                ))}
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "12px" }}>
+                {question.options.map((option, index) => {
+                  const active = selected === index;
+                  const correctAnswer = submitted && index === question.correctIndex;
+                  const wrongAnswer = submitted && active && index !== question.correctIndex;
+
+                  return (
+                    <button
+                      key={option}
+                      className={`lc-tab-btn${active ? " active" : ""}`}
+                      style={{
+                        justifyContent: "flex-start",
+                        height: "auto",
+                        minHeight: "36px",
+                        padding: "9px 12px",
+                        borderColor: correctAnswer
+                          ? "color-mix(in srgb,var(--accent-emerald) 30%,transparent)"
+                          : wrongAnswer
+                            ? "color-mix(in srgb,var(--accent-rose) 30%,transparent)"
+                            : undefined,
+                        color: correctAnswer
+                          ? "var(--accent-emerald)"
+                          : wrongAnswer
+                            ? "var(--accent-rose)"
+                            : undefined,
+                      }}
+                      disabled={submitted}
+                      onClick={() => setAnswers((prev) => ({ ...prev, [question.id]: index }))}
+                    >
+                      {option}
+                    </button>
+                  );
+                })}
               </div>
+
               {submitted && (
-                <p className="lc-mini-copy" style={{ marginTop: 12 }}>
-                  {question.feedback}
-                </p>
+                <div style={{ marginTop: "12px", fontSize: "12px", color: "var(--fg-muted)", lineHeight: 1.6 }}>
+                  {question.explanation}
+                </div>
               )}
             </div>
           );
         })}
       </div>
 
-      <div className="lc-pill-row" style={{ marginTop: 16, alignItems: 'center' }}>
-        <button type="button" className="lc-btn lc-btn-primary" disabled={!canSubmit} onClick={handleSubmit}>
-          Submit quiz
-        </button>
-        {submitted && <span className="lc-pill">Score: {score.toFixed(0)}%</span>}
+      <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "18px", flexWrap: "wrap" }}>
+        {!submitted && (
+          <button className="lc-complete-btn" disabled={!canSubmit} onClick={handleSubmit}>
+            Submit Quiz
+          </button>
+        )}
+        {submitted && (
+          <>
+            <div className={`lc-badge ${score >= quiz.passingScore ? "lc-badge-emerald" : "lc-badge-rose"}`}>
+              Score: {score}%
+            </div>
+            <button className="lc-tab-btn" onClick={onBack}>
+              Back to Learning Center
+            </button>
+          </>
+        )}
       </div>
-    </section>
+    </div>
   );
 }
 

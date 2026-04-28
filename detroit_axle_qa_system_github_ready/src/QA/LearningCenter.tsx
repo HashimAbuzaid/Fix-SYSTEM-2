@@ -1,5 +1,4 @@
 import { useState, useCallback, useMemo, memo, useEffect } from "react";
-import TrainingModule from "./TrainingModule";
 import QuizEngine from "./QuizEngine";
 import CertificationTracker from "./CertificationTracker";
 
@@ -1057,9 +1056,15 @@ const CoachingTab = memo(function CoachingTab({ onSelectModule }: { onSelectModu
 
 // ─── Main Component ───────────────────────────────────────────
 
-interface LearningCenterProps { userRole?: string; }
+interface LearningCenterProps {
+  userRole?: string;
+  currentUser?: {
+    role?: string | null;
+  } | null;
+}
 
-export default function LearningCenter({ userRole = "agent" }: LearningCenterProps) {
+export default function LearningCenter({ userRole, currentUser = null }: LearningCenterProps) {
+  const resolvedUserRole = userRole || currentUser?.role || "agent";
   useEffect(() => { injectLCStyles(); }, []);
 
   const [activeTab, setActiveTab] = useState<LCTab>("home");
@@ -1069,8 +1074,8 @@ export default function LearningCenter({ userRole = "agent" }: LearningCenterPro
   const [showCerts, setShowCerts] = useState(false);
   const [search, setSearch] = useState("");
 
-  const isAdmin = userRole === "admin" || userRole === "qa";
-  const isSupervisor = userRole === "supervisor";
+  const isAdmin = resolvedUserRole === "admin" || resolvedUserRole === "qa";
+  const isSupervisor = resolvedUserRole === "supervisor";
 
   const levelPct = useMemo(() => {
     const cur = LEVEL_THRESHOLDS[progress.level] ?? 0;
@@ -1130,7 +1135,7 @@ export default function LearningCenter({ userRole = "agent" }: LearningCenterPro
     { id:"coaching", label:"Coaching", icon:"👔", roles:["supervisor","admin","qa"] },
   ];
 
-  const visibleTabs = TABS.filter((t) => !t.roles || t.roles.includes(userRole));
+  const visibleTabs = TABS.filter((t) => !t.roles || t.roles.includes(resolvedUserRole));
 
   if (activeQuizId) {
     const quiz = MOCK_QUIZZES.find((q) => q.id === activeQuizId);
