@@ -284,6 +284,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
 
   useEffect(() => {
     if (!userId) return;
+    const activeUserId = userId;
 
     const isSup = role === "supervisor";
     const isAgent = role === "agent";
@@ -303,8 +304,8 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
           fetchQuizzes(),
           fetchLessonsLearned(),
           fetchBestPractices(),
-          fetchOrCreateUserProgress(userId),
-          fetchUserUpvotes(userId),
+          fetchOrCreateUserProgress(activeUserId),
+          fetchUserUpvotes(activeUserId),
           fetchOnboardingTracks(role),
         ]);
 
@@ -321,8 +322,8 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
 
         if (isSup) {
           const [teamRes, notesRes, linksRes] = await Promise.all([
-            fetchTeamMembers(userId),
-            fetchCoachingNotes(userId),
+            fetchTeamMembers(activeUserId),
+            fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
           ]);
           if (teamRes.data)  setTeamData(teamRes.data);
@@ -330,17 +331,17 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
           if (linksRes.data) setAuditLinks(linksRes.data);
         } else if (isAgent) {
           const [recRes, assignRes, linksRes] = await Promise.all([
-            fetchRecommendedModuleIds(userId),
-            fetchAgentAssignments(userId),
-            fetchAuditLinks(userId),
+            fetchRecommendedModuleIds(activeUserId),
+            fetchAgentAssignments(activeUserId),
+            fetchAuditLinks(activeUserId),
           ]);
           if (recRes.data)    setRecommendations(recRes.data);
           if (assignRes.data) setAssignedModuleIds(new Set(assignRes.data.map(a => a.moduleId ?? "").filter(Boolean)));
           if (linksRes.data)  setAuditLinks(linksRes.data);
         } else {
           const [teamRes, notesRes, linksRes] = await Promise.all([
-            fetchTeamMembers(userId),
-            fetchCoachingNotes(userId),
+            fetchTeamMembers(activeUserId),
+            fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
           ]);
           if (teamRes.data)  setTeamData(teamRes.data);
