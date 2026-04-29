@@ -186,14 +186,16 @@ const QuizManager = memo(function QuizManager({
 
   const handleRoleToggle = useCallback((role: LearningRole) => {
     setDraft((current) => {
-      const roles = new Set(current.audienceRoles ?? ["agent"]);
+      const roles = new Set<LearningRole>(current.audienceRoles ?? (["agent"] as LearningRole[]));
       if (role === "all") {
-        return { ...current, audienceRoles: roles.has("all") ? ["agent"] : ["all"] };
+        const nextRoles: LearningRole[] = roles.has("all") ? ["agent"] : ["all"];
+        return { ...current, audienceRoles: nextRoles };
       }
       roles.delete("all");
       if (roles.has(role)) roles.delete(role);
       else roles.add(role);
-      return { ...current, audienceRoles: roles.size > 0 ? Array.from(roles) : ["agent"] };
+      const nextRoles: LearningRole[] = roles.size > 0 ? Array.from(roles) : ["agent"];
+      return { ...current, audienceRoles: nextRoles };
     });
   }, []);
 
