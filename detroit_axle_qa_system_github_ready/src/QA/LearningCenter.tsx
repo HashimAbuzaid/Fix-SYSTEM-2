@@ -17,7 +17,7 @@ import {
   upsertSOP, deleteSOP, upsertWorkInstruction, deleteWorkInstruction,
   upsertDefectExample, deleteDefectExample, upsertQualityStandard, deleteQualityStandard,
   upsertOnboardingTrack, deleteOnboardingTrack, upsertBestPractice, deleteBestPractice,
-  upsertTeamMember, deleteTeamMember, deleteCoachingNote,
+  deleteCoachingNote,
   fetchAllAssignments, fetchLearningContentAuditTrail,
 } from "./learningService";
 import type {
@@ -292,8 +292,6 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   removeOnboardingTrack: (id: string) => Promise<void>;
   saveBestPractice: (item: BestPractice) => Promise<void>;
   removeBestPractice: (id: string) => Promise<void>;
-  saveTeamMember: (item: TeamMember) => Promise<void>;
-  removeTeamMember: (id: string) => Promise<void>;
   removeCoachingNote: (id: string) => Promise<void>;
   saveCoachingNoteWithId: (agentId: string, note: string, metric?: string, noteId?: string) => Promise<void>;
 } {
@@ -597,16 +595,6 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     setBestPractices(prev => prev.filter(item => item.id !== id));
   }, []);
 
-  const saveTeamMember = useCallback(async (item: TeamMember) => {
-    const res = await upsertTeamMember(item);
-    if (res.data) setTeamData(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
-  }, []);
-
-  const removeTeamMember = useCallback(async (id: string) => {
-    await deleteTeamMember(id);
-    setTeamData(prev => prev.filter(item => item.id !== id));
-  }, []);
-
   const removeCoachingNote = useCallback(async (id: string) => {
     if (!userId) return;
     await deleteCoachingNote(userId, id);
@@ -636,7 +624,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     saveModule, removeModule, saveSOP, removeSOP,
     saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
     saveStandard, removeStandard, saveOnboardingTrack, removeOnboardingTrack,
-    saveBestPractice, removeBestPractice, saveTeamMember, removeTeamMember,
+    saveBestPractice, removeBestPractice,
     removeCoachingNote, saveCoachingNoteWithId,
   };
 }
@@ -1335,7 +1323,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     saveModule, removeModule, saveSOP, removeSOP,
     saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
     saveStandard, removeStandard, saveOnboardingTrack, removeOnboardingTrack,
-    saveBestPractice, removeBestPractice, saveTeamMember, removeTeamMember,
+    saveBestPractice, removeBestPractice,
     removeCoachingNote, saveCoachingNoteWithId,
   } = useSupabaseLearning(userId, resolvedRole);
 
@@ -1720,8 +1708,6 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
               kind="coaching"
               teamData={teamData}
               coachingNotes={coachingNotes}
-              onSaveTeamMember={saveTeamMember}
-              onDeleteTeamMember={removeTeamMember}
               onSaveCoachingNote={saveCoachingNoteWithId}
               onDeleteCoachingNote={removeCoachingNote}
             />
