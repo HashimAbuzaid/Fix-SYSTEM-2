@@ -154,12 +154,18 @@ export interface QualityStandard {
   lastEditedBy?: string | null;
 }
 
+export type OperationalTeam = "Calls" | "Tickets" | "Sales";
+
 export interface TeamMember {
   id: string;
   name: string;
   initials: string;
   score: number;
   failedMetrics: string[];
+  team?: OperationalTeam | string | null;
+  agentId?: string | null;
+  email?: string | null;
+  source?: "profiles" | "manual";
 }
 
 export interface CoachingNote {
@@ -519,15 +525,9 @@ const QUALITY_STANDARDS: QualityStandard[] = [
   },
 ];
 
-const TEAM_MEMBERS: TeamMember[] = [
-  {
-    id: "agent-1",
-    name: "Sample Agent",
-    initials: "SA",
-    score: 82,
-    failedMetrics: ["Ticket Documentation"],
-  },
-];
+// Team members are synced from the existing app profiles table.
+// Keep this empty so the Learning Center never shows a fake/sample agent.
+const TEAM_MEMBERS: TeamMember[] = [];
 
 const AUDIT_LINKS: AuditLink[] = [
   { metric: "Ticket Documentation", moduleId: "ticket-documentation", failRate: 18 },
@@ -853,7 +853,51 @@ function normalizeTeamMember(item: TeamMember): TeamMember {
     initials: item.initials?.trim() || "TM",
     score: Math.max(0, Math.min(Number(item.score) || 0, 100)),
     failedMetrics: csv(item.failedMetrics),
+    team: item.team ?? null,
+    agentId: item.agentId ?? null,
+    email: item.email ?? null,
+    source: item.source ?? "manual",
   };
+}
+
+type ProfileTeamRow = {
+  id: string;
+  agent_id?: string | null;
+  agent_name?: string | null;
+  display_name?: string | null;
+  email?: string | null;
+  team?: string | null;
+  role?: string | null;
+};
+
+const OPERATIONAL_TEAMS: OperationalTeam[] = ["Calls", "Tickets", "Sales"];
+
+function getInitials(name: string, email?: string | null): string {
+  const source = name.trim() || email?.split("@")[0] || "TM";
+  const parts = source.split(/[\s._-]+/).filter(Boolean);
+
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+
+  return source.slice(0, 2).toUpperCase();
+}
+
+function profileToTeamMember(row: ProfileTeamRow): TeamMember {
+  const name =
+    row.display_name || row.agent_name || row.email || row.agent_id || "Unknown Agent";
+
+  return normalizeTeamMember({
+    id: row.id,
+    agentId: row.agent_id ?? row.id,
+    name,
+    initials: getInitials(name, row.email),
+    email: row.email ?? null,
+    team: row.team ?? null,
+    score: 0,
+    failedMetrics: [],
+    source: "profiles",
+  });
 }
 
 // ─── Supabase REST persistence with local fallback ───────────────────────────
@@ -904,6 +948,7 @@ function getSupabaseEnv(): SupabaseEnv {
 
 function canUseSupabase(): boolean {
   const env = getSupabaseEnv();
+
   return Boolean(env.url && env.anonKey && typeof fetch !== "undefined");
 }
 
@@ -943,6 +988,7 @@ async function supabaseJson<T>(
 
 function rowsToData<T>(rows: readonly JsonRecordRow<T>[] | null): T[] | null {
   if (!rows) return null;
+
   return rows.map((row) => row.data).filter(Boolean);
 }
 
@@ -1051,7 +1097,9 @@ async function deleteContent(
   id: string
 ): Promise<ServiceResult<boolean>> {
   withLocalDelete(customKey, deletedKey, id);
+
   await deleteRecord(table, id);
+
   return ok(true);
 }
 
@@ -1465,15 +1513,32 @@ export async function toggleLessonUpvote(
 export async function fetchTeamMembers(
   _supervisorId?: string
 ): Promise<ServiceResult<TeamMember[]>> {
-  return fetchContent(
-    tableNames.teamMembers,
+  const teams = OPERATIONAL_TEAMS.join(",");
+
+  const remoteProfiles = await supabaseJson<ProfileTeamRow[]>(
+    `profiles?select=id,agent_id,agent_name,display_name,email,team,role&role=eq.agent&team=in.(${teams})&order=team.asc,agent_name.asc`,
+    { method: "GET" }
+  );
+
+  if (remoteProfiles) {
+    return ok(remoteProfiles.map(profileToTeamMember));
+  }
+
+  const local = mergeItems(
     TEAM_MEMBERS,
-    customKeys.teamMembers,
-    deletedKeys.teamMembers,
-    normalizeTeamMember
+    readCustom<TeamMember>(customKeys.teamMembers),
+    readDeleted(deletedKeys.teamMembers)
+  );
+
+  return ok(
+    local
+      .map(normalizeTeamMember)
+      .filter((member) => OPERATIONAL_TEAMS.includes(member.team as OperationalTeam))
   );
 }
 
+// Kept for backward compatibility with older manager builds. New Learning Center UI
+// treats team members as synced profile data and does not expose manual CRUD.
 export async function upsertTeamMember(
   item: TeamMember
 ): Promise<ServiceResult<TeamMember>> {
@@ -1614,7 +1679,11 @@ export async function fetchAgentAssignments(
 
   if (remoteData) return ok(remoteData.map(normalizeAssignment));
 
-  return ok(readJson<LearningAssignment[]>(assignmentKey(agentId), []).map(normalizeAssignment));
+  return ok(
+    readJson<LearningAssignment[]>(assignmentKey(agentId), []).map(
+      normalizeAssignment
+    )
+  );
 }
 
 export async function fetchAllAssignments(): Promise<
@@ -1687,9 +1756,11 @@ export async function checkAndGrantCertifications(
   };
 
   if (progress.completedModules.length >= 1) ensure("qa-foundations");
+
   if (Object.values(progress.quizScores).some((score) => score === 100)) {
     ensure("perfect-scorer");
   }
+
   if (progress.xp >= 500) ensure("module-master");
 
   const updated: UserProgress = { ...progress, certifications };
