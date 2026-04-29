@@ -2081,7 +2081,8 @@ export async function toggleLessonUpvote(
 }
 
 export async function fetchTeamMembers(
-  _supervisorId?: string
+  _supervisorId?: string,
+  teamScope?: string | null
 ): Promise<ServiceResult<TeamMember[]>> {
   // Pull directly from the existing app profiles table using the signed-in user's
   // Supabase access token when available. This matters because RLS policies for
@@ -2092,14 +2093,18 @@ export async function fetchTeamMembers(
     { method: "GET" }
   );
 
+  const scopeTeam = normalizeOperationalTeam(teamScope);
+
+  const inScope = (member: TeamMember) => {
+    const memberTeam = normalizeOperationalTeam(member.team);
+
+    if (!memberTeam || !OPERATIONAL_TEAMS.includes(memberTeam)) return false;
+
+    return scopeTeam ? memberTeam === scopeTeam : true;
+  };
+
   if (remoteProfiles) {
-    const synced = remoteProfiles
-      .map(profileToTeamMember)
-      .filter(
-        (member) =>
-          member.team !== null &&
-          OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
-      );
+    const synced = remoteProfiles.map(profileToTeamMember).filter(inScope);
 
     return ok(await attachAuditInsightsToTeamMembers(synced));
   }
@@ -2117,11 +2122,7 @@ export async function fetchTeamMembers(
         team: normalizeOperationalTeam(member.team),
       })
     )
-    .filter(
-      (member) =>
-        member.team !== null &&
-        OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
-    );
+    .filter(inScope);
 
   return ok(await attachAuditInsightsToTeamMembers(syncedLocal));
 }
