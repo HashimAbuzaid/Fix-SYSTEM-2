@@ -431,15 +431,6 @@ function lsSet<T>(key: string, value: T): void {
   }
 }
 
-function lsDel(key: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // ignore
-  }
-}
-
 // ─── Key factories ────────────────────────────────────────────────────────────
 
 const KEY = {
