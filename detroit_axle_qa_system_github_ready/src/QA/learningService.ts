@@ -860,8 +860,8 @@ function normalizeTeamMember(item: TeamMember): TeamMember {
   };
 }
 
-type ProfileTeamRow = {
-  id: string;
+type ProfileTeamRow = Record<string, unknown> & {
+  id?: string | null;
   agent_id?: string | null;
   agent_name?: string | null;
   display_name?: string | null;
@@ -901,17 +901,56 @@ function getInitials(name: string, email?: string | null): string {
   return source.slice(0, 2).toUpperCase();
 }
 
+function stringFromRow(row: ProfileTeamRow, keys: string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
 function profileToTeamMember(row: ProfileTeamRow): TeamMember {
+  const id =
+    stringFromRow(row, ["id", "user_id", "profile_id", "agent_id", "email"]) ??
+    createLocalId("profile-agent");
+
+  const agentId = stringFromRow(row, ["agent_id", "user_id", "id"]) ?? id;
+  const email = stringFromRow(row, ["email", "user_email"]);
+
   const name =
-    row.display_name || row.agent_name || row.email || row.agent_id || "Unknown Agent";
+    stringFromRow(row, [
+      "display_name",
+      "agent_name",
+      "full_name",
+      "name",
+      "employee_name",
+    ]) ??
+    email ??
+    agentId ??
+    "Unknown Agent";
+
+  const team = normalizeOperationalTeam(
+    stringFromRow(row, [
+      "team",
+      "department",
+      "queue",
+      "line_of_business",
+      "lob",
+      "channel",
+    ])
+  );
 
   return normalizeTeamMember({
-    id: row.id,
-    agentId: row.agent_id ?? row.id,
+    id,
+    agentId,
     name,
-    initials: getInitials(name, row.email),
-    email: row.email ?? null,
-    team: normalizeOperationalTeam(row.team),
+    initials: getInitials(name, email),
+    email,
+    team,
     score: 0,
     failedMetrics: [],
     source: "profiles",
@@ -970,12 +1009,49 @@ function canUseSupabase(): boolean {
   return Boolean(env.url && env.anonKey && typeof fetch !== "undefined");
 }
 
+function getSupabaseAccessToken(): string | null {
+  if (typeof window === "undefined") return null;
+
+  try {
+    for (let index = 0; index < window.localStorage.length; index += 1) {
+      const key = window.localStorage.key(index);
+
+      if (!key || !key.startsWith("sb-") || !key.endsWith("-auth-token")) {
+        continue;
+      }
+
+      const raw = window.localStorage.getItem(key);
+
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw) as {
+        access_token?: string;
+        currentSession?: { access_token?: string };
+        session?: { access_token?: string };
+      };
+
+      const token =
+        parsed.access_token ??
+        parsed.currentSession?.access_token ??
+        parsed.session?.access_token ??
+        null;
+
+      if (token) return token;
+    }
+  } catch {
+    // If localStorage parsing fails, fall back to the anon key.
+  }
+
+  return null;
+}
+
 function supabaseHeaders(extra?: HeadersInit): HeadersInit {
   const env = getSupabaseEnv();
+  const bearerToken = getSupabaseAccessToken() ?? env.anonKey ?? "";
 
   return {
     apikey: env.anonKey ?? "",
-    Authorization: `Bearer ${env.anonKey ?? ""}`,
+    Authorization: `Bearer ${bearerToken}`,
     "Content-Type": "application/json",
     ...extra,
   };
@@ -1531,24 +1607,25 @@ export async function toggleLessonUpvote(
 export async function fetchTeamMembers(
   _supervisorId?: string
 ): Promise<ServiceResult<TeamMember[]>> {
-  // Pull directly from the existing app profiles table. Do not require role = agent here:
-  // some existing Detroit Axle accounts are grouped by team first and may not have the
-  // exact lowercase role value the Learning Center previously filtered on.
+  // Pull directly from the existing app profiles table using the signed-in user's
+  // Supabase access token when available. This matters because RLS policies for
+  // profiles usually apply to `authenticated`, not `anon`.
+  // Use select=* so this keeps working if profile column names differ slightly.
   const remoteProfiles = await supabaseJson<ProfileTeamRow[]>(
-    "profiles?select=id,agent_id,agent_name,display_name,email,team,role&order=team.asc,agent_name.asc",
+    "profiles?select=*&order=team.asc",
     { method: "GET" }
   );
 
   if (remoteProfiles) {
-    return ok(
-      remoteProfiles
-        .map(profileToTeamMember)
-        .filter(
-          (member) =>
-            member.team !== null &&
-            OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
-        )
-    );
+    const synced = remoteProfiles
+      .map(profileToTeamMember)
+      .filter(
+        (member) =>
+          member.team !== null &&
+          OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
+      );
+
+    return ok(synced);
   }
 
   const local = mergeItems(
