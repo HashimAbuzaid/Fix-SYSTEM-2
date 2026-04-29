@@ -1040,7 +1040,7 @@ const HomeTab = memo(function HomeTab({
               {progress.completedModules.filter(id => modules.some(m => m.id === id)).length} of {modules.length} modules  ·  {nextLevelXP > 0 ? `${nextLevelXP} XP to Level ${progress.level + 1}` : "Max level reached!"}
             </div>
           </div>
-          <div style={{ display:"flex", gap:8" }}>
+          <div style={{ display:"flex", gap:8 }}>
             {progress.badges.length > 0 && (
               <div className="lc-badges-row" style={{ maxWidth:240, justifyContent:"flex-end", margin:0 }}>
                 {progress.badges.slice(0,4).map(b => (
