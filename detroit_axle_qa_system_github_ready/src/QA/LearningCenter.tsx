@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, memo, useEffect } from "react";
 import QuizEngine from "./QuizEngine";
 import QuizManager from "./QuizManager";
 import LearningContentManager from "./LearningContentManager";
+import LearningContentHealth from "./LearningContentHealth";
 import CertificationTracker from "./CertificationTracker";
 import type { UserProfile } from "../context/AuthContext";
 import {
@@ -17,11 +18,13 @@ import {
   upsertDefectExample, deleteDefectExample, upsertQualityStandard, deleteQualityStandard,
   upsertOnboardingTrack, deleteOnboardingTrack, upsertBestPractice, deleteBestPractice,
   upsertTeamMember, deleteTeamMember, deleteCoachingNote,
+  fetchAllAssignments, fetchLearningContentAuditTrail,
 } from "./learningService";
 import type {
   LearningModule, SOPDocument, WorkInstruction, DefectExample,
   Quiz, LessonLearned, BestPractice, TeamMember, CoachingNote,
   UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard, LearningRole,
+  LearningAssignment, ContentAuditEntry,
 } from "./learningService";
 
 // ─── Re-export types consumers rely on ───────────────────────────────────────
@@ -33,7 +36,7 @@ export type { LearningModule, SOPDocument, WorkInstruction, DefectExample,
 export type LCTab =
   | "home" | "modules" | "sop" | "work-instructions" | "defects"
   | "standards" | "onboarding" | "quizzes" | "certifications"
-  | "lessons" | "audit-findings" | "best-practices" | "analytics" | "coaching";
+  | "lessons" | "audit-findings" | "best-practices" | "analytics" | "coaching" | "health";
 
 // ─── Quiz question type (used by QuizEngine) ──────────────────────────────────
 export interface QuizQuestion {
@@ -260,6 +263,8 @@ interface LearningData {
   onboardingTracks: OnboardingTrack[];
   userUpvotes: Set<string>;
   assignedModuleIds: Set<string>;
+  assignments: LearningAssignment[];
+  contentAudit: ContentAuditEntry[];
   loading: boolean;
   error: string | null;
 }
@@ -308,6 +313,8 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   const [onboardingTracks, setOnboardingTracks] = useState<OnboardingTrack[]>([]);
   const [userUpvotes, setUserUpvotes] = useState<Set<string>>(new Set());
   const [assignedModuleIds, setAssignedModuleIds] = useState<Set<string>>(new Set());
+  const [assignments, setAssignments] = useState<LearningAssignment[]>([]);
+  const [contentAudit, setContentAudit] = useState<ContentAuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -352,14 +359,18 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
         if (trackRes.data)      setOnboardingTracks(trackRes.data);
 
         if (isSup) {
-          const [teamRes, notesRes, linksRes] = await Promise.all([
+          const [teamRes, notesRes, linksRes, assignmentsRes, auditRes] = await Promise.all([
             fetchTeamMembers(activeUserId),
             fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
+            fetchAllAssignments(),
+            fetchLearningContentAuditTrail(),
           ]);
-          if (teamRes.data)  setTeamData(teamRes.data);
-          if (notesRes.data) setCoachingNotes(notesRes.data);
-          if (linksRes.data) setAuditLinks(linksRes.data);
+          if (teamRes.data)        setTeamData(teamRes.data);
+          if (notesRes.data)       setCoachingNotes(notesRes.data);
+          if (linksRes.data)       setAuditLinks(linksRes.data);
+          if (assignmentsRes.data) setAssignments(assignmentsRes.data);
+          if (auditRes.data)       setContentAudit(auditRes.data);
         } else if (isAgent) {
           const [recRes, assignRes, linksRes] = await Promise.all([
             fetchRecommendedModuleIds(activeUserId),
@@ -370,14 +381,18 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
           if (assignRes.data) setAssignedModuleIds(new Set(assignRes.data.map(a => a.moduleId ?? "").filter(Boolean)));
           if (linksRes.data)  setAuditLinks(linksRes.data);
         } else {
-          const [teamRes, notesRes, linksRes] = await Promise.all([
+          const [teamRes, notesRes, linksRes, assignmentsRes, auditRes] = await Promise.all([
             fetchTeamMembers(activeUserId),
             fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
+            fetchAllAssignments(),
+            fetchLearningContentAuditTrail(),
           ]);
-          if (teamRes.data)  setTeamData(teamRes.data);
-          if (notesRes.data) setCoachingNotes(notesRes.data);
-          if (linksRes.data) setAuditLinks(linksRes.data);
+          if (teamRes.data)        setTeamData(teamRes.data);
+          if (notesRes.data)       setCoachingNotes(notesRes.data);
+          if (linksRes.data)       setAuditLinks(linksRes.data);
+          if (assignmentsRes.data) setAssignments(assignmentsRes.data);
+          if (auditRes.data)       setContentAudit(auditRes.data);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load learning data");
@@ -614,7 +629,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   return {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
     qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
-    onboardingTracks, userUpvotes, assignedModuleIds,
+    onboardingTracks, userUpvotes, assignedModuleIds, assignments, contentAudit,
     loading, error,
     completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
@@ -629,9 +644,9 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
 // ─── Module Detail Panel ──────────────────────────────────────────────────────
 
 const ModuleDetailPanel = memo(function ModuleDetailPanel({
-  module: mod, progress, quizzes, canTakeQuizzes, onClose, onComplete, onStartQuiz,
+  module: mod, progress, quizzes, canTakeQuizzes, readOnly, onClose, onComplete, onStartQuiz,
 }: {
-  module: LearningModule; progress: UserProgress; quizzes: Quiz[]; canTakeQuizzes: boolean;
+  module: LearningModule; progress: UserProgress; quizzes: Quiz[]; canTakeQuizzes: boolean; readOnly?: boolean;
   onClose: () => void; onComplete: (id: string) => void; onStartQuiz: (qId: string) => void;
 }) {
   const isCompleted = progress.completedModules.includes(mod.id);
@@ -693,8 +708,8 @@ const ModuleDetailPanel = memo(function ModuleDetailPanel({
               </div>
             </div>
           )}
-          <button className="lc-complete-btn" disabled={isCompleted} onClick={() => onComplete(mod.id)}>
-            {isCompleted ? "✓ Module Completed" : "Mark as Complete (+XP)"}
+          <button className="lc-complete-btn" disabled={isCompleted || readOnly} onClick={() => onComplete(mod.id)}>
+            {readOnly ? "Preview only" : isCompleted ? "✓ Module Completed" : "Mark as Complete (+XP)"}
           </button>
           {canTakeQuizzes && relatedQuiz && !quizCompleted && (
             <button className="lc-complete-btn"
@@ -836,6 +851,7 @@ const ModulesTab = memo(function ModulesTab({
   recommendations: string[]; onSelectModule: (mod: LearningModule) => void;
 }) {
   const [search, setSearch] = useState("");
+  const [previewRole, setPreviewRole] = useState<"agent" | "supervisor" | "qa" | "admin" | null>(null);
   const [filterDiff, setFilterDiff] = useState("all");
 
   const filtered = useMemo(() => modules.filter(m => {
@@ -1313,7 +1329,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
   const {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
     qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
-    onboardingTracks, userUpvotes, loading, error,
+    onboardingTracks, userUpvotes, assignments, contentAudit, loading, error,
     completeModule, completeQuiz, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
     saveModule, removeModule, saveSOP, removeSOP,
@@ -1323,11 +1339,14 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     removeCoachingNote, saveCoachingNoteWithId,
   } = useSupabaseLearning(userId, resolvedRole);
 
-  const isAdmin      = resolvedRole === "admin" || resolvedRole === "qa";
-  const isSupervisor = resolvedRole === "supervisor";
-  const isAgent      = resolvedRole === "agent";
+  const activeRole = previewRole ?? resolvedRole;
+  const canManageLearning = resolvedRole === "admin" || resolvedRole === "qa" || resolvedRole === "supervisor";
+  const isPreviewing = previewRole !== null;
+  const isAdmin      = activeRole === "admin" || activeRole === "qa";
+  const isSupervisor = activeRole === "supervisor";
+  const isAgent      = activeRole === "agent";
 
-  const roleLabel = isAgent ? "Agent Learning" : isSupervisor ? "Supervisor Team Learning" : "Learning Center";
+  const roleLabel = isPreviewing ? `Previewing as ${activeRole}` : isAgent ? "Agent Learning" : isSupervisor ? "Supervisor Team Learning" : "Learning Center";
   const heroSubtitle = isAgent
     ? "Your personal training hub — assigned modules, SOPs, quizzes, certifications, and refreshers."
     : isSupervisor
@@ -1349,7 +1368,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     () => quizzes.filter(q => {
       const status = q.status ?? "published";
       const audienceRoles = q.audienceRoles && q.audienceRoles.length > 0 ? q.audienceRoles : ["all", "agent"];
-      const audienceAllowsRole = audienceRoles.includes("all") || audienceRoles.includes(resolvedRole as LearningRole);
+      const audienceAllowsRole = audienceRoles.includes("all") || audienceRoles.includes(activeRole as LearningRole);
       const mod = q.moduleId ? modules.find(m => m.id === q.moduleId) : null;
 
       if (isAgent) {
@@ -1363,7 +1382,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
 
       return true;
     }),
-    [quizzes, modules, isAgent, isSupervisor, resolvedRole]
+    [quizzes, modules, isAgent, isSupervisor, activeRole]
   );
 
   const levelPct = useMemo(() => {
@@ -1422,6 +1441,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     { id:"audit-findings",    label:"Audit Findings",    icon:"🔗" },
     { id:"best-practices",    label:"Best Practices",    icon:"🌟" },
     { id:"analytics",         label:"Analytics",         icon:"📊" },
+    { id:"health",            label:"Content Health",    icon:"🩺", minRole:["supervisor","admin","qa"] },
     { id:"coaching",          label:"Coaching",          icon:"👔", minRole:["supervisor","admin","qa"] },
   ];
 
@@ -1497,6 +1517,23 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
           </div>
         </div>
       </div>
+
+      {canManageLearning && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", flexWrap: "wrap", marginBottom: "18px", padding: "12px 14px", borderRadius: "12px", border: "1px solid var(--border)", background: "var(--bg-elevated)" }}>
+          <div>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "var(--fg-default)" }}>Preview and publishing controls</div>
+            <div style={{ fontSize: "11px", color: "var(--fg-muted)", marginTop: "2px" }}>Use preview before publishing to confirm what each role will see.</div>
+          </div>
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {(["agent", "supervisor", "qa", "admin"] as const).map((role) => (
+              <button key={role} className={`lc-tab-btn${previewRole === role ? " active" : ""}`} onClick={() => setPreviewRole(role)}>
+                Preview as {role}
+              </button>
+            ))}
+            {previewRole && <button className="lc-tab-btn" onClick={() => setPreviewRole(null)}>Exit Preview</button>}
+          </div>
+        </div>
+      )}
 
       {/* Global Search */}
       <div className="lc-search-bar">
@@ -1631,9 +1668,10 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
                         <button
                           className="lc-complete-btn"
                           style={{ marginTop:"14px", background:done ? "var(--bg-subtle)" : "linear-gradient(135deg,var(--accent-cyan),var(--accent-blue))", color:done ? "var(--fg-muted)" : "#fff" }}
-                          onClick={() => setActiveQuizId(quiz.id)}
+                          disabled={isPreviewing}
+                          onClick={() => !isPreviewing && setActiveQuizId(quiz.id)}
                         >
-                          {done ? "Retake Quiz" : "Start Quiz →"}
+                          {isPreviewing ? "Preview only" : done ? "Retake Quiz" : "Start Quiz →"}
                         </button>
                       </div>
                     );
@@ -1658,6 +1696,25 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
           )}
           {activeTab === "best-practices" && (isAgent ? <BestPracticesTab bestPractices={bestPractices} /> : <LearningContentManager kind="best-practices" bestPractices={bestPractices} onSaveBestPractice={saveBestPractice} onDeleteBestPractice={removeBestPractice} />)}
           {activeTab === "analytics" && <AnalyticsTab progress={progress} modules={roleModules} />}
+          {activeTab === "health" && canManageLearning && (
+            <LearningContentHealth
+              modules={modules}
+              sops={sops}
+              workInstructions={workInstructions}
+              defects={defects}
+              standards={qualityStandards}
+              onboardingTracks={onboardingTracks}
+              quizzes={quizzes}
+              bestPractices={bestPractices}
+              teamData={teamData}
+              coachingNotes={coachingNotes}
+              assignments={assignments}
+              auditLinks={auditLinks}
+              auditTrail={contentAudit}
+              onOpenTab={setActiveTab}
+              onPreviewRole={setPreviewRole}
+            />
+          )}
           {activeTab === "coaching" && (isSupervisor || isAdmin) && (
             <LearningContentManager
               kind="coaching"
@@ -1678,7 +1735,8 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
           module={selectedModule}
           progress={progress}
           quizzes={roleQuizzes}
-          canTakeQuizzes={isAgent}
+          canTakeQuizzes={isAgent && !isPreviewing}
+          readOnly={isPreviewing}
           onClose={() => setSelectedModule(null)}
           onComplete={handleCompleteModule}
           onStartQuiz={qId => { setSelectedModule(null); setActiveQuizId(qId); }}
