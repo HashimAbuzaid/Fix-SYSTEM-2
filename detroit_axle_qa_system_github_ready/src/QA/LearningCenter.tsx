@@ -1314,7 +1314,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
     qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, loading, error,
-    completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
+    completeModule, completeQuiz, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
     saveModule, removeModule, saveSOP, removeSOP,
     saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
