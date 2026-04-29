@@ -114,7 +114,7 @@ export default memo(function LearningContentHealth({
     allContent.filter((item) => item.missingAudience).forEach((item) => {
       list.push({ id: `audience-${item.type}-${item.id}`, title: item.title, detail: `${item.type} has no role visibility set.`, severity: "warning", tab: item.tab });
     });
-    assignments.filter((assignment) => assignment.status === "overdue").forEach((assignment) => {
+    assignments.filter((assignment) => assignment.dueDate && !["completed", "verified", "cancelled"].includes(assignment.status ?? "assigned") && assignment.dueDate < new Date().toISOString().split("T")[0]).forEach((assignment) => {
       list.push({ id: `assignment-${assignment.id}`, title: assignment.title || assignment.contentId || assignment.moduleId, detail: `Overdue assignment for ${assignment.agentId}.`, severity: "danger", tab: "coaching" });
     });
     auditLinks.filter((link) => !modules.some((module) => module.id === link.moduleId)).forEach((link) => {
@@ -131,6 +131,8 @@ export default memo(function LearningContentHealth({
   const archivedCount = allContent.filter((item) => item.status === "archived").length;
   const dangerCount = issues.filter((issue) => issue.severity === "danger").length;
   const warningCount = issues.filter((issue) => issue.severity === "warning").length;
+  const readyToVerifyCount = assignments.filter((assignment) => assignment.status === "completed").length;
+  const verifiedCount = assignments.filter((assignment) => assignment.status === "verified").length;
 
   return (
     <div>
@@ -157,6 +159,8 @@ export default memo(function LearningContentHealth({
         <HealthStat label="Coaching Notes" value={coachingNotes.length} color="var(--accent-violet)" />
         <HealthStat label="Team Members" value={teamData.length} color="var(--accent-blue)" />
         <HealthStat label="Assignments" value={assignments.length} color="var(--accent-cyan)" />
+        <HealthStat label="Ready to Verify" value={readyToVerifyCount} color="var(--accent-emerald)" />
+        <HealthStat label="Verified" value={verifiedCount} color="var(--accent-blue)" />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1.35fr) minmax(280px, 0.65fr)", gap: "16px", alignItems: "start" }}>
