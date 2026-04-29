@@ -59,6 +59,8 @@ interface LearningContentManagerProps {
   onSaveCoachingNote?: (agentId: string, note: string, metric?: string, noteId?: string) => Promise<void> | void;
   onDeleteCoachingNote?: (id: string) => Promise<void> | void;
   onCreateAssignment?: (input: { agentId: string; moduleId: string; contentType?: LearningAssignableType; contentId?: string; title?: string; dueDate?: string | null }) => Promise<void> | void;
+  onUpdateAssignment?: (assignment: LearningAssignment) => Promise<void> | void;
+  onDeleteAssignment?: (assignment: LearningAssignment) => Promise<void> | void;
 }
 
 const ROLE_OPTIONS: LearningRole[] = ["all", "admin", "qa", "supervisor", "agent"];
@@ -460,7 +462,7 @@ function defaultDueDate(daysFromNow = 7): string {
 }
 
 function isAssignmentOpen(assignment: LearningAssignment): boolean {
-  return !["completed", "cancelled"].includes(assignment.status ?? "assigned");
+  return !["completed", "verified", "cancelled"].includes(assignment.status ?? "assigned");
 }
 
 function isAssignmentOverdue(assignment: LearningAssignment): boolean {
@@ -511,6 +513,8 @@ const CoachingManager = memo(function CoachingManager({
   quizzes,
   assignments,
   onCreateAssignment,
+  onUpdateAssignment,
+  onDeleteAssignment,
   onSaveCoachingNote,
   onDeleteCoachingNote,
 }: {
@@ -520,11 +524,14 @@ const CoachingManager = memo(function CoachingManager({
   quizzes: Quiz[];
   assignments: LearningAssignment[];
   onCreateAssignment: NonNullable<LearningContentManagerProps["onCreateAssignment"]>;
+  onUpdateAssignment: NonNullable<LearningContentManagerProps["onUpdateAssignment"]>;
+  onDeleteAssignment: NonNullable<LearningContentManagerProps["onDeleteAssignment"]>;
   onSaveCoachingNote: NonNullable<LearningContentManagerProps["onSaveCoachingNote"]>;
   onDeleteCoachingNote: NonNullable<LearningContentManagerProps["onDeleteCoachingNote"]>;
 }) {
   const [noteDraft, setNoteDraft] = useState<{ id?: string; agentId: string; note: string; metric: string }>({ agentId: "", note: "", metric: "" });
   const [assigningKey, setAssigningKey] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const editNote = (note: CoachingNote) => setNoteDraft({ id: note.id, agentId: note.agentId, note: note.note, metric: note.metric ?? "" });
   const saveNote = async () => {
     if (!noteDraft.agentId || !noteDraft.note.trim()) return;
@@ -576,6 +583,15 @@ const CoachingManager = memo(function CoachingManager({
   const overdueAssignments = assignments.filter(isAssignmentOverdue);
   const agentsNeedingCoaching = teamData.filter((agent) => (agent.failedMetrics ?? []).length > 0);
   const topMetrics = countByMetric(teamData);
+  const completedAssignments = assignments.filter((assignment) => assignment.status === "completed");
+  const verifiedAssignments = assignments.filter((assignment) => assignment.status === "verified");
+  const teamsSynced = Array.from(new Set(teamData.map((agent) => agent.team).filter(Boolean))).join(", ") || "None";
+  const agentsWithoutMetrics = teamData.filter((agent) => !(agent.failedMetrics ?? []).length);
+  const selectedAgent = teamData.find((agent) => assignmentAgentId(agent) === selectedAgentId || agent.id === selectedAgentId) ?? null;
+  const selectedAgentAssignments = selectedAgent ? assignmentsForAgent(selectedAgent) : [];
+  const selectedAgentNotes = selectedAgent ? coachingNotes.filter((note) => note.agentId === assignmentAgentId(selectedAgent) || note.agentId === selectedAgent.id) : [];
+  const selectedRecommended = selectedAgent ? recommendedModulesForAgent(selectedAgent, modules) : [];
+  const selectedRelatedQuizzes = relatedQuizzesForModules(selectedRecommended, quizzes);
 
   return (
     <ManagerShell kind="coaching" onNew={() => setNoteDraft({ agentId: "", note: "", metric: "" })}>
@@ -584,6 +600,21 @@ const CoachingManager = memo(function CoachingManager({
         <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-amber)" }}>{agentsNeedingCoaching.length}</div><div className="lc-stat-label">Need Coaching</div></div>
         <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-rose)" }}>{overdueAssignments.length}</div><div className="lc-stat-label">Overdue Assignments</div></div>
         <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-violet)" }}>{openAssignments.length}</div><div className="lc-stat-label">Open Assignments</div></div>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-emerald)" }}>{completedAssignments.length}</div><div className="lc-stat-label">Ready to Verify</div></div>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-cyan)" }}>{verifiedAssignments.length}</div><div className="lc-stat-label">Verified</div></div>
+      </div>
+
+      <div className="lc-card" style={{ cursor: "default", marginBottom: 16 }}>
+        <div className="lc-section-title" style={{ marginBottom: 8 }}>Sync Diagnostics</div>
+        <div className="lc-card-desc" style={{ marginBottom: 10 }}>Last refreshed when this page loaded. Use this to confirm what the coaching engine can see.</div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <span className="lc-badge lc-badge-blue">Teams: {teamsSynced}</span>
+          <span className="lc-badge lc-badge-emerald">With failed metrics: {agentsNeedingCoaching.length}</span>
+          <span className="lc-badge lc-badge-muted">Without failed metrics: {agentsWithoutMetrics.length}</span>
+          <span className="lc-badge lc-badge-violet">Assignments checked: {assignments.length}</span>
+          <span className="lc-badge lc-badge-cyan">Notes synced: {coachingNotes.length}</span>
+          <span className="lc-badge lc-badge-amber">{new Date().toLocaleString()}</span>
+        </div>
       </div>
 
       {topMetrics.length > 0 && (
@@ -624,7 +655,10 @@ const CoachingManager = memo(function CoachingManager({
                     <div className="lc-card-title">{agent.name}</div>
                     <div className="lc-card-desc" style={{ marginBottom: 8 }}>{[agent.team, agent.email].filter(Boolean).join(" · ") || agent.agentId || "Synced profile"}</div>
                   </div>
-                  <span className="lc-badge lc-badge-blue">Score {agent.score}%</span>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                    <span className="lc-badge lc-badge-blue">Score {agent.score}%</span>
+                    <button className="lc-assign-btn" onClick={() => setSelectedAgentId(assignmentAgentId(agent))}>Drill-down</button>
+                  </div>
                 </div>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                   {(agent.failedMetrics.length ? agent.failedMetrics : ["No failed metrics synced yet"]).map((metric) => (
@@ -652,6 +686,7 @@ const CoachingManager = memo(function CoachingManager({
                       );
                     })}
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                      <button className="lc-assign-btn" onClick={() => setSelectedAgentId(assignmentAgentId(agent))}>View Drill-down</button>
                       <button className="lc-assign-btn" onClick={() => assignAllRecommended(agent)}>Assign All Recommended</button>
                       <button
                         className="lc-assign-btn"
@@ -668,6 +703,90 @@ const CoachingManager = memo(function CoachingManager({
         </div>
       )}
 
+
+      {selectedAgent && (
+        <div className="lc-card" style={{ cursor: "default", marginBottom: 22 }}>
+          <div className="lc-section-header">
+            <div>
+              <div className="lc-section-title">Agent Drill-down: {selectedAgent.name}</div>
+              <div className="lc-section-sub">Recent metrics, recommended training, assignments, and coaching notes.</div>
+            </div>
+            <button className="lc-tab-btn" onClick={() => setSelectedAgentId(null)}>Close</button>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            <span className="lc-badge lc-badge-blue">{selectedAgent.team ?? "No team"}</span>
+            <span className="lc-badge lc-badge-violet">Score {selectedAgent.score}%</span>
+            <span className="lc-badge lc-badge-rose">{selectedAgent.failedMetrics.length} failed metrics</span>
+            <span className="lc-badge lc-badge-amber">{selectedAgentAssignments.filter(isAssignmentOpen).length} open</span>
+            <span className="lc-badge lc-badge-emerald">{selectedAgentAssignments.filter((assignment) => assignment.status === "completed" || assignment.status === "verified").length} completed/verified</span>
+          </div>
+
+          <div className="lc-grid" style={{ marginBottom: 16 }}>
+            <div className="lc-card" style={{ cursor: "default" }}>
+              <div className="lc-card-title" style={{ marginBottom: 8 }}>Failed Metrics</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {(selectedAgent.failedMetrics.length ? selectedAgent.failedMetrics : ["No failed metrics synced yet"]).map((metric) => (
+                  <span key={metric} className={`lc-badge ${selectedAgent.failedMetrics.length ? "lc-badge-rose" : "lc-badge-muted"}`}>{metric}</span>
+                ))}
+              </div>
+            </div>
+            <div className="lc-card" style={{ cursor: "default" }}>
+              <div className="lc-card-title" style={{ marginBottom: 8 }}>Recommended Training</div>
+              {selectedRecommended.length === 0 ? (
+                <div className="lc-card-desc" style={{ marginBottom: 0 }}>No recommendation is available until failed metrics are synced.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {selectedRecommended.map((module) => {
+                    const quiz = selectedRelatedQuizzes.find((item) => item.moduleId === module.id);
+                    return (
+                      <div key={module.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 12, color: "var(--fg-default)", fontWeight: 600 }}>{module.title}{quiz ? ` + ${quiz.title}` : ""}</span>
+                        <button className="lc-assign-btn" onClick={() => assignContent(selectedAgent, module, quiz)}>Assign</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="lc-section-title" style={{ marginBottom: 10 }}>Assignments</div>
+          {selectedAgentAssignments.length === 0 ? (
+            <div className="lc-card-desc">No assignments yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+              {selectedAgentAssignments.map((assignment) => (
+                <div key={assignment.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap", padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--bg-subtle)" }}>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--fg-default)" }}>{assignment.title ?? assignment.contentId ?? assignment.moduleId}</div>
+                    <div style={{ fontSize: 11, color: "var(--fg-muted)", marginTop: 2 }}>{assignment.contentType ?? "module"} · Due {assignment.dueDate ?? "not set"} · {assignment.status ?? "assigned"}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button className="lc-assign-btn" onClick={() => onUpdateAssignment({ ...assignment, status: "in_progress" })}>In Progress</button>
+                    <button className="lc-assign-btn" onClick={() => onUpdateAssignment({ ...assignment, status: "completed", completedAt: assignment.completedAt ?? new Date().toISOString() })}>Completed</button>
+                    <button className="lc-assign-btn" onClick={() => onUpdateAssignment({ ...assignment, status: "verified", completedAt: assignment.completedAt ?? new Date().toISOString() })}>Verified</button>
+                    <button className="lc-assign-btn" style={{ color: "var(--accent-rose)", borderColor: "color-mix(in srgb,var(--accent-rose) 25%,transparent)", background: "color-mix(in srgb,var(--accent-rose) 8%,transparent)" }} onClick={() => confirmDelete(assignment.title ?? assignment.id) && onDeleteAssignment(assignment)}>Remove</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="lc-section-title" style={{ marginBottom: 10 }}>Coaching Note History</div>
+          {selectedAgentNotes.length === 0 ? (
+            <div className="lc-card-desc" style={{ marginBottom: 0 }}>No coaching notes saved for this agent yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {selectedAgentNotes.map((note) => (
+                <div key={note.id} style={{ padding: "10px 12px", border: "1px solid var(--border)", borderRadius: 10, background: "var(--bg-subtle)" }}>
+                  <div style={{ fontSize: 11, color: "var(--fg-muted)", marginBottom: 4 }}>{note.metric ?? "General"} · {note.sessionDate}</div>
+                  <div style={{ fontSize: 12, color: "var(--fg-default)", lineHeight: 1.5 }}>{note.note}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="lc-section-title" style={{ marginBottom: 10 }}>Coaching Notes</div>
       <SimpleCards
         items={coachingNotes.map((item) => ({
@@ -708,7 +827,7 @@ const LearningContentManager = memo(function LearningContentManager(props: Learn
     case "standards": return <StandardsManager items={props.standards ?? []} onSave={props.onSaveStandard!} onDelete={props.onDeleteStandard!} />;
     case "onboarding": return <OnboardingManager items={props.onboardingTracks ?? []} onSave={props.onSaveOnboardingTrack!} onDelete={props.onDeleteOnboardingTrack!} />;
     case "best-practices": return <BestPracticeManager items={props.bestPractices ?? []} onSave={props.onSaveBestPractice!} onDelete={props.onDeleteBestPractice!} />;
-    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} modules={props.modules ?? []} quizzes={props.quizzes ?? []} assignments={props.assignments ?? []} onCreateAssignment={props.onCreateAssignment!} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
+    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} modules={props.modules ?? []} quizzes={props.quizzes ?? []} assignments={props.assignments ?? []} onCreateAssignment={props.onCreateAssignment!} onUpdateAssignment={props.onUpdateAssignment!} onDeleteAssignment={props.onDeleteAssignment!} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
     default: return null;
   }
 });
