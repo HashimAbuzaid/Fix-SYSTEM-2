@@ -4,6 +4,7 @@
 // typed fallback data and local persistence hooks for LearningCenter.tsx.
 
 export type LearningRole = "all" | "admin" | "qa" | "supervisor" | "agent";
+export type QuizStatus = "draft" | "published";
 export type LearningDifficulty = "beginner" | "intermediate" | "advanced";
 export type DefectSeverity = "low" | "medium" | "high" | "critical";
 
@@ -78,7 +79,13 @@ export interface Quiz {
   questions: QuizQuestion[];
   passingScore: number;
   xpReward: number;
+  status?: QuizStatus;
+  audienceRoles?: LearningRole[];
+  createdBy?: string | null;
+  updatedAt?: string;
 }
+
+export type QuizUpsertInput = Quiz;
 
 export interface LessonLearned {
   id: string;
@@ -297,6 +304,9 @@ const QUIZZES: Quiz[] = [
     description: "Check your understanding of basic audit expectations.",
     passingScore: 70,
     xpReward: 75,
+    status: "published",
+    audienceRoles: ["all", "agent"],
+    updatedAt: today,
     questions: [
       {
         id: "q1",
@@ -409,6 +419,53 @@ function notesKey(supervisorId: string): string {
   return `da-learning-notes:${supervisorId}`;
 }
 
+const CUSTOM_QUIZZES_KEY = "da-learning-custom-quizzes";
+const DELETED_QUIZZES_KEY = "da-learning-deleted-quizzes";
+
+function createLocalId(prefix: string): string {
+  const random = Math.random().toString(36).slice(2, 9);
+  return `${prefix}-${Date.now().toString(36)}-${random}`;
+}
+
+function normalizeQuiz(quiz: Quiz): Quiz {
+  return {
+    ...quiz,
+    moduleId: quiz.moduleId ?? null,
+    description: quiz.description ?? "",
+    passingScore: Number.isFinite(quiz.passingScore) ? quiz.passingScore : 70,
+    xpReward: Number.isFinite(quiz.xpReward) ? quiz.xpReward : 0,
+    status: quiz.status ?? "published",
+    audienceRoles: quiz.audienceRoles && quiz.audienceRoles.length > 0 ? quiz.audienceRoles : ["all", "agent"],
+    updatedAt: quiz.updatedAt ?? today,
+    questions: quiz.questions.map((question, index) => {
+      const options = question.options.length >= 2 ? question.options : ["Option A", "Option B"];
+      return {
+        ...question,
+        id: question.id || createLocalId(`q${index + 1}`),
+        options,
+        correctIndex: Math.max(0, Math.min(question.correctIndex, Math.max(options.length - 1, 0))),
+        explanation: question.explanation ?? "",
+      };
+    }),
+  };
+}
+
+function readCustomQuizzes(): Quiz[] {
+  return readJson<Quiz[]>(CUSTOM_QUIZZES_KEY, []).map(normalizeQuiz);
+}
+
+function writeCustomQuizzes(quizzes: Quiz[]): void {
+  writeJson(CUSTOM_QUIZZES_KEY, quizzes.map(normalizeQuiz));
+}
+
+function readDeletedQuizIds(): Set<string> {
+  return new Set(readJson<string[]>(DELETED_QUIZZES_KEY, []));
+}
+
+function writeDeletedQuizIds(ids: Set<string>): void {
+  writeJson(DELETED_QUIZZES_KEY, Array.from(ids));
+}
+
 export async function fetchLearningModules(): Promise<ServiceResult<LearningModule[]>> {
   return ok(MODULES);
 }
@@ -426,7 +483,45 @@ export async function fetchDefectExamples(): Promise<ServiceResult<DefectExample
 }
 
 export async function fetchQuizzes(): Promise<ServiceResult<Quiz[]>> {
-  return ok(QUIZZES);
+  const deletedIds = readDeletedQuizIds();
+  const staticQuizzes = QUIZZES.map(normalizeQuiz).filter((quiz) => !deletedIds.has(quiz.id));
+  const customQuizzes = readCustomQuizzes().filter((quiz) => !deletedIds.has(quiz.id));
+  const merged = new Map<string, Quiz>();
+  staticQuizzes.forEach((quiz) => merged.set(quiz.id, quiz));
+  customQuizzes.forEach((quiz) => merged.set(quiz.id, quiz));
+  return ok(Array.from(merged.values()).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
+}
+
+export async function upsertQuiz(quiz: QuizUpsertInput, userId?: string): Promise<ServiceResult<Quiz>> {
+  const now = new Date().toISOString();
+  const id = quiz.id?.trim() || createLocalId("quiz");
+  const normalized = normalizeQuiz({
+    ...quiz,
+    id,
+    createdBy: quiz.createdBy ?? userId ?? null,
+    updatedAt: now,
+  });
+
+  const customQuizzes = readCustomQuizzes();
+  const next = [normalized, ...customQuizzes.filter((item) => item.id !== normalized.id)];
+  writeCustomQuizzes(next);
+
+  const deletedIds = readDeletedQuizIds();
+  deletedIds.delete(normalized.id);
+  writeDeletedQuizIds(deletedIds);
+
+  return ok(normalized);
+}
+
+export async function deleteQuiz(quizId: string): Promise<ServiceResult<boolean>> {
+  const customQuizzes = readCustomQuizzes().filter((quiz) => quiz.id !== quizId);
+  writeCustomQuizzes(customQuizzes);
+
+  const deletedIds = readDeletedQuizIds();
+  deletedIds.add(quizId);
+  writeDeletedQuizIds(deletedIds);
+
+  return ok(true);
 }
 
 export async function fetchLessonsLearned(): Promise<ServiceResult<LessonLearned[]>> {

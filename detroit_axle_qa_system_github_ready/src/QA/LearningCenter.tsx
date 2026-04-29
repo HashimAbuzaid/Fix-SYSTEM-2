@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, memo, useEffect } from "react";
 import QuizEngine from "./QuizEngine";
+import QuizManager from "./QuizManager";
 import CertificationTracker from "./CertificationTracker";
 import type { UserProfile } from "../context/AuthContext";
 import {
@@ -9,7 +10,7 @@ import {
   toggleLessonUpvote, fetchTeamMembers, fetchCoachingNotes, upsertCoachingNote,
   createAssignment, fetchAgentAssignments, fetchRecommendedModuleIds,
   fetchAuditLinks, checkAndGrantCertifications, fetchOnboardingTracks,
-  incrementModuleCompletions,
+  incrementModuleCompletions, upsertQuiz, deleteQuiz,
 } from "./learningService";
 import type {
   LearningModule, SOPDocument, WorkInstruction, DefectExample,
@@ -263,6 +264,8 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   assignModule: (agentId: string, moduleId: string) => Promise<void>;
   toggleUpvote: (lessonId: string) => Promise<void>;
   handleCertificationEarned: (certId: string) => Promise<void>;
+  saveQuiz: (quiz: Quiz) => Promise<Quiz | void>;
+  removeQuiz: (quizId: string) => Promise<void>;
 } {
   const [modules, setModules] = useState<LearningModule[]>([]);
   const [sops, setSops] = useState<SOPDocument[]>([]);
@@ -481,22 +484,35 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     ]);
   }, [userId, progress]);
 
+  const saveQuiz = useCallback(async (quiz: Quiz): Promise<Quiz | void> => {
+    const res = await upsertQuiz(quiz, userId);
+    if (res.data) {
+      setQuizzes(prev => [res.data, ...prev.filter(item => item.id !== res.data.id)]);
+      return res.data;
+    }
+  }, [userId]);
+
+  const removeQuiz = useCallback(async (quizId: string) => {
+    await deleteQuiz(quizId);
+    setQuizzes(prev => prev.filter(item => item.id !== quizId));
+  }, []);
+
   return {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
     progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, assignedModuleIds,
     loading, error,
     completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
-    handleCertificationEarned,
+    handleCertificationEarned, saveQuiz, removeQuiz,
   };
 }
 
 // ─── Module Detail Panel ──────────────────────────────────────────────────────
 
 const ModuleDetailPanel = memo(function ModuleDetailPanel({
-  module: mod, progress, quizzes, onClose, onComplete, onStartQuiz,
+  module: mod, progress, quizzes, canTakeQuizzes, onClose, onComplete, onStartQuiz,
 }: {
-  module: LearningModule; progress: UserProgress; quizzes: Quiz[];
+  module: LearningModule; progress: UserProgress; quizzes: Quiz[]; canTakeQuizzes: boolean;
   onClose: () => void; onComplete: (id: string) => void; onStartQuiz: (qId: string) => void;
 }) {
   const isCompleted = progress.completedModules.includes(mod.id);
@@ -561,7 +577,7 @@ const ModuleDetailPanel = memo(function ModuleDetailPanel({
           <button className="lc-complete-btn" disabled={isCompleted} onClick={() => onComplete(mod.id)}>
             {isCompleted ? "✓ Module Completed" : "Mark as Complete (+XP)"}
           </button>
-          {relatedQuiz && !quizCompleted && (
+          {canTakeQuizzes && relatedQuiz && !quizCompleted && (
             <button className="lc-complete-btn"
               style={{ marginTop:"10px", background:"linear-gradient(135deg,var(--accent-cyan),var(--accent-blue))" }}
               onClick={() => onStartQuiz(relatedQuiz.id)}
@@ -569,7 +585,7 @@ const ModuleDetailPanel = memo(function ModuleDetailPanel({
               📝 Take Quiz — {relatedQuiz.title}
             </button>
           )}
-          {relatedQuiz && quizCompleted && (
+          {canTakeQuizzes && relatedQuiz && quizCompleted && (
             <div style={{ marginTop:"10px", padding:"10px 14px", borderRadius:"8px", background:"color-mix(in srgb,var(--accent-emerald) 8%,transparent)", border:"1px solid color-mix(in srgb,var(--accent-emerald) 20%,transparent)", fontSize:"12px", color:"var(--accent-emerald)", fontWeight:600, textAlign:"center" }}>
               ✓ Quiz passed — Score: {progress.quizScores[relatedQuiz.id]}%
             </div>
@@ -1306,7 +1322,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, loading, error,
     completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
-    handleCertificationEarned,
+    handleCertificationEarned, saveQuiz, removeQuiz,
   } = useSupabaseLearning(userId, resolvedRole);
 
   const isAdmin      = resolvedRole === "admin" || resolvedRole === "qa";
@@ -1331,13 +1347,23 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
 
   const roleQuizzes = useMemo(
     () => quizzes.filter(q => {
+      const status = q.status ?? "published";
+      const audienceRoles = q.audienceRoles && q.audienceRoles.length > 0 ? q.audienceRoles : ["all", "agent"];
+      const audienceAllowsRole = audienceRoles.includes("all") || audienceRoles.includes(resolvedRole as any);
       const mod = q.moduleId ? modules.find(m => m.id === q.moduleId) : null;
-      if (!mod) return true;
-      if (isAgent) return mod.roles.includes("agent");
-      if (isSupervisor) return mod.roles.includes("supervisor") || mod.roles.includes("agent");
+
+      if (isAgent) {
+        if (status !== "published" || !audienceAllowsRole) return false;
+        return mod ? mod.roles.includes("agent") || mod.roles.includes("all") : true;
+      }
+
+      if (isSupervisor) {
+        return mod ? mod.roles.includes("supervisor") || mod.roles.includes("agent") || mod.roles.includes("all") : true;
+      }
+
       return true;
     }),
-    [quizzes, modules, isAgent, isSupervisor]
+    [quizzes, modules, isAgent, isSupervisor, resolvedRole]
   );
 
   const levelPct = useMemo(() => {
@@ -1413,7 +1439,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
   });
 
   // ── Render guard: quiz ──────────────────────────────────────────────────────
-  if (activeQuizId) {
+  if (activeQuizId && isAgent) {
     const quiz = roleQuizzes.find(q => q.id === activeQuizId);
     if (quiz) return (
       <QuizEngine
@@ -1585,33 +1611,43 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
             />
           )}
           {activeTab === "quizzes" && (
-            <div>
-              <div className="lc-section-header"><div><div className="lc-section-title">Refresher Quizzes</div><div className="lc-section-sub">Test your knowledge and earn XP</div></div></div>
-              {!roleQuizzes.length && <div style={{ padding:"32px", textAlign:"center", color:"var(--fg-muted)", fontSize:"13px" }}>No quizzes available yet.</div>}
-              <div className="lc-grid">
-                {roleQuizzes.map(quiz => {
-                  const done = progress.completedQuizzes.includes(quiz.id);
-                  const score = progress.quizScores[quiz.id];
-                  return (
-                    <div key={quiz.id} className="lc-card">
-                      <div className="lc-card-header">
-                        <div className="lc-card-title">{quiz.title}</div>
-                        {done && <span className="lc-badge lc-badge-emerald">✓ {score}%</span>}
+            isAgent ? (
+              <div>
+                <div className="lc-section-header"><div><div className="lc-section-title">Refresher Quizzes</div><div className="lc-section-sub">Test your knowledge and earn XP</div></div></div>
+                {!roleQuizzes.length && <div style={{ padding:"32px", textAlign:"center", color:"var(--fg-muted)", fontSize:"13px" }}>No quizzes available yet.</div>}
+                <div className="lc-grid">
+                  {roleQuizzes.map(quiz => {
+                    const done = progress.completedQuizzes.includes(quiz.id);
+                    const score = progress.quizScores[quiz.id];
+                    return (
+                      <div key={quiz.id} className="lc-card">
+                        <div className="lc-card-header">
+                          <div className="lc-card-title">{quiz.title}</div>
+                          {done && <span className="lc-badge lc-badge-emerald">✓ {score}%</span>}
+                        </div>
+                        <div className="lc-card-desc">{quiz.questions.length} questions · Pass: {quiz.passingScore}%</div>
+                        <div className="lc-card-meta"><XPPill xp={quiz.xpReward} /></div>
+                        <button
+                          className="lc-complete-btn"
+                          style={{ marginTop:"14px", background:done ? "var(--bg-subtle)" : "linear-gradient(135deg,var(--accent-cyan),var(--accent-blue))", color:done ? "var(--fg-muted)" : "#fff" }}
+                          onClick={() => setActiveQuizId(quiz.id)}
+                        >
+                          {done ? "Retake Quiz" : "Start Quiz →"}
+                        </button>
                       </div>
-                      <div className="lc-card-desc">{quiz.questions.length} questions · Pass: {quiz.passingScore}%</div>
-                      <div className="lc-card-meta"><XPPill xp={quiz.xpReward} /></div>
-                      <button
-                        className="lc-complete-btn"
-                        style={{ marginTop:"14px", background:done ? "var(--bg-subtle)" : "linear-gradient(135deg,var(--accent-cyan),var(--accent-blue))", color:done ? "var(--fg-muted)" : "#fff" }}
-                        onClick={() => setActiveQuizId(quiz.id)}
-                      >
-                        {done ? "Retake Quiz" : "Start Quiz →"}
-                      </button>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            ) : (
+              <QuizManager
+                quizzes={roleQuizzes}
+                modules={roleModules}
+                currentRole={resolvedRole}
+                onSaveQuiz={saveQuiz}
+                onDeleteQuiz={removeQuiz}
+              />
+            )
           )}
           {activeTab === "lessons" && (
             <LessonsTab lessons={lessons} userUpvotes={userUpvotes} onToggleUpvote={toggleUpvote} />
@@ -1639,6 +1675,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
           module={selectedModule}
           progress={progress}
           quizzes={roleQuizzes}
+          canTakeQuizzes={isAgent}
           onClose={() => setSelectedModule(null)}
           onComplete={handleCompleteModule}
           onStartQuiz={qId => { setSelectedModule(null); setActiveQuizId(qId); }}
