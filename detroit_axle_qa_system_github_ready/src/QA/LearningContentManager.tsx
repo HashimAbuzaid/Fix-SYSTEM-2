@@ -4,10 +4,13 @@ import type {
   CoachingNote,
   DefectExample,
   LearningDifficulty,
+  LearningAssignment,
+  LearningAssignableType,
   LearningModule,
   LearningRole,
   OnboardingTrack,
   QualityStandard,
+  Quiz,
   SOPDocument,
   TeamMember,
   WorkInstruction,
@@ -26,6 +29,8 @@ export type ContentManagerKind =
 interface LearningContentManagerProps {
   kind: ContentManagerKind;
   modules?: LearningModule[];
+  quizzes?: Quiz[];
+  assignments?: LearningAssignment[];
   sops?: SOPDocument[];
   workInstructions?: WorkInstruction[];
   defects?: DefectExample[];
@@ -53,6 +58,7 @@ interface LearningContentManagerProps {
   onDeleteTeamMember?: (id: string) => Promise<void> | void;
   onSaveCoachingNote?: (agentId: string, note: string, metric?: string, noteId?: string) => Promise<void> | void;
   onDeleteCoachingNote?: (id: string) => Promise<void> | void;
+  onCreateAssignment?: (input: { agentId: string; moduleId: string; contentType?: LearningAssignableType; contentId?: string; title?: string; dueDate?: string | null }) => Promise<void> | void;
 }
 
 const ROLE_OPTIONS: LearningRole[] = ["all", "admin", "qa", "supervisor", "agent"];
@@ -97,7 +103,7 @@ const TITLES: Record<ContentManagerKind, { title: string; sub: string; empty: st
   },
   coaching: {
     title: "Supervisor Coaching Manager",
-    sub: "View synced Calls/Tickets/Sales team members and manage coaching notes used by Supervisor Coaching Mode.",
+    sub: "View your synced team, assign recommended training, and manage coaching notes from failed metrics.",
     empty: "No coaching records found.",
   },
 };
@@ -443,13 +449,82 @@ const OnboardingManager = memo(function OnboardingManager({ items, onSave, onDel
   );
 });
 
-const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes, onSaveCoachingNote, onDeleteCoachingNote }: {
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+function defaultDueDate(daysFromNow = 7): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+  return date.toISOString().split("T")[0];
+}
+
+function isAssignmentOpen(assignment: LearningAssignment): boolean {
+  return !["completed", "cancelled"].includes(assignment.status ?? "assigned");
+}
+
+function isAssignmentOverdue(assignment: LearningAssignment): boolean {
+  if (!assignment.dueDate || !isAssignmentOpen(assignment)) return false;
+  return assignment.dueDate < new Date().toISOString().split("T")[0];
+}
+
+function moduleMatchesMetric(module: LearningModule, metric: string): boolean {
+  const target = normalizeText(metric);
+  if (!target) return false;
+  const haystack = [module.title, module.description, module.category, ...(module.metrics ?? []), ...(module.tags ?? [])]
+    .map(normalizeText)
+    .join("|");
+  return haystack.includes(target) || target.includes(normalizeText(module.title));
+}
+
+function recommendedModulesForAgent(agent: TeamMember, modules: LearningModule[]): LearningModule[] {
+  const failedMetrics = agent.failedMetrics ?? [];
+  if (!failedMetrics.length) return [];
+  const matches = modules.filter((module) => failedMetrics.some((metric) => moduleMatchesMetric(module, metric)));
+  if (matches.length) return matches.slice(0, 3);
+  return modules.filter((module) => ["qa-foundations", "ticket-documentation"].includes(module.id)).slice(0, 2);
+}
+
+function relatedQuizzesForModules(modules: LearningModule[], quizzes: Quiz[]): Quiz[] {
+  const moduleIds = new Set(modules.map((module) => module.id));
+  return quizzes.filter((quiz) => quiz.moduleId && moduleIds.has(quiz.moduleId)).slice(0, 3);
+}
+
+function coachingTemplate(agent: TeamMember, metric?: string): string {
+  const focus = metric || agent.failedMetrics[0] || "quality performance";
+  return `Observed opportunity in ${focus}. Please review the recommended training, focus on the related QA standard, and apply the coaching points on the next customer interaction. Follow up after completion to confirm improvement.`;
+}
+
+function countByMetric(teamData: TeamMember[]): { metric: string; count: number }[] {
+  const counts = new Map<string, number>();
+  teamData.forEach((agent) => (agent.failedMetrics ?? []).forEach((metric) => counts.set(metric, (counts.get(metric) ?? 0) + 1)));
+  return Array.from(counts.entries())
+    .map(([metric, count]) => ({ metric, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
+}
+
+const CoachingManager = memo(function CoachingManager({
+  teamData,
+  coachingNotes,
+  modules,
+  quizzes,
+  assignments,
+  onCreateAssignment,
+  onSaveCoachingNote,
+  onDeleteCoachingNote,
+}: {
   teamData: TeamMember[];
   coachingNotes: CoachingNote[];
+  modules: LearningModule[];
+  quizzes: Quiz[];
+  assignments: LearningAssignment[];
+  onCreateAssignment: NonNullable<LearningContentManagerProps["onCreateAssignment"]>;
   onSaveCoachingNote: NonNullable<LearningContentManagerProps["onSaveCoachingNote"]>;
   onDeleteCoachingNote: NonNullable<LearningContentManagerProps["onDeleteCoachingNote"]>;
 }) {
   const [noteDraft, setNoteDraft] = useState<{ id?: string; agentId: string; note: string; metric: string }>({ agentId: "", note: "", metric: "" });
+  const [assigningKey, setAssigningKey] = useState<string | null>(null);
   const editNote = (note: CoachingNote) => setNoteDraft({ id: note.id, agentId: note.agentId, note: note.note, metric: note.metric ?? "" });
   const saveNote = async () => {
     if (!noteDraft.agentId || !noteDraft.note.trim()) return;
@@ -457,31 +532,140 @@ const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes,
     setNoteDraft({ agentId: "", note: "", metric: "" });
   };
 
+  const assignmentAgentId = (agent: TeamMember) => agent.agentId ?? agent.id;
+  const assignmentsForAgent = (agent: TeamMember) => assignments.filter((assignment) => assignment.agentId === assignmentAgentId(agent) || assignment.agentId === agent.id);
+
+  const assignContent = useCallback(async (agent: TeamMember, module: LearningModule, quiz?: Quiz) => {
+    const agentId = assignmentAgentId(agent);
+    const key = `${agentId}:${module.id}:${quiz?.id ?? "module"}`;
+    setAssigningKey(key);
+    try {
+      await onCreateAssignment({
+        agentId,
+        moduleId: module.id,
+        contentType: "module",
+        contentId: module.id,
+        title: module.title,
+        dueDate: defaultDueDate(7),
+      });
+      if (quiz) {
+        await onCreateAssignment({
+          agentId,
+          moduleId: module.id,
+          contentType: "quiz",
+          contentId: quiz.id,
+          title: quiz.title,
+          dueDate: defaultDueDate(7),
+        });
+      }
+    } finally {
+      setAssigningKey(null);
+    }
+  }, [onCreateAssignment]);
+
+  const assignAllRecommended = useCallback(async (agent: TeamMember) => {
+    const recommended = recommendedModulesForAgent(agent, modules);
+    const relatedQuizzes = relatedQuizzesForModules(recommended, quizzes);
+    for (const module of recommended) {
+      const quiz = relatedQuizzes.find((item) => item.moduleId === module.id);
+      await assignContent(agent, module, quiz);
+    }
+  }, [assignContent, modules, quizzes]);
+
+  const openAssignments = assignments.filter(isAssignmentOpen);
+  const overdueAssignments = assignments.filter(isAssignmentOverdue);
+  const agentsNeedingCoaching = teamData.filter((agent) => (agent.failedMetrics ?? []).length > 0);
+  const topMetrics = countByMetric(teamData);
+
   return (
     <ManagerShell kind="coaching" onNew={() => setNoteDraft({ agentId: "", note: "", metric: "" })}>
+      <div className="lc-analytics-grid" style={{ marginBottom: 18 }}>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-blue)" }}>{teamData.length}</div><div className="lc-stat-label">Agents Synced</div></div>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-amber)" }}>{agentsNeedingCoaching.length}</div><div className="lc-stat-label">Need Coaching</div></div>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-rose)" }}>{overdueAssignments.length}</div><div className="lc-stat-label">Overdue Assignments</div></div>
+        <div className="lc-stat-card"><div className="lc-stat-val" style={{ color: "var(--accent-violet)" }}>{openAssignments.length}</div><div className="lc-stat-label">Open Assignments</div></div>
+      </div>
+
+      {topMetrics.length > 0 && (
+        <div className="lc-card" style={{ cursor: "default", marginBottom: 16 }}>
+          <div className="lc-section-title" style={{ marginBottom: 10 }}>Most Common Failed Metrics</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {topMetrics.map((item) => <span key={item.metric} className="lc-badge lc-badge-rose">{item.metric} · {item.count}</span>)}
+          </div>
+        </div>
+      )}
+
       <div className="lc-section-title" style={{ marginBottom: 10 }}>Synced Team Members</div>
       <div className="lc-card" style={{ cursor: "default", marginBottom: 14 }}>
         <div className="lc-card-desc" style={{ marginBottom: 0 }}>
-          Team members are pulled from existing agent profiles on the Calls, Tickets, and Sales teams. Add or remove team members in Accounts / user profiles, not in Learning Center.
+          Supervisors see only agents from their own team. Admin/QA users can review all Calls, Tickets, and Sales agents.
         </div>
       </div>
       {teamData.length === 0 ? (
         <div className="lc-card" style={{ cursor: "default", marginBottom: 20 }}>
-          <div className="lc-card-title" style={{ marginBottom: 6 }}>No Calls/Tickets/Sales agents found</div>
+          <div className="lc-card-title" style={{ marginBottom: 6 }}>No agents found for this scope</div>
           <div className="lc-card-desc" style={{ marginBottom: 0 }}>
-            Once agent profiles exist with team set to Calls, Tickets, or Sales, they will appear here automatically.
+            Confirm the supervisor profile has a team and agents have matching Calls, Tickets, or Sales team values.
           </div>
         </div>
       ) : (
-        <SimpleCards
-          items={teamData.map((item) => ({
-            id: item.id,
-            title: item.name,
-            sub: [item.team, item.email].filter(Boolean).join(" · ") || item.agentId || "Synced profile",
-            desc: item.failedMetrics.length ? item.failedMetrics.join(", ") : "No failed metrics synced yet",
-            raw: item,
-          }))}
-        />
+        <div className="lc-grid" style={{ marginBottom: 22 }}>
+          {teamData.map((agent) => {
+            const recommended = recommendedModulesForAgent(agent, modules);
+            const relatedQuizzes = relatedQuizzesForModules(recommended, quizzes);
+            const agentAssignments = assignmentsForAgent(agent);
+            const openCount = agentAssignments.filter(isAssignmentOpen).length;
+            const overdueCount = agentAssignments.filter(isAssignmentOverdue).length;
+            const firstMetric = agent.failedMetrics[0] ?? "";
+            return (
+              <div key={agent.id} className="lc-card" style={{ cursor: "default" }}>
+                <div className="lc-card-header">
+                  <div>
+                    <div className="lc-card-title">{agent.name}</div>
+                    <div className="lc-card-desc" style={{ marginBottom: 8 }}>{[agent.team, agent.email].filter(Boolean).join(" · ") || agent.agentId || "Synced profile"}</div>
+                  </div>
+                  <span className="lc-badge lc-badge-blue">Score {agent.score}%</span>
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                  {(agent.failedMetrics.length ? agent.failedMetrics : ["No failed metrics synced yet"]).map((metric) => (
+                    <span key={metric} className={`lc-badge ${agent.failedMetrics.length ? "lc-badge-rose" : "lc-badge-muted"}`}>{metric}</span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                  <span className="lc-badge lc-badge-violet">{openCount} open</span>
+                  {overdueCount > 0 && <span className="lc-badge lc-badge-rose">{overdueCount} overdue</span>}
+                </div>
+
+                {recommended.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.07em", textTransform: "uppercase", color: "var(--fg-muted)" }}>Recommended Actions</div>
+                    {recommended.map((module) => {
+                      const quiz = relatedQuizzes.find((item) => item.moduleId === module.id);
+                      const key = `${assignmentAgentId(agent)}:${module.id}:${quiz?.id ?? "module"}`;
+                      return (
+                        <div key={module.id} style={{ display: "flex", gap: 8, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12, color: "var(--fg-default)", fontWeight: 600 }}>{module.title}{quiz ? ` + ${quiz.title}` : ""}</span>
+                          <button className="lc-assign-btn" disabled={assigningKey === key} onClick={() => assignContent(agent, module, quiz)}>
+                            {assigningKey === key ? "Assigning…" : "Assign"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                      <button className="lc-assign-btn" onClick={() => assignAllRecommended(agent)}>Assign All Recommended</button>
+                      <button
+                        className="lc-assign-btn"
+                        onClick={() => setNoteDraft({ agentId: assignmentAgentId(agent), metric: firstMetric, note: coachingTemplate(agent, firstMetric) })}
+                      >
+                        Create Coaching Note
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
       <div className="lc-section-title" style={{ marginBottom: 10 }}>Coaching Notes</div>
@@ -502,7 +686,7 @@ const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes,
           <Field label="Agent">
             <select style={inputStyle} value={noteDraft.agentId} onChange={(e) => setNoteDraft({ ...noteDraft, agentId: e.target.value })}>
               <option value="">Select agent</option>
-              {teamData.map((agent) => <option key={agent.id} value={agent.agentId ?? agent.id}>{agent.name}{agent.team ? ` — ${agent.team}` : ""}</option>)}
+              {teamData.map((agent) => <option key={agent.id} value={assignmentAgentId(agent)}>{agent.name}{agent.team ? ` — ${agent.team}` : ""}</option>)}
             </select>
           </Field>
           <Field label="Metric"><input style={inputStyle} value={noteDraft.metric} onChange={(e) => setNoteDraft({ ...noteDraft, metric: e.target.value })} /></Field>
@@ -514,6 +698,7 @@ const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes,
   );
 });
 
+
 const LearningContentManager = memo(function LearningContentManager(props: LearningContentManagerProps) {
   switch (props.kind) {
     case "modules": return <ModuleManager items={props.modules ?? []} onSave={props.onSaveModule!} onDelete={props.onDeleteModule!} />;
@@ -523,7 +708,7 @@ const LearningContentManager = memo(function LearningContentManager(props: Learn
     case "standards": return <StandardsManager items={props.standards ?? []} onSave={props.onSaveStandard!} onDelete={props.onDeleteStandard!} />;
     case "onboarding": return <OnboardingManager items={props.onboardingTracks ?? []} onSave={props.onSaveOnboardingTrack!} onDelete={props.onDeleteOnboardingTrack!} />;
     case "best-practices": return <BestPracticeManager items={props.bestPractices ?? []} onSave={props.onSaveBestPractice!} onDelete={props.onDeleteBestPractice!} />;
-    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
+    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} modules={props.modules ?? []} quizzes={props.quizzes ?? []} assignments={props.assignments ?? []} onCreateAssignment={props.onCreateAssignment!} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
     default: return null;
   }
 });
