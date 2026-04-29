@@ -237,6 +237,7 @@ export type LearningAssignmentStatus =
   | "assigned"
   | "in_progress"
   | "completed"
+  | "verified"
   | "overdue"
   | "cancelled";
 
