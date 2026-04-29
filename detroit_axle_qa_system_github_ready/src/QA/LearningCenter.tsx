@@ -851,7 +851,6 @@ const ModulesTab = memo(function ModulesTab({
   recommendations: string[]; onSelectModule: (mod: LearningModule) => void;
 }) {
   const [search, setSearch] = useState("");
-  const [previewRole, setPreviewRole] = useState<"agent" | "supervisor" | "qa" | "admin" | null>(null);
   const [filterDiff, setFilterDiff] = useState("all");
 
   const filtered = useMemo(() => modules.filter(m => {
@@ -1325,6 +1324,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
   const [showCerts, setShowCerts] = useState(false);
   const [search, setSearch] = useState("");
+  const [previewRole, setPreviewRole] = useState<"agent" | "supervisor" | "qa" | "admin" | null>(null);
 
   const {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
