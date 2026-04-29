@@ -97,7 +97,7 @@ const TITLES: Record<ContentManagerKind, { title: string; sub: string; empty: st
   },
   coaching: {
     title: "Supervisor Coaching Manager",
-    sub: "Add/edit/delete team members and coaching notes used by Supervisor Coaching Mode.",
+    sub: "View synced Calls/Tickets/Sales team members and manage coaching notes used by Supervisor Coaching Mode.",
     empty: "No coaching records found.",
   },
 };
@@ -376,8 +376,21 @@ const DefectManager = memo(function DefectManager({ items, onSave, onDelete }: {
 });
 
 interface SimpleCardItem { id: string; title: string; sub: string; desc: string; raw: unknown }
-function SimpleCards({ items, onEdit, onDelete }: { items: SimpleCardItem[]; onEdit: (item: SimpleCardItem) => void; onDelete: (item: SimpleCardItem) => void }) {
-  return <div className="lc-grid" style={{ marginBottom: "18px" }}>{items.map((item) => <div key={item.id} className="lc-card"><div className="lc-card-header"><div className="lc-card-title">{item.title}</div><EditDeleteButtons onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} /></div><div className="lc-card-desc">{item.desc}</div><div className="lc-card-meta"><span className="lc-badge lc-badge-muted">{item.sub}</span></div></div>)}</div>;
+function SimpleCards({ items, onEdit, onDelete }: { items: SimpleCardItem[]; onEdit?: (item: SimpleCardItem) => void; onDelete?: (item: SimpleCardItem) => void }) {
+  return (
+    <div className="lc-grid" style={{ marginBottom: "18px" }}>
+      {items.map((item) => (
+        <div key={item.id} className="lc-card">
+          <div className="lc-card-header">
+            <div className="lc-card-title">{item.title}</div>
+            {onEdit && onDelete && <EditDeleteButtons onEdit={() => onEdit(item)} onDelete={() => onDelete(item)} />}
+          </div>
+          <div className="lc-card-desc">{item.desc}</div>
+          <div className="lc-card-meta"><span className="lc-badge lc-badge-muted">{item.sub}</span></div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 const StandardsManager = memo(function StandardsManager({ items, onSave, onDelete }: {
@@ -430,30 +443,73 @@ const OnboardingManager = memo(function OnboardingManager({ items, onSave, onDel
   );
 });
 
-const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes, onSaveTeamMember, onDeleteTeamMember, onSaveCoachingNote, onDeleteCoachingNote }: {
+const CoachingManager = memo(function CoachingManager({ teamData, coachingNotes, onSaveCoachingNote, onDeleteCoachingNote }: {
   teamData: TeamMember[];
   coachingNotes: CoachingNote[];
-  onSaveTeamMember: NonNullable<LearningContentManagerProps["onSaveTeamMember"]>;
-  onDeleteTeamMember: NonNullable<LearningContentManagerProps["onDeleteTeamMember"]>;
   onSaveCoachingNote: NonNullable<LearningContentManagerProps["onSaveCoachingNote"]>;
   onDeleteCoachingNote: NonNullable<LearningContentManagerProps["onDeleteCoachingNote"]>;
 }) {
-  const blankTeam = (): TeamMember => ({ id: "", name: "", initials: "", score: 0, failedMetrics: [] });
-  const [memberDraft, setMemberDraft] = useState<TeamMember>(blankTeam);
-  const [failedMetrics, setFailedMetrics] = useState("");
   const [noteDraft, setNoteDraft] = useState<{ id?: string; agentId: string; note: string; metric: string }>({ agentId: "", note: "", metric: "" });
-  const editMember = (item: TeamMember) => { setMemberDraft({ ...item }); setFailedMetrics(joinList(item.failedMetrics)); };
-  const saveMember = async () => { const next = { ...memberDraft, id: memberDraft.id || makeId("team-member"), failedMetrics: splitList(failedMetrics) }; await onSaveTeamMember(next); editMember(next); };
   const editNote = (note: CoachingNote) => setNoteDraft({ id: note.id, agentId: note.agentId, note: note.note, metric: note.metric ?? "" });
-  const saveNote = async () => { if (!noteDraft.agentId || !noteDraft.note.trim()) return; await onSaveCoachingNote(noteDraft.agentId, noteDraft.note, noteDraft.metric || undefined, noteDraft.id); setNoteDraft({ agentId: "", note: "", metric: "" }); };
+  const saveNote = async () => {
+    if (!noteDraft.agentId || !noteDraft.note.trim()) return;
+    await onSaveCoachingNote(noteDraft.agentId, noteDraft.note, noteDraft.metric || undefined, noteDraft.id);
+    setNoteDraft({ agentId: "", note: "", metric: "" });
+  };
+
   return (
-    <ManagerShell kind="coaching" onNew={() => { setMemberDraft(blankTeam()); setFailedMetrics(""); setNoteDraft({ agentId: "", note: "", metric: "" }); }}>
-      <div className="lc-section-title" style={{ marginBottom: 10 }}>Team Members</div>
-      <SimpleCards items={teamData.map((item) => ({ id: item.id, title: item.name, sub: `Score ${item.score}%`, desc: item.failedMetrics.join(", ") || "No failed metrics", raw: item }))} onEdit={(item) => editMember(item.raw as TeamMember)} onDelete={(item) => confirmDelete(item.title) && onDeleteTeamMember(item.id)} />
-      <div className="lc-card" style={{ cursor: "default", marginBottom: 20 }}><div className="lc-section-title" style={{ marginBottom: 14 }}>{memberDraft.id ? "Edit Team Member" : "Add Team Member"}</div><div className="lc-grid-sm"><Field label="Name"><input style={inputStyle} value={memberDraft.name} onChange={(e) => setMemberDraft({ ...memberDraft, name: e.target.value })} /></Field><Field label="Initials"><input style={inputStyle} value={memberDraft.initials} onChange={(e) => setMemberDraft({ ...memberDraft, initials: e.target.value })} /></Field><Field label="Score"><input type="number" style={inputStyle} value={memberDraft.score} onChange={(e) => setMemberDraft({ ...memberDraft, score: Number(e.target.value) })} /></Field><Field label="Failed metrics"><textarea style={textareaStyle} value={failedMetrics} onChange={(e) => setFailedMetrics(e.target.value)} /></Field></div><button type="button" className="lc-complete-btn" onClick={saveMember}>Save Team Member</button></div>
+    <ManagerShell kind="coaching" onNew={() => setNoteDraft({ agentId: "", note: "", metric: "" })}>
+      <div className="lc-section-title" style={{ marginBottom: 10 }}>Synced Team Members</div>
+      <div className="lc-card" style={{ cursor: "default", marginBottom: 14 }}>
+        <div className="lc-card-desc" style={{ marginBottom: 0 }}>
+          Team members are pulled from existing agent profiles on the Calls, Tickets, and Sales teams. Add or remove team members in Accounts / user profiles, not in Learning Center.
+        </div>
+      </div>
+      {teamData.length === 0 ? (
+        <div className="lc-card" style={{ cursor: "default", marginBottom: 20 }}>
+          <div className="lc-card-title" style={{ marginBottom: 6 }}>No Calls/Tickets/Sales agents found</div>
+          <div className="lc-card-desc" style={{ marginBottom: 0 }}>
+            Once agent profiles exist with team set to Calls, Tickets, or Sales, they will appear here automatically.
+          </div>
+        </div>
+      ) : (
+        <SimpleCards
+          items={teamData.map((item) => ({
+            id: item.id,
+            title: item.name,
+            sub: [item.team, item.email].filter(Boolean).join(" · ") || item.agentId || "Synced profile",
+            desc: item.failedMetrics.length ? item.failedMetrics.join(", ") : "No failed metrics synced yet",
+            raw: item,
+          }))}
+        />
+      )}
+
       <div className="lc-section-title" style={{ marginBottom: 10 }}>Coaching Notes</div>
-      <SimpleCards items={coachingNotes.map((item) => ({ id: item.id, title: teamData.find((m) => m.id === item.agentId)?.name ?? item.agentId, sub: `${item.metric ?? "General"} · ${item.sessionDate}`, desc: item.note, raw: item }))} onEdit={(item) => editNote(item.raw as CoachingNote)} onDelete={(item) => confirmDelete(item.title) && onDeleteCoachingNote(item.id)} />
-      <div className="lc-card" style={{ cursor: "default" }}><div className="lc-section-title" style={{ marginBottom: 14 }}>{noteDraft.id ? "Edit Coaching Note" : "Add Coaching Note"}</div><div className="lc-grid-sm"><Field label="Agent"><select style={inputStyle} value={noteDraft.agentId} onChange={(e) => setNoteDraft({ ...noteDraft, agentId: e.target.value })}><option value="">Select agent</option>{teamData.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></Field><Field label="Metric"><input style={inputStyle} value={noteDraft.metric} onChange={(e) => setNoteDraft({ ...noteDraft, metric: e.target.value })} /></Field></div><div style={{ marginTop: 12 }}><Field label="Note"><textarea style={textareaStyle} value={noteDraft.note} onChange={(e) => setNoteDraft({ ...noteDraft, note: e.target.value })} /></Field></div><button type="button" className="lc-complete-btn" onClick={saveNote}>Save Coaching Note</button></div>
+      <SimpleCards
+        items={coachingNotes.map((item) => ({
+          id: item.id,
+          title: teamData.find((m) => m.id === item.agentId || m.agentId === item.agentId)?.name ?? item.agentId,
+          sub: `${item.metric ?? "General"} · ${item.sessionDate}`,
+          desc: item.note,
+          raw: item,
+        }))}
+        onEdit={(item) => editNote(item.raw as CoachingNote)}
+        onDelete={(item) => confirmDelete(item.title) && onDeleteCoachingNote(item.id)}
+      />
+      <div className="lc-card" style={{ cursor: "default" }}>
+        <div className="lc-section-title" style={{ marginBottom: 14 }}>{noteDraft.id ? "Edit Coaching Note" : "Add Coaching Note"}</div>
+        <div className="lc-grid-sm">
+          <Field label="Agent">
+            <select style={inputStyle} value={noteDraft.agentId} onChange={(e) => setNoteDraft({ ...noteDraft, agentId: e.target.value })}>
+              <option value="">Select agent</option>
+              {teamData.map((agent) => <option key={agent.id} value={agent.agentId ?? agent.id}>{agent.name}{agent.team ? ` — ${agent.team}` : ""}</option>)}
+            </select>
+          </Field>
+          <Field label="Metric"><input style={inputStyle} value={noteDraft.metric} onChange={(e) => setNoteDraft({ ...noteDraft, metric: e.target.value })} /></Field>
+        </div>
+        <div style={{ marginTop: 12 }}><Field label="Note"><textarea style={textareaStyle} value={noteDraft.note} onChange={(e) => setNoteDraft({ ...noteDraft, note: e.target.value })} /></Field></div>
+        <button type="button" className="lc-complete-btn" disabled={!teamData.length || !noteDraft.agentId || !noteDraft.note.trim()} onClick={saveNote}>Save Coaching Note</button>
+      </div>
     </ManagerShell>
   );
 });
@@ -467,7 +523,7 @@ const LearningContentManager = memo(function LearningContentManager(props: Learn
     case "standards": return <StandardsManager items={props.standards ?? []} onSave={props.onSaveStandard!} onDelete={props.onDeleteStandard!} />;
     case "onboarding": return <OnboardingManager items={props.onboardingTracks ?? []} onSave={props.onSaveOnboardingTrack!} onDelete={props.onDeleteOnboardingTrack!} />;
     case "best-practices": return <BestPracticeManager items={props.bestPractices ?? []} onSave={props.onSaveBestPractice!} onDelete={props.onDeleteBestPractice!} />;
-    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} onSaveTeamMember={props.onSaveTeamMember!} onDeleteTeamMember={props.onDeleteTeamMember!} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
+    case "coaching": return <CoachingManager teamData={props.teamData ?? []} coachingNotes={props.coachingNotes ?? []} onSaveCoachingNote={props.onSaveCoachingNote!} onDeleteCoachingNote={props.onDeleteCoachingNote!} />;
     default: return null;
   }
 });
