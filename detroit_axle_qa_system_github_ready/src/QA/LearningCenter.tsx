@@ -24,7 +24,7 @@ import type {
   LearningModule, SOPDocument, WorkInstruction, DefectExample,
   Quiz, LessonLearned, BestPractice, TeamMember, CoachingNote,
   UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard, LearningRole,
-  LearningAssignment, ContentAuditEntry,
+  LearningAssignment, ContentAuditEntry, LearningAssignableType,
 } from "./learningService";
 
 // ─── Re-export types consumers rely on ───────────────────────────────────────
@@ -234,6 +234,12 @@ function SearchSVG() {
   );
 }
 
+function defaultDueDate(daysFromNow = 7): string {
+  const date = new Date();
+  date.setDate(date.getDate() + daysFromNow);
+  return date.toISOString().split("T")[0];
+}
+
 function SkeletonCard() {
   return (
     <div style={{ background: "var(--bg-elevated)", border: "1px solid var(--border)", borderRadius: 12, padding: 20 }}>
@@ -269,11 +275,12 @@ interface LearningData {
   error: string | null;
 }
 
-function useSupabaseLearning(userId: string | undefined, role: string): LearningData & {
+function useSupabaseLearning(userId: string | undefined, role: string, teamScope?: string | null): LearningData & {
   completeModule: (moduleId: string) => Promise<void>;
   completeQuiz: (quizId: string, score: number) => Promise<void>;
   saveCoachingNote: (agentId: string, note: string, metric?: string) => Promise<void>;
   assignModule: (agentId: string, moduleId: string) => Promise<void>;
+  assignLearningContent: (input: { agentId: string; moduleId: string; contentType?: LearningAssignableType; contentId?: string; title?: string; dueDate?: string | null }) => Promise<void>;
   toggleUpvote: (lessonId: string) => Promise<void>;
   handleCertificationEarned: (certId: string) => Promise<void>;
   saveQuiz: (quiz: Quiz) => Promise<Quiz | void>;
@@ -358,7 +365,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
 
         if (isSup) {
           const [teamRes, notesRes, linksRes, assignmentsRes, auditRes] = await Promise.all([
-            fetchTeamMembers(activeUserId),
+            fetchTeamMembers(activeUserId, role === "supervisor" ? teamScope : null),
             fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
             fetchAllAssignments(),
@@ -376,11 +383,14 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
             fetchAuditLinks(activeUserId),
           ]);
           if (recRes.data)    setRecommendations(recRes.data);
-          if (assignRes.data) setAssignedModuleIds(new Set(assignRes.data.map(a => a.moduleId ?? "").filter(Boolean)));
+          if (assignRes.data) {
+            setAssignments(assignRes.data);
+            setAssignedModuleIds(new Set(assignRes.data.map(a => a.moduleId ?? "").filter(Boolean)));
+          }
           if (linksRes.data)  setAuditLinks(linksRes.data);
         } else {
           const [teamRes, notesRes, linksRes, assignmentsRes, auditRes] = await Promise.all([
-            fetchTeamMembers(activeUserId),
+            fetchTeamMembers(activeUserId, role === "supervisor" ? teamScope : null),
             fetchCoachingNotes(activeUserId),
             fetchAuditLinks(),
             fetchAllAssignments(),
@@ -400,7 +410,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     }
 
     loadAll();
-  }, [userId, role]);
+  }, [userId, role, teamScope]);
 
   // ── Mutation: complete a module ──────────────────────────────────────────
   const completeModule = useCallback(async (moduleId: string) => {
@@ -476,11 +486,37 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     await saveCoachingNoteWithId(agentId, note, metric);
   }, [saveCoachingNoteWithId]);
 
+  // ── Mutation: assign learning content ───────────────────────────────────
+  const assignLearningContent = useCallback(async (input: {
+    agentId: string;
+    moduleId: string;
+    contentType?: LearningAssignableType;
+    contentId?: string;
+    title?: string;
+    dueDate?: string | null;
+  }) => {
+    if (!userId) return;
+    const res = await createAssignment({
+      agentId: input.agentId,
+      moduleId: input.moduleId,
+      assignedBy: userId,
+      contentType: input.contentType ?? "module",
+      contentId: input.contentId ?? input.moduleId,
+      title: input.title,
+      dueDate: input.dueDate ?? defaultDueDate(7),
+    });
+    if (res.data) {
+      setAssignments((prev) => [res.data!, ...prev.filter((item) => item.id !== res.data!.id)]);
+      if ((res.data.contentType ?? "module") === "module") {
+        setAssignedModuleIds((prev) => new Set([...Array.from(prev), res.data!.moduleId]));
+      }
+    }
+  }, [userId]);
+
   // ── Mutation: assign module ──────────────────────────────────────────────
   const assignModule = useCallback(async (agentId: string, moduleId: string) => {
-    if (!userId) return;
-    await createAssignment({ agentId, moduleId, assignedBy: userId });
-  }, [userId]);
+    await assignLearningContent({ agentId, moduleId, contentType: "module", contentId: moduleId });
+  }, [assignLearningContent]);
 
   // ── Mutation: toggle lesson upvote ───────────────────────────────────────
   const toggleUpvote = useCallback(async (lessonId: string) => {
@@ -619,7 +655,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, assignedModuleIds, assignments, contentAudit,
     loading, error,
-    completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
+    completeModule, completeQuiz, saveCoachingNote, assignModule, assignLearningContent, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
     saveModule, removeModule, saveSOP, removeSOP,
     saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
@@ -722,12 +758,12 @@ const ModuleDetailPanel = memo(function ModuleDetailPanel({
 
 const HomeTab = memo(function HomeTab({
   progress, modules, quizzes, sops, workInstructions, defects,
-  lessons, recommendations, onTabChange, onSelectModule,
+  lessons, recommendations, assignments, onTabChange, onSelectModule,
 }: {
   progress: UserProgress; modules: LearningModule[]; quizzes: Quiz[];
   sops: SOPDocument[]; workInstructions: WorkInstruction[];
   defects: DefectExample[]; lessons: LessonLearned[];
-  recommendations: string[]; onTabChange: (tab: LCTab) => void;
+  recommendations: string[]; assignments: LearningAssignment[]; onTabChange: (tab: LCTab) => void;
   onSelectModule: (mod: LearningModule) => void;
 }) {
   const pinned = useMemo(() => {
@@ -745,6 +781,10 @@ const HomeTab = memo(function HomeTab({
   }, [progress]);
 
   const hasRecommendations = recommendations.length > 0;
+  const openAssignments = useMemo(
+    () => assignments.filter((assignment) => !["completed", "cancelled"].includes(assignment.status ?? "assigned")),
+    [assignments]
+  );
 
   return (
     <>
@@ -760,6 +800,45 @@ const HomeTab = memo(function HomeTab({
           </span>
         </div>
       )}
+      {openAssignments.length > 0 && (
+        <div className="lc-pinned" style={{ marginBottom: "18px" }}>
+          <div>
+            <div style={{ fontSize:"13px", fontWeight:700, color:"var(--fg-default)" }}>✅ Assigned by Supervisor</div>
+            <div style={{ fontSize:"11px", color:"var(--fg-muted)", marginTop:"2px" }}>
+              Complete these assigned modules and quizzes by their due dates.
+            </div>
+          </div>
+          <div className="lc-pinned-items">
+            {openAssignments.slice(0, 6).map((assignment) => {
+              const module = modules.find((item) => item.id === assignment.moduleId || item.id === assignment.contentId);
+              const quiz = quizzes.find((item) => item.id === assignment.contentId);
+              const title = assignment.title ?? module?.title ?? quiz?.title ?? "Assigned training";
+              const isQuiz = assignment.contentType === "quiz";
+              return (
+                <div
+                  key={assignment.id}
+                  className="lc-pinned-item"
+                  onClick={() => {
+                    if (isQuiz) onTabChange("quizzes");
+                    else if (module) onSelectModule(module);
+                  }}
+                >
+                  <div className="lc-pinned-icon" style={{ background:"color-mix(in srgb,var(--accent-blue) 12%,transparent)", color:"var(--accent-blue)" }}>
+                    {isQuiz ? "📝" : "📚"}
+                  </div>
+                  <div>
+                    <div className="lc-pinned-item-title">{title}</div>
+                    <div className="lc-pinned-item-sub">
+                      {assignment.dueDate ? `Due ${assignment.dueDate}` : "No due date"} · {assignment.status ?? "assigned"}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="lc-pinned">
         <div>
           <div style={{ fontSize:"13px", fontWeight:700, color:"var(--fg-default)" }}>📌 Pinned For You</div>
@@ -1318,14 +1397,14 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
     qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, assignments, contentAudit, loading, error,
-    completeModule, completeQuiz, toggleUpvote,
+    completeModule, completeQuiz, assignLearningContent, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
     saveModule, removeModule, saveSOP, removeSOP,
     saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
     saveStandard, removeStandard, saveOnboardingTrack, removeOnboardingTrack,
     saveBestPractice, removeBestPractice,
     removeCoachingNote, saveCoachingNoteWithId,
-  } = useSupabaseLearning(userId, resolvedRole);
+  } = useSupabaseLearning(userId, resolvedRole, currentUser?.team ?? null);
 
   const activeRole = previewRole ?? resolvedRole;
   const canManageLearning = resolvedRole === "admin" || resolvedRole === "qa" || resolvedRole === "supervisor";
@@ -1607,7 +1686,7 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
             <HomeTab
               progress={progress} modules={roleModules} quizzes={roleQuizzes}
               sops={sops} workInstructions={workInstructions} defects={defects}
-              lessons={lessons} recommendations={recommendations}
+              lessons={lessons} recommendations={recommendations} assignments={assignments}
               onTabChange={tab => { if (tab === "certifications") { setShowCerts(true); return; } setActiveTab(tab); }}
               onSelectModule={setSelectedModule}
             />
@@ -1708,6 +1787,10 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
               kind="coaching"
               teamData={teamData}
               coachingNotes={coachingNotes}
+              modules={roleModules}
+              quizzes={roleQuizzes}
+              assignments={assignments}
+              onCreateAssignment={assignLearningContent}
               onSaveCoachingNote={saveCoachingNoteWithId}
               onDeleteCoachingNote={removeCoachingNote}
             />
