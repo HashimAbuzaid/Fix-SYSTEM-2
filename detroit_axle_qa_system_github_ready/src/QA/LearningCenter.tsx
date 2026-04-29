@@ -21,7 +21,7 @@ import {
 import type {
   LearningModule, SOPDocument, WorkInstruction, DefectExample,
   Quiz, LessonLearned, BestPractice, TeamMember, CoachingNote,
-  UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard,
+  UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard, LearningRole,
 } from "./learningService";
 
 // ─── Re-export types consumers rely on ───────────────────────────────────────
@@ -1334,20 +1334,22 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     ? "Team-focused training hub — coaching, team findings, assigned modules, and supervisor resources."
     : "Centralized QA training hub — modules, SOPs, quizzes, certifications, analytics, and coaching.";
 
+  const isPublishedForAgent = useCallback((status?: string) => !status || status === "published", []);
+
   const roleModules = useMemo(
     () => modules.filter(m => {
-      if (isAgent) return m.roles.includes("agent");
-      if (isSupervisor) return m.roles.includes("supervisor") || m.roles.includes("agent");
+      if (isAgent) return isPublishedForAgent(m.status) && (m.roles.includes("agent") || m.roles.includes("all"));
+      if (isSupervisor) return m.roles.includes("supervisor") || m.roles.includes("agent") || m.roles.includes("all");
       return true;
     }),
-    [modules, isAgent, isSupervisor]
+    [modules, isAgent, isSupervisor, isPublishedForAgent]
   );
 
   const roleQuizzes = useMemo(
     () => quizzes.filter(q => {
       const status = q.status ?? "published";
       const audienceRoles = q.audienceRoles && q.audienceRoles.length > 0 ? q.audienceRoles : ["all", "agent"];
-      const audienceAllowsRole = audienceRoles.includes("all") || audienceRoles.includes(resolvedRole as any);
+      const audienceAllowsRole = audienceRoles.includes("all") || audienceRoles.includes(resolvedRole as LearningRole);
       const mod = q.moduleId ? modules.find(m => m.id === q.moduleId) : null;
 
       if (isAgent) {
