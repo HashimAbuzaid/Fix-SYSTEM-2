@@ -403,7 +403,7 @@ interface CmdItem {
 }
 
 const CommandPalette = memo(function CommandPalette({
-  modules, sops, workInstructions, quizzes,
+  modules, sops, quizzes,
   onClose, onSelectModule, onTabChange,
 }: {
   modules: LearningModule[]; sops: SOPDocument[]; workInstructions: WorkInstruction[];
@@ -919,12 +919,6 @@ const HomeTab = memo(function HomeTab({
   onSelectModule: (m: LearningModule) => void;
   onUpdateAssignment: (a: LearningAssignment) => Promise<void> | void;
 }) {
-  const levelPct = useMemo(() => {
-    const cur = LEVEL_THRESHOLDS[progress.level] ?? 0;
-    const next = LEVEL_THRESHOLDS[progress.level + 1] ?? cur + 1000;
-    return Math.round(((progress.xp - cur) / (next - cur)) * 100);
-  }, [progress]);
-
   const nextLevelXP = useMemo(() => {
     const next = LEVEL_THRESHOLDS[progress.level + 1];
     return next ? next - progress.xp : 0;
@@ -1775,7 +1769,10 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
 
   const roleQuizzes = useMemo(() => quizzes.filter(q => {
     const status = q.status ?? "published";
-    const audienceRoles = q.audienceRoles?.length > 0 ? q.audienceRoles : ["all","agent"];
+    const audienceRoles: LearningRole[] =
+      Array.isArray(q.audienceRoles) && q.audienceRoles.length > 0
+        ? q.audienceRoles
+        : ["all", "agent"];
     const audienceOk = audienceRoles.includes("all") || audienceRoles.includes(activeRole as LearningRole);
     const mod = q.moduleId ? modules.find(m => m.id === q.moduleId) : null;
     if (isAgent) {
