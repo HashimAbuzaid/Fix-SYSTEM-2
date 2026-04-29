@@ -957,6 +957,482 @@ function profileToTeamMember(row: ProfileTeamRow): TeamMember {
   });
 }
 
+type AuditSourceRow = Record<string, unknown>;
+
+const AUDIT_SOURCE_TABLES = [
+  "qa_audits",
+  "audits",
+  "audit_records",
+  "qa_reviews",
+  "reviews",
+  "call_audits",
+  "calls_audits",
+  "ticket_audits",
+  "tickets_audits",
+  "sales_audits",
+  "calls_uploads",
+  "tickets_uploads",
+  "sales_uploads",
+  "calls",
+  "tickets",
+  "sales",
+  "ticket_ai_reviews",
+  "ticket_review_queue",
+] as const;
+
+const KNOWN_METRIC_LABELS: Record<string, string> = {
+  rl: "Return Label",
+  returnlabel: "Return Label",
+  return_label: "Return Label",
+  ticketdocumentation: "Ticket Documentation",
+  ticket_documentation: "Ticket Documentation",
+  documentation: "Ticket Documentation",
+  firstcontactresolution: "First Contact Resolution",
+  first_contact_resolution: "First Contact Resolution",
+  fcr: "First Contact Resolution",
+  professionalism: "Professionalism",
+  productknowledge: "Product Knowledge",
+  product_knowledge: "Product Knowledge",
+  accuracy: "Accuracy",
+  communication: "Communication",
+  empathy: "Empathy",
+  resolution: "Resolution",
+  process: "Process Adherence",
+  processadherence: "Process Adherence",
+  policy: "Policy Adherence",
+  policyadherence: "Policy Adherence",
+  followup: "Follow Up",
+  follow_up: "Follow Up",
+  verification: "Verification",
+  callcontrol: "Call Control",
+  call_control: "Call Control",
+  greeting: "Greeting",
+  closing: "Closing",
+  escalation: "Escalation",
+  shipping: "Shipping Accuracy",
+  warranty: "Warranty Accuracy",
+};
+
+const EXCLUDED_METRIC_KEYS = new Set([
+  "id",
+  "uuid",
+  "agent_id",
+  "agentid",
+  "agent",
+  "agent_name",
+  "agentname",
+  "email",
+  "user_email",
+  "name",
+  "team",
+  "role",
+  "channel",
+  "created_at",
+  "createdat",
+  "updated_at",
+  "updatedat",
+  "date",
+  "audit_date",
+  "auditor",
+  "notes",
+  "comment",
+  "comments",
+  "status",
+  "overall_status",
+  "visibility",
+  "hidden",
+  "shared",
+  "score",
+  "total_score",
+  "final_score",
+  "qa_score",
+  "quality_score",
+  "average_quality",
+]);
+
+function normalizeComparable(value: string | null | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9@.]+/g, "")
+    .trim();
+}
+
+function prettifyKey(key: string): string {
+  const cleaned = key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return cleaned.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function normalizeMetricLabel(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+
+  if (!value) return null;
+
+  const compact = value.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const snake = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  return KNOWN_METRIC_LABELS[snake] ?? KNOWN_METRIC_LABELS[compact] ?? prettifyKey(value);
+}
+
+function uniqueList(values: readonly string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+}
+
+function splitMetricText(value: string): string[] {
+  return uniqueList(
+    value
+      .split(/[;,|\n]+/)
+      .map((part) => normalizeMetricLabel(part))
+      .filter((part): part is string => Boolean(part))
+  );
+}
+
+function isNegativePrimitive(value: unknown): boolean {
+  if (typeof value === "boolean") return value === false;
+  if (typeof value === "number") return Number.isFinite(value) && value <= 0;
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    return [
+      "fail",
+      "failed",
+      "false",
+      "no",
+      "n",
+      "miss",
+      "missed",
+      "incorrect",
+      "not met",
+      "needs improvement",
+      "unsatisfactory",
+      "zero",
+      "0",
+    ].includes(normalized);
+  }
+
+  return false;
+}
+
+function keyLooksLikeMetric(key: string): boolean {
+  const normalized = key
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const compact = normalized.replace(/_/g, "");
+
+  if (EXCLUDED_METRIC_KEYS.has(normalized) || EXCLUDED_METRIC_KEYS.has(compact)) {
+    return false;
+  }
+
+  if (KNOWN_METRIC_LABELS[normalized] || KNOWN_METRIC_LABELS[compact]) {
+    return true;
+  }
+
+  return /(metric|rubric|criterion|category|documentation|professionalism|knowledge|resolution|accuracy|empathy|policy|process|greeting|closing|escalation|shipping|warranty)/i.test(
+    key
+  );
+}
+
+function readStringFromObject(row: AuditSourceRow, keys: readonly string[]): string | null {
+  for (const key of keys) {
+    const value = row[key];
+
+    if (typeof value === "string" && value.trim()) return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
+  return null;
+}
+
+function rowMatchesTeamMember(row: AuditSourceRow, member: TeamMember): boolean {
+  const memberKeys = [member.id, member.agentId ?? undefined, member.email ?? undefined, member.name]
+    .map((value) => normalizeComparable(value))
+    .filter(Boolean);
+
+  const directValues = [
+    readStringFromObject(row, [
+      "agent_id",
+      "agentId",
+      "user_id",
+      "profile_id",
+      "profileId",
+      "employee_id",
+    ]),
+    readStringFromObject(row, [
+      "email",
+      "user_email",
+      "agent_email",
+      "employee_email",
+    ]),
+    readStringFromObject(row, [
+      "agent_name",
+      "agentName",
+      "name",
+      "employee_name",
+      "rep_name",
+      "representative",
+      "sales_rep",
+    ]),
+  ]
+    .map((value) => normalizeComparable(value))
+    .filter(Boolean);
+
+  if (directValues.some((value) => memberKeys.includes(value))) return true;
+
+  const nestedProfile = row.profile ?? row.agent_profile ?? row.user ?? row.agent;
+
+  if (nestedProfile && typeof nestedProfile === "object" && !Array.isArray(nestedProfile)) {
+    const nested = nestedProfile as AuditSourceRow;
+
+    const nestedValues = [
+      readStringFromObject(nested, ["id", "user_id", "agent_id", "profile_id"]),
+      readStringFromObject(nested, ["email", "user_email"]),
+      readStringFromObject(nested, ["display_name", "agent_name", "full_name", "name"]),
+    ]
+      .map((value) => normalizeComparable(value))
+      .filter(Boolean);
+
+    if (nestedValues.some((value) => memberKeys.includes(value))) return true;
+  }
+
+  return false;
+}
+
+function rowTeamMatches(row: AuditSourceRow, member: TeamMember): boolean {
+  if (!member.team) return true;
+
+  const rowTeam = normalizeOperationalTeam(
+    readStringFromObject(row, [
+      "team",
+      "department",
+      "queue",
+      "line_of_business",
+      "lob",
+      "channel",
+    ])
+  );
+
+  return !rowTeam || rowTeam === member.team;
+}
+
+function objectHasNegativeOutcome(obj: AuditSourceRow): boolean {
+  const outcomeKeys = [
+    "passed",
+    "pass",
+    "met",
+    "is_met",
+    "success",
+    "failed",
+    "missed",
+    "fail",
+    "result",
+    "outcome",
+    "status",
+    "value",
+    "answer",
+    "score",
+    "points",
+    "points_earned",
+  ];
+
+  for (const key of outcomeKeys) {
+    if (!(key in obj)) continue;
+
+    const value = obj[key];
+
+    if (["failed", "missed", "fail"].includes(key) && value === true) return true;
+    if (["passed", "pass", "met", "is_met", "success"].includes(key) && value === false) {
+      return true;
+    }
+    if (isNegativePrimitive(value)) return true;
+  }
+
+  const pointsEarned =
+    typeof obj.points_earned === "number"
+      ? obj.points_earned
+      : typeof obj.pointsEarned === "number"
+        ? obj.pointsEarned
+        : null;
+
+  const maxPoints =
+    typeof obj.max_points === "number"
+      ? obj.max_points
+      : typeof obj.maxPoints === "number"
+        ? obj.maxPoints
+        : null;
+
+  if (pointsEarned !== null && maxPoints !== null && pointsEarned < maxPoints) {
+    return true;
+  }
+
+  return false;
+}
+
+function collectFailedMetrics(
+  value: unknown,
+  inheritedKey: string | null,
+  output: Set<string>
+): void {
+  if (value === null || value === undefined) return;
+
+  if (typeof value === "string") {
+    if (inheritedKey && /failed|missed|defect|opportunit|error|coaching/i.test(inheritedKey)) {
+      splitMetricText(value).forEach((metric) => output.add(metric));
+    }
+
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((entry) => collectFailedMetrics(entry, inheritedKey, output));
+    return;
+  }
+
+  if (typeof value !== "object") return;
+
+  const obj = value as AuditSourceRow;
+
+  const label = readStringFromObject(obj, [
+    "metric",
+    "metric_name",
+    "metricName",
+    "name",
+    "title",
+    "criterion",
+    "category",
+    "field",
+    "label",
+  ]);
+
+  if (label && objectHasNegativeOutcome(obj)) {
+    const normalized = normalizeMetricLabel(label);
+
+    if (normalized) output.add(normalized);
+  }
+
+  for (const [key, child] of Object.entries(obj)) {
+    if (keyLooksLikeMetric(key) && isNegativePrimitive(child)) {
+      const normalized = normalizeMetricLabel(key);
+
+      if (normalized) output.add(normalized);
+    }
+
+    if (/failed|missed|defect|opportunit|error|coaching/i.test(key) && typeof child === "string") {
+      splitMetricText(child).forEach((metric) => output.add(metric));
+    }
+
+    collectFailedMetrics(child, key, output);
+  }
+}
+
+function extractFailedMetricsFromRow(row: AuditSourceRow): string[] {
+  const output = new Set<string>();
+
+  collectFailedMetrics(row, null, output);
+
+  return uniqueList(Array.from(output)).slice(0, 8);
+}
+
+function extractScoreFromRow(row: AuditSourceRow): number | null {
+  const scoreKeys = [
+    "score",
+    "qa_score",
+    "qaScore",
+    "quality_score",
+    "qualityScore",
+    "audit_score",
+    "auditScore",
+    "final_score",
+    "finalScore",
+    "total_score",
+    "totalScore",
+    "average_quality",
+    "averageQuality",
+  ];
+
+  for (const key of scoreKeys) {
+    const value = row[key];
+    const numeric =
+      typeof value === "number"
+        ? value
+        : typeof value === "string"
+          ? Number(value.replace("%", ""))
+          : NaN;
+
+    if (Number.isFinite(numeric) && numeric >= 0 && numeric <= 100) {
+      return Math.round(numeric);
+    }
+  }
+
+  for (const child of Object.values(row)) {
+    if (child && typeof child === "object" && !Array.isArray(child)) {
+      const nested = extractScoreFromRow(child as AuditSourceRow);
+
+      if (nested !== null) return nested;
+    }
+  }
+
+  return null;
+}
+
+async function fetchCandidateAuditRows(): Promise<AuditSourceRow[]> {
+  const batches = await Promise.all(
+    AUDIT_SOURCE_TABLES.map(async (table) => {
+      const rows = await supabaseJson<AuditSourceRow[]>(
+        `${table}?select=*&limit=5000`,
+        { method: "GET" }
+      );
+
+      return rows ?? [];
+    })
+  );
+
+  return batches.flat();
+}
+
+async function attachAuditInsightsToTeamMembers(
+  members: TeamMember[]
+): Promise<TeamMember[]> {
+  if (!members.length || !canUseSupabase()) return members;
+
+  const auditRows = await fetchCandidateAuditRows();
+
+  if (!auditRows.length) return members;
+
+  return members.map((member) => {
+    const matchedRows = auditRows.filter(
+      (row) => rowMatchesTeamMember(row, member) && rowTeamMatches(row, member)
+    );
+
+    if (!matchedRows.length) return member;
+
+    const failedMetrics = uniqueList(matchedRows.flatMap(extractFailedMetricsFromRow));
+
+    const scores = matchedRows
+      .map(extractScoreFromRow)
+      .filter((score): score is number => score !== null);
+
+    const score = scores.length
+      ? Math.round(scores.reduce((total, current) => total + current, 0) / scores.length)
+      : member.score;
+
+    return normalizeTeamMember({
+      ...member,
+      score,
+      failedMetrics,
+    });
+  });
+}
+
 // ─── Supabase REST persistence with local fallback ───────────────────────────
 // If VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are present, writes go to
 // Supabase. If not, the existing localStorage fallback remains active so the UI
@@ -1625,7 +2101,7 @@ export async function fetchTeamMembers(
           OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
       );
 
-    return ok(synced);
+    return ok(await attachAuditInsightsToTeamMembers(synced));
   }
 
   const local = mergeItems(
@@ -1634,20 +2110,20 @@ export async function fetchTeamMembers(
     readDeleted(deletedKeys.teamMembers)
   );
 
-  return ok(
-    local
-      .map((member) =>
-        normalizeTeamMember({
-          ...member,
-          team: normalizeOperationalTeam(member.team),
-        })
-      )
-      .filter(
-        (member) =>
-          member.team !== null &&
-          OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
-      )
-  );
+  const syncedLocal = local
+    .map((member) =>
+      normalizeTeamMember({
+        ...member,
+        team: normalizeOperationalTeam(member.team),
+      })
+    )
+    .filter(
+      (member) =>
+        member.team !== null &&
+        OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
+    );
+
+  return ok(await attachAuditInsightsToTeamMembers(syncedLocal));
 }
 
 // Kept for backward compatibility with older manager builds. New Learning Center UI
