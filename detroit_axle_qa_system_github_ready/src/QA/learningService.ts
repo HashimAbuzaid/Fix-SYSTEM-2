@@ -1,7 +1,5 @@
-// Type-safe Learning Center service.
-// This file intentionally has no external imports so it cannot break deploys if
-// a Supabase client path differs between environments. It provides strongly
-// typed fallback data and local persistence hooks for LearningCenter.tsx.
+// Type-safe Learning Center service with local persistence fallback.
+// Replace these localStorage hooks with Supabase calls later without changing the UI layer.
 
 export type LearningRole = "all" | "admin" | "qa" | "supervisor" | "agent";
 export type QuizStatus = "draft" | "published";
@@ -104,6 +102,14 @@ export interface BestPractice {
   quote: string;
   agentLabel: string;
   metric: string;
+}
+
+export interface QualityStandard {
+  id: string;
+  name: string;
+  min: number;
+  color: string;
+  desc: string;
 }
 
 export interface TeamMember {
@@ -349,6 +355,37 @@ const BEST_PRACTICES: BestPractice[] = [
   },
 ];
 
+const QUALITY_STANDARDS: QualityStandard[] = [
+  {
+    id: "excellent",
+    name: "Excellent",
+    min: 95,
+    color: "var(--accent-emerald)",
+    desc: "Exceeds all expectations. Exemplary service, complete documentation, proactive solutions.",
+  },
+  {
+    id: "good",
+    name: "Good",
+    min: 85,
+    color: "var(--accent-blue)",
+    desc: "Meets all standards. Minor areas for improvement but overall strong performance.",
+  },
+  {
+    id: "needs-improvement",
+    name: "Needs Improvement",
+    min: 70,
+    color: "var(--accent-amber)",
+    desc: "Meets minimum requirements but has notable gaps. Coaching recommended.",
+  },
+  {
+    id: "unsatisfactory",
+    name: "Unsatisfactory",
+    min: 0,
+    color: "var(--accent-rose)",
+    desc: "Does not meet minimum standards. Immediate retraining required.",
+  },
+];
+
 const TEAM_MEMBERS: TeamMember[] = [
   { id: "agent-1", name: "Sample Agent", initials: "SA", score: 82, failedMetrics: ["Ticket Documentation"] },
 ];
@@ -403,34 +440,135 @@ function writeJson<T>(key: string, value: T): void {
   }
 }
 
-function progressKey(userId: string): string {
-  return `da-learning-progress:${userId}`;
-}
-
-function upvoteKey(userId: string): string {
-  return `da-learning-upvotes:${userId}`;
-}
-
-function assignmentKey(agentId: string): string {
-  return `da-learning-assignments:${agentId}`;
-}
-
-function notesKey(supervisorId: string): string {
-  return `da-learning-notes:${supervisorId}`;
-}
-
-const CUSTOM_QUIZZES_KEY = "da-learning-custom-quizzes";
-const DELETED_QUIZZES_KEY = "da-learning-deleted-quizzes";
+function progressKey(userId: string): string { return `da-learning-progress:${userId}`; }
+function upvoteKey(userId: string): string { return `da-learning-upvotes:${userId}`; }
+function assignmentKey(agentId: string): string { return `da-learning-assignments:${agentId}`; }
+function notesKey(supervisorId: string): string { return `da-learning-notes:${supervisorId}`; }
 
 function createLocalId(prefix: string): string {
-  const random = Math.random().toString(36).slice(2, 9);
-  return `${prefix}-${Date.now().toString(36)}-${random}`;
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function readCustom<T>(key: string): T[] { return readJson<T[]>(key, []); }
+function writeCustom<T>(key: string, items: T[]): void { writeJson(key, items); }
+function readDeleted(key: string): Set<string> { return new Set(readJson<string[]>(key, [])); }
+function writeDeleted(key: string, ids: Set<string>): void { writeJson(key, Array.from(ids)); }
+
+function mergeItems<T extends { id: string }>(base: T[], custom: T[], deletedIds: Set<string>): T[] {
+  const merged = new Map<string, T>();
+  base.filter((item) => !deletedIds.has(item.id)).forEach((item) => merged.set(item.id, item));
+  custom.filter((item) => !deletedIds.has(item.id)).forEach((item) => merged.set(item.id, item));
+  return Array.from(merged.values());
+}
+
+function saveItem<T extends { id: string }>(customKey: string, deletedKey: string, item: T): T {
+  const next = [item, ...readCustom<T>(customKey).filter((existing) => existing.id !== item.id)];
+  writeCustom(customKey, next);
+  const deletedIds = readDeleted(deletedKey);
+  deletedIds.delete(item.id);
+  writeDeleted(deletedKey, deletedIds);
+  return item;
+}
+
+function removeItem(customKey: string, deletedKey: string, id: string): void {
+  writeCustom(customKey, readCustom<{ id: string }>(customKey).filter((item) => item.id !== id));
+  const deletedIds = readDeleted(deletedKey);
+  deletedIds.add(id);
+  writeDeleted(deletedKey, deletedIds);
+}
+
+const customKeys = {
+  modules: "da-learning-custom-modules",
+  sops: "da-learning-custom-sops",
+  workInstructions: "da-learning-custom-work-instructions",
+  defects: "da-learning-custom-defects",
+  quizzes: "da-learning-custom-quizzes",
+  bestPractices: "da-learning-custom-best-practices",
+  standards: "da-learning-custom-quality-standards",
+  onboarding: "da-learning-custom-onboarding-tracks",
+  teamMembers: "da-learning-custom-team-members",
+};
+
+const deletedKeys = {
+  modules: "da-learning-deleted-modules",
+  sops: "da-learning-deleted-sops",
+  workInstructions: "da-learning-deleted-work-instructions",
+  defects: "da-learning-deleted-defects",
+  quizzes: "da-learning-deleted-quizzes",
+  bestPractices: "da-learning-deleted-best-practices",
+  standards: "da-learning-deleted-quality-standards",
+  onboarding: "da-learning-deleted-onboarding-tracks",
+  teamMembers: "da-learning-deleted-team-members",
+};
+
+function csv(value: string[] | undefined): string[] { return value ?? []; }
+
+function normalizeModule(module: LearningModule): LearningModule {
+  return {
+    ...module,
+    id: module.id?.trim() || createLocalId("module"),
+    title: module.title?.trim() || "Untitled module",
+    description: module.description ?? "",
+    category: module.category || "General",
+    difficulty: module.difficulty ?? "beginner",
+    durationMin: Number(module.durationMin) || 0,
+    xpReward: Number(module.xpReward) || 0,
+    content: module.content ?? "",
+    author: module.author || "QA Training",
+    updatedAt: new Date().toISOString().split("T")[0],
+    rating: Number(module.rating) || 0,
+    completions: Number(module.completions) || 0,
+    tags: csv(module.tags),
+    roles: module.roles && module.roles.length > 0 ? module.roles : ["all"],
+    steps: csv(module.steps),
+    metrics: csv(module.metrics),
+  };
+}
+
+function normalizeSOP(sop: SOPDocument): SOPDocument {
+  return {
+    ...sop,
+    id: sop.id?.trim() || createLocalId("sop"),
+    title: sop.title?.trim() || "Untitled SOP",
+    version: sop.version || "1.0",
+    category: sop.category || "General",
+    content: sop.content ?? "",
+    updatedAt: new Date().toISOString().split("T")[0],
+    author: sop.author || "QA Training",
+    changeLog: sop.changeLog ?? [],
+  };
+}
+
+function normalizeWorkInstruction(item: WorkInstruction): WorkInstruction {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("work-instruction"),
+    title: item.title?.trim() || "Untitled work instruction",
+    metric: item.metric || "General",
+    category: item.category || "General",
+    steps: csv(item.steps),
+    updatedAt: new Date().toISOString().split("T")[0],
+  };
+}
+
+function normalizeDefect(item: DefectExample): DefectExample {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("defect"),
+    title: item.title?.trim() || "Untitled defect example",
+    metric: item.metric || "General",
+    severity: item.severity ?? "medium",
+    whatWentWrong: item.whatWentWrong ?? "",
+    correctBehavior: item.correctBehavior ?? "",
+  };
 }
 
 function normalizeQuiz(quiz: Quiz): Quiz {
   return {
     ...quiz,
+    id: quiz.id?.trim() || createLocalId("quiz"),
     moduleId: quiz.moduleId ?? null,
+    title: quiz.title?.trim() || "Untitled quiz",
     description: quiz.description ?? "",
     passingScore: Number.isFinite(quiz.passingScore) ? quiz.passingScore : 70,
     xpReward: Number.isFinite(quiz.xpReward) ? quiz.xpReward : 0,
@@ -450,86 +588,130 @@ function normalizeQuiz(quiz: Quiz): Quiz {
   };
 }
 
-function readCustomQuizzes(): Quiz[] {
-  return readJson<Quiz[]>(CUSTOM_QUIZZES_KEY, []).map(normalizeQuiz);
+function normalizeBestPractice(item: BestPractice): BestPractice {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("best-practice"),
+    title: item.title?.trim() || "Untitled best practice",
+    category: item.category || "General",
+    quote: item.quote ?? "",
+    agentLabel: item.agentLabel || "QA Training",
+    metric: item.metric || "General",
+  };
 }
 
-function writeCustomQuizzes(quizzes: Quiz[]): void {
-  writeJson(CUSTOM_QUIZZES_KEY, quizzes.map(normalizeQuiz));
+function normalizeQualityStandard(item: QualityStandard): QualityStandard {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("standard"),
+    name: item.name?.trim() || "Untitled standard",
+    min: Math.max(0, Math.min(Number(item.min) || 0, 100)),
+    color: item.color || "var(--accent-blue)",
+    desc: item.desc ?? "",
+  };
 }
 
-function readDeletedQuizIds(): Set<string> {
-  return new Set(readJson<string[]>(DELETED_QUIZZES_KEY, []));
+function normalizeOnboardingTrack(item: OnboardingTrack): OnboardingTrack {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("onboarding"),
+    label: item.label?.trim() || "Untitled onboarding track",
+    subtitle: item.subtitle ?? "",
+    badgeLabel: item.badgeLabel || "General",
+    steps: (item.steps ?? []).map((step, index) => ({
+      ...step,
+      id: step.id || createLocalId(`onboarding-step-${index + 1}`),
+      title: step.title?.trim() || `Step ${index + 1}`,
+      description: step.description ?? "",
+      moduleId: step.moduleId || null,
+    })),
+  };
 }
 
-function writeDeletedQuizIds(ids: Set<string>): void {
-  writeJson(DELETED_QUIZZES_KEY, Array.from(ids));
+function normalizeTeamMember(item: TeamMember): TeamMember {
+  return {
+    ...item,
+    id: item.id?.trim() || createLocalId("team-member"),
+    name: item.name?.trim() || "New team member",
+    initials: item.initials?.trim() || "TM",
+    score: Math.max(0, Math.min(Number(item.score) || 0, 100)),
+    failedMetrics: csv(item.failedMetrics),
+  };
 }
 
 export async function fetchLearningModules(): Promise<ServiceResult<LearningModule[]>> {
-  return ok(MODULES);
+  return ok(mergeItems(MODULES, readCustom<LearningModule>(customKeys.modules).map(normalizeModule), readDeleted(deletedKeys.modules)));
+}
+export async function upsertLearningModule(item: LearningModule): Promise<ServiceResult<LearningModule>> {
+  return ok(saveItem(customKeys.modules, deletedKeys.modules, normalizeModule(item)));
+}
+export async function deleteLearningModule(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.modules, deletedKeys.modules, id); return ok(true);
 }
 
 export async function fetchSOPs(): Promise<ServiceResult<SOPDocument[]>> {
-  return ok(SOPS);
+  return ok(mergeItems(SOPS, readCustom<SOPDocument>(customKeys.sops).map(normalizeSOP), readDeleted(deletedKeys.sops)));
+}
+export async function upsertSOP(item: SOPDocument): Promise<ServiceResult<SOPDocument>> {
+  return ok(saveItem(customKeys.sops, deletedKeys.sops, normalizeSOP(item)));
+}
+export async function deleteSOP(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.sops, deletedKeys.sops, id); return ok(true);
 }
 
 export async function fetchWorkInstructions(): Promise<ServiceResult<WorkInstruction[]>> {
-  return ok(WORK_INSTRUCTIONS);
+  return ok(mergeItems(WORK_INSTRUCTIONS, readCustom<WorkInstruction>(customKeys.workInstructions).map(normalizeWorkInstruction), readDeleted(deletedKeys.workInstructions)));
+}
+export async function upsertWorkInstruction(item: WorkInstruction): Promise<ServiceResult<WorkInstruction>> {
+  return ok(saveItem(customKeys.workInstructions, deletedKeys.workInstructions, normalizeWorkInstruction(item)));
+}
+export async function deleteWorkInstruction(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.workInstructions, deletedKeys.workInstructions, id); return ok(true);
 }
 
 export async function fetchDefectExamples(): Promise<ServiceResult<DefectExample[]>> {
-  return ok(DEFECTS);
+  return ok(mergeItems(DEFECTS, readCustom<DefectExample>(customKeys.defects).map(normalizeDefect), readDeleted(deletedKeys.defects)));
+}
+export async function upsertDefectExample(item: DefectExample): Promise<ServiceResult<DefectExample>> {
+  return ok(saveItem(customKeys.defects, deletedKeys.defects, normalizeDefect(item)));
+}
+export async function deleteDefectExample(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.defects, deletedKeys.defects, id); return ok(true);
 }
 
 export async function fetchQuizzes(): Promise<ServiceResult<Quiz[]>> {
-  const deletedIds = readDeletedQuizIds();
-  const staticQuizzes = QUIZZES.map(normalizeQuiz).filter((quiz) => !deletedIds.has(quiz.id));
-  const customQuizzes = readCustomQuizzes().filter((quiz) => !deletedIds.has(quiz.id));
-  const merged = new Map<string, Quiz>();
-  staticQuizzes.forEach((quiz) => merged.set(quiz.id, quiz));
-  customQuizzes.forEach((quiz) => merged.set(quiz.id, quiz));
-  return ok(Array.from(merged.values()).sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
+  const deletedIds = readDeleted(deletedKeys.quizzes);
+  const merged = mergeItems(QUIZZES.map(normalizeQuiz), readCustom<Quiz>(customKeys.quizzes).map(normalizeQuiz), deletedIds);
+  return ok(merged.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")));
 }
-
 export async function upsertQuiz(quiz: QuizUpsertInput, userId?: string): Promise<ServiceResult<Quiz>> {
-  const now = new Date().toISOString();
-  const id = quiz.id?.trim() || createLocalId("quiz");
-  const normalized = normalizeQuiz({
-    ...quiz,
-    id,
-    createdBy: quiz.createdBy ?? userId ?? null,
-    updatedAt: now,
-  });
-
-  const customQuizzes = readCustomQuizzes();
-  const next = [normalized, ...customQuizzes.filter((item) => item.id !== normalized.id)];
-  writeCustomQuizzes(next);
-
-  const deletedIds = readDeletedQuizIds();
-  deletedIds.delete(normalized.id);
-  writeDeletedQuizIds(deletedIds);
-
-  return ok(normalized);
+  const normalized = normalizeQuiz({ ...quiz, createdBy: quiz.createdBy ?? userId ?? null, updatedAt: new Date().toISOString() });
+  return ok(saveItem(customKeys.quizzes, deletedKeys.quizzes, normalized));
+}
+export async function deleteQuiz(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.quizzes, deletedKeys.quizzes, id); return ok(true);
 }
 
-export async function deleteQuiz(quizId: string): Promise<ServiceResult<boolean>> {
-  const customQuizzes = readCustomQuizzes().filter((quiz) => quiz.id !== quizId);
-  writeCustomQuizzes(customQuizzes);
-
-  const deletedIds = readDeletedQuizIds();
-  deletedIds.add(quizId);
-  writeDeletedQuizIds(deletedIds);
-
-  return ok(true);
-}
-
-export async function fetchLessonsLearned(): Promise<ServiceResult<LessonLearned[]>> {
-  return ok(LESSONS);
-}
+export async function fetchLessonsLearned(): Promise<ServiceResult<LessonLearned[]>> { return ok(LESSONS); }
 
 export async function fetchBestPractices(): Promise<ServiceResult<BestPractice[]>> {
-  return ok(BEST_PRACTICES);
+  return ok(mergeItems(BEST_PRACTICES, readCustom<BestPractice>(customKeys.bestPractices).map(normalizeBestPractice), readDeleted(deletedKeys.bestPractices)));
+}
+export async function upsertBestPractice(item: BestPractice): Promise<ServiceResult<BestPractice>> {
+  return ok(saveItem(customKeys.bestPractices, deletedKeys.bestPractices, normalizeBestPractice(item)));
+}
+export async function deleteBestPractice(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.bestPractices, deletedKeys.bestPractices, id); return ok(true);
+}
+
+export async function fetchQualityStandards(): Promise<ServiceResult<QualityStandard[]>> {
+  return ok(mergeItems(QUALITY_STANDARDS, readCustom<QualityStandard>(customKeys.standards).map(normalizeQualityStandard), readDeleted(deletedKeys.standards)).sort((a, b) => b.min - a.min));
+}
+export async function upsertQualityStandard(item: QualityStandard): Promise<ServiceResult<QualityStandard>> {
+  return ok(saveItem(customKeys.standards, deletedKeys.standards, normalizeQualityStandard(item)));
+}
+export async function deleteQualityStandard(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.standards, deletedKeys.standards, id); return ok(true);
 }
 
 export async function fetchOrCreateUserProgress(userId: string): Promise<ServiceResult<UserProgress>> {
@@ -546,112 +728,81 @@ export async function fetchOrCreateUserProgress(userId: string): Promise<Service
   writeJson(progressKey(userId), merged);
   return ok(merged);
 }
-
 export async function upsertUserProgress(userId: string, progress: UserProgress): Promise<ServiceResult<UserProgress>> {
-  writeJson(progressKey(userId), progress);
-  return ok(progress);
+  writeJson(progressKey(userId), progress); return ok(progress);
 }
-
-export async function fetchUserUpvotes(userId: string): Promise<ServiceResult<string[]>> {
-  return ok(readJson<string[]>(upvoteKey(userId), []));
-}
-
-export async function toggleLessonUpvote(
-  userId: string,
-  lessonId: string,
-  alreadyUpvoted: boolean
-): Promise<ServiceResult<boolean>> {
+export async function fetchUserUpvotes(userId: string): Promise<ServiceResult<string[]>> { return ok(readJson<string[]>(upvoteKey(userId), [])); }
+export async function toggleLessonUpvote(userId: string, lessonId: string, alreadyUpvoted: boolean): Promise<ServiceResult<boolean>> {
   const current = new Set(readJson<string[]>(upvoteKey(userId), []));
-  if (alreadyUpvoted) current.delete(lessonId);
-  else current.add(lessonId);
-  writeJson(upvoteKey(userId), Array.from(current));
-  return ok(!alreadyUpvoted);
+  if (alreadyUpvoted) current.delete(lessonId); else current.add(lessonId);
+  writeJson(upvoteKey(userId), Array.from(current)); return ok(!alreadyUpvoted);
 }
 
 export async function fetchTeamMembers(_supervisorId?: string): Promise<ServiceResult<TeamMember[]>> {
-  return ok(TEAM_MEMBERS);
+  return ok(mergeItems(TEAM_MEMBERS, readCustom<TeamMember>(customKeys.teamMembers).map(normalizeTeamMember), readDeleted(deletedKeys.teamMembers)));
+}
+export async function upsertTeamMember(item: TeamMember): Promise<ServiceResult<TeamMember>> {
+  return ok(saveItem(customKeys.teamMembers, deletedKeys.teamMembers, normalizeTeamMember(item)));
+}
+export async function deleteTeamMember(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.teamMembers, deletedKeys.teamMembers, id); return ok(true);
 }
 
 export async function fetchCoachingNotes(supervisorId: string): Promise<ServiceResult<CoachingNote[]>> {
   return ok(readJson<CoachingNote[]>(notesKey(supervisorId), []));
 }
-
-export async function upsertCoachingNote(input: {
-  supervisorId: string;
-  agentId: string;
-  note: string;
-  metric?: string;
-}): Promise<ServiceResult<CoachingNote>> {
+export async function upsertCoachingNote(input: { supervisorId: string; agentId: string; note: string; metric?: string; id?: string }): Promise<ServiceResult<CoachingNote>> {
   const existing = readJson<CoachingNote[]>(notesKey(input.supervisorId), []);
   const nextNote: CoachingNote = {
-    id: `${input.supervisorId}:${input.agentId}`,
+    id: input.id || createLocalId("coaching-note"),
     supervisorId: input.supervisorId,
     agentId: input.agentId,
     note: input.note,
     metric: input.metric,
     sessionDate: new Date().toLocaleDateString(),
   };
-  const next = [nextNote, ...existing.filter((n) => n.agentId !== input.agentId)];
+  const next = [nextNote, ...existing.filter((note) => note.id !== nextNote.id)];
   writeJson(notesKey(input.supervisorId), next);
   return ok(nextNote);
 }
+export async function deleteCoachingNote(supervisorId: string, noteId: string): Promise<ServiceResult<boolean>> {
+  writeJson(notesKey(supervisorId), readJson<CoachingNote[]>(notesKey(supervisorId), []).filter((note) => note.id !== noteId));
+  return ok(true);
+}
 
-export async function createAssignment(input: {
-  agentId: string;
-  moduleId: string;
-  assignedBy: string;
-}): Promise<ServiceResult<LearningAssignment>> {
-  const assignment: LearningAssignment = {
-    id: `${input.agentId}:${input.moduleId}`,
-    agentId: input.agentId,
-    moduleId: input.moduleId,
-    assignedBy: input.assignedBy,
-    assignedAt: new Date().toISOString(),
-  };
+export async function createAssignment(input: { agentId: string; moduleId: string; assignedBy: string }): Promise<ServiceResult<LearningAssignment>> {
+  const assignment: LearningAssignment = { id: `${input.agentId}:${input.moduleId}`, agentId: input.agentId, moduleId: input.moduleId, assignedBy: input.assignedBy, assignedAt: new Date().toISOString() };
   const existing = readJson<LearningAssignment[]>(assignmentKey(input.agentId), []);
-  const next = [assignment, ...existing.filter((a) => a.moduleId !== input.moduleId)];
-  writeJson(assignmentKey(input.agentId), next);
+  writeJson(assignmentKey(input.agentId), [assignment, ...existing.filter((a) => a.moduleId !== input.moduleId)]);
   return ok(assignment);
 }
+export async function fetchAgentAssignments(agentId: string): Promise<ServiceResult<LearningAssignment[]>> { return ok(readJson<LearningAssignment[]>(assignmentKey(agentId), [])); }
+export async function fetchRecommendedModuleIds(_userId: string): Promise<ServiceResult<string[]>> { return ok(["ticket-documentation"]); }
+export async function fetchAuditLinks(_userId?: string): Promise<ServiceResult<AuditLink[]>> { return ok(AUDIT_LINKS); }
 
-export async function fetchAgentAssignments(agentId: string): Promise<ServiceResult<LearningAssignment[]>> {
-  return ok(readJson<LearningAssignment[]>(assignmentKey(agentId), []));
-}
-
-export async function fetchRecommendedModuleIds(_userId: string): Promise<ServiceResult<string[]>> {
-  return ok(["ticket-documentation"]);
-}
-
-export async function fetchAuditLinks(_userId?: string): Promise<ServiceResult<AuditLink[]>> {
-  return ok(AUDIT_LINKS);
-}
-
-export async function checkAndGrantCertifications(
-  userId: string,
-  progress: UserProgress
-): Promise<ServiceResult<Certification[]>> {
+export async function checkAndGrantCertifications(userId: string, progress: UserProgress): Promise<ServiceResult<Certification[]>> {
   const certifications = [...(progress.certifications ?? [])];
   const ensure = (id: string) => {
-    if (!certifications.some((cert) => cert.id === id)) {
-      certifications.push({ id, earnedAt: new Date().toISOString() });
-    }
+    if (!certifications.some((cert) => cert.id === id)) certifications.push({ id, earnedAt: new Date().toISOString() });
   };
-
   if (progress.completedModules.length >= 1) ensure("qa-foundations");
   if (Object.values(progress.quizScores).some((score) => score === 100)) ensure("perfect-scorer");
   if (progress.xp >= 500) ensure("module-master");
-
   const updated: UserProgress = { ...progress, certifications };
   writeJson(progressKey(userId), updated);
   return ok(certifications);
 }
 
 export async function fetchOnboardingTracks(role: string): Promise<ServiceResult<OnboardingTrack[]>> {
-  if (role === "supervisor") return ok(ONBOARDING_TRACKS);
-  if (role === "agent") return ok(ONBOARDING_TRACKS.filter((track) => track.badgeLabel === "Agent"));
-  return ok(ONBOARDING_TRACKS);
+  const tracks = mergeItems(ONBOARDING_TRACKS, readCustom<OnboardingTrack>(customKeys.onboarding).map(normalizeOnboardingTrack), readDeleted(deletedKeys.onboarding));
+  if (role === "agent") return ok(tracks.filter((track) => track.badgeLabel === "Agent"));
+  return ok(tracks);
+}
+export async function upsertOnboardingTrack(item: OnboardingTrack): Promise<ServiceResult<OnboardingTrack>> {
+  return ok(saveItem(customKeys.onboarding, deletedKeys.onboarding, normalizeOnboardingTrack(item)));
+}
+export async function deleteOnboardingTrack(id: string): Promise<ServiceResult<boolean>> {
+  removeItem(customKeys.onboarding, deletedKeys.onboarding, id); return ok(true);
 }
 
-export async function incrementModuleCompletions(_moduleId: string): Promise<ServiceResult<boolean>> {
-  return ok(true);
-}
+export async function incrementModuleCompletions(_moduleId: string): Promise<ServiceResult<boolean>> { return ok(true); }

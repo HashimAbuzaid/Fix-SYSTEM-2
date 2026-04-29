@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, memo, useEffect } from "react";
 import QuizEngine from "./QuizEngine";
 import QuizManager from "./QuizManager";
+import LearningContentManager from "./LearningContentManager";
 import CertificationTracker from "./CertificationTracker";
 import type { UserProfile } from "../context/AuthContext";
 import {
@@ -11,17 +12,22 @@ import {
   createAssignment, fetchAgentAssignments, fetchRecommendedModuleIds,
   fetchAuditLinks, checkAndGrantCertifications, fetchOnboardingTracks,
   incrementModuleCompletions, upsertQuiz, deleteQuiz,
+  fetchQualityStandards, upsertLearningModule, deleteLearningModule,
+  upsertSOP, deleteSOP, upsertWorkInstruction, deleteWorkInstruction,
+  upsertDefectExample, deleteDefectExample, upsertQualityStandard, deleteQualityStandard,
+  upsertOnboardingTrack, deleteOnboardingTrack, upsertBestPractice, deleteBestPractice,
+  upsertTeamMember, deleteTeamMember, deleteCoachingNote,
 } from "./learningService";
 import type {
   LearningModule, SOPDocument, WorkInstruction, DefectExample,
   Quiz, LessonLearned, BestPractice, TeamMember, CoachingNote,
-  UserProgress, Certification, OnboardingTrack, AuditLink,
+  UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard,
 } from "./learningService";
 
 // ─── Re-export types consumers rely on ───────────────────────────────────────
 export type { LearningModule, SOPDocument, WorkInstruction, DefectExample,
               Quiz, LessonLearned, BestPractice, TeamMember, CoachingNote,
-              UserProgress, Certification, OnboardingTrack, AuditLink };
+              UserProgress, Certification, OnboardingTrack, AuditLink, QualityStandard };
 
 // ─── Tab type ─────────────────────────────────────────────────────────────────
 export type LCTab =
@@ -245,6 +251,7 @@ interface LearningData {
   quizzes: Quiz[];
   lessons: LessonLearned[];
   bestPractices: BestPractice[];
+  qualityStandards: QualityStandard[];
   progress: UserProgress;
   teamData: TeamMember[];
   coachingNotes: CoachingNote[];
@@ -266,6 +273,24 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   handleCertificationEarned: (certId: string) => Promise<void>;
   saveQuiz: (quiz: Quiz) => Promise<Quiz | void>;
   removeQuiz: (quizId: string) => Promise<void>;
+  saveModule: (item: LearningModule) => Promise<void>;
+  removeModule: (id: string) => Promise<void>;
+  saveSOP: (item: SOPDocument) => Promise<void>;
+  removeSOP: (id: string) => Promise<void>;
+  saveWorkInstruction: (item: WorkInstruction) => Promise<void>;
+  removeWorkInstruction: (id: string) => Promise<void>;
+  saveDefect: (item: DefectExample) => Promise<void>;
+  removeDefect: (id: string) => Promise<void>;
+  saveStandard: (item: QualityStandard) => Promise<void>;
+  removeStandard: (id: string) => Promise<void>;
+  saveOnboardingTrack: (item: OnboardingTrack) => Promise<void>;
+  removeOnboardingTrack: (id: string) => Promise<void>;
+  saveBestPractice: (item: BestPractice) => Promise<void>;
+  removeBestPractice: (id: string) => Promise<void>;
+  saveTeamMember: (item: TeamMember) => Promise<void>;
+  removeTeamMember: (id: string) => Promise<void>;
+  removeCoachingNote: (id: string) => Promise<void>;
+  saveCoachingNoteWithId: (agentId: string, note: string, metric?: string, noteId?: string) => Promise<void>;
 } {
   const [modules, setModules] = useState<LearningModule[]>([]);
   const [sops, setSops] = useState<SOPDocument[]>([]);
@@ -274,6 +299,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [lessons, setLessons] = useState<LessonLearned[]>([]);
   const [bestPractices, setBestPractices] = useState<BestPractice[]>([]);
+  const [qualityStandards, setQualityStandards] = useState<QualityStandard[]>([]);
   const [progress, setProgress] = useState<UserProgress>(DEFAULT_PROGRESS);
   const [teamData, setTeamData] = useState<TeamMember[]>([]);
   const [coachingNotes, setCoachingNotes] = useState<CoachingNote[]>([]);
@@ -298,7 +324,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
       try {
         const [
           modRes, sopRes, wiRes, defRes, quizRes,
-          lessonRes, bpRes, progressRes, upvoteRes, trackRes,
+          lessonRes, bpRes, standardRes, progressRes, upvoteRes, trackRes,
         ] = await Promise.all([
           fetchLearningModules(),
           fetchSOPs(),
@@ -307,6 +333,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
           fetchQuizzes(),
           fetchLessonsLearned(),
           fetchBestPractices(),
+          fetchQualityStandards(),
           fetchOrCreateUserProgress(activeUserId),
           fetchUserUpvotes(activeUserId),
           fetchOnboardingTracks(role),
@@ -319,6 +346,7 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
         if (quizRes.data)       setQuizzes(quizRes.data);
         if (lessonRes.data)     setLessons(lessonRes.data);
         if (bpRes.data)         setBestPractices(bpRes.data);
+        if (standardRes.data)   setQualityStandards(standardRes.data);
         if (progressRes.data)   setProgress(progressRes.data);
         if (upvoteRes.data)     setUserUpvotes(new Set(upvoteRes.data));
         if (trackRes.data)      setOnboardingTracks(trackRes.data);
@@ -423,18 +451,17 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
   }, [userId, quizzes, progress]);
 
   // ── Mutation: save coaching note ─────────────────────────────────────────
-  const saveCoachingNote = useCallback(async (agentId: string, note: string, metric?: string) => {
+  const saveCoachingNoteWithId = useCallback(async (agentId: string, note: string, metric?: string, noteId?: string) => {
     if (!userId || !note.trim()) return;
-    const res = await upsertCoachingNote({ supervisorId: userId, agentId, note, metric });
+    const res = await upsertCoachingNote({ supervisorId: userId, agentId, note, metric, id: noteId });
     if (res.data) {
-      setCoachingNotes(prev => {
-        const idx = prev.findIndex(n => n.agentId === agentId);
-        return idx >= 0
-          ? prev.map((n, i) => i === idx ? res.data! : n)
-          : [res.data!, ...prev];
-      });
+      setCoachingNotes(prev => [res.data!, ...prev.filter(n => n.id !== res.data!.id)]);
     }
   }, [userId]);
+
+  const saveCoachingNote = useCallback(async (agentId: string, note: string, metric?: string) => {
+    await saveCoachingNoteWithId(agentId, note, metric);
+  }, [saveCoachingNoteWithId]);
 
   // ── Mutation: assign module ──────────────────────────────────────────────
   const assignModule = useCallback(async (agentId: string, moduleId: string) => {
@@ -484,6 +511,93 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
     ]);
   }, [userId, progress]);
 
+
+  const saveModule = useCallback(async (item: LearningModule) => {
+    const res = await upsertLearningModule(item);
+    if (res.data) setModules(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeModule = useCallback(async (id: string) => {
+    await deleteLearningModule(id);
+    setModules(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveSOP = useCallback(async (item: SOPDocument) => {
+    const res = await upsertSOP(item);
+    if (res.data) setSops(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeSOP = useCallback(async (id: string) => {
+    await deleteSOP(id);
+    setSops(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveWorkInstruction = useCallback(async (item: WorkInstruction) => {
+    const res = await upsertWorkInstruction(item);
+    if (res.data) setWorkInstructions(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeWorkInstruction = useCallback(async (id: string) => {
+    await deleteWorkInstruction(id);
+    setWorkInstructions(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveDefect = useCallback(async (item: DefectExample) => {
+    const res = await upsertDefectExample(item);
+    if (res.data) setDefects(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeDefect = useCallback(async (id: string) => {
+    await deleteDefectExample(id);
+    setDefects(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveStandard = useCallback(async (item: QualityStandard) => {
+    const res = await upsertQualityStandard(item);
+    if (res.data) setQualityStandards(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)].sort((a, b) => b.min - a.min));
+  }, []);
+
+  const removeStandard = useCallback(async (id: string) => {
+    await deleteQualityStandard(id);
+    setQualityStandards(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveOnboardingTrack = useCallback(async (item: OnboardingTrack) => {
+    const res = await upsertOnboardingTrack(item);
+    if (res.data) setOnboardingTracks(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeOnboardingTrack = useCallback(async (id: string) => {
+    await deleteOnboardingTrack(id);
+    setOnboardingTracks(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveBestPractice = useCallback(async (item: BestPractice) => {
+    const res = await upsertBestPractice(item);
+    if (res.data) setBestPractices(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeBestPractice = useCallback(async (id: string) => {
+    await deleteBestPractice(id);
+    setBestPractices(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const saveTeamMember = useCallback(async (item: TeamMember) => {
+    const res = await upsertTeamMember(item);
+    if (res.data) setTeamData(prev => [res.data, ...prev.filter(existing => existing.id !== res.data.id)]);
+  }, []);
+
+  const removeTeamMember = useCallback(async (id: string) => {
+    await deleteTeamMember(id);
+    setTeamData(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const removeCoachingNote = useCallback(async (id: string) => {
+    if (!userId) return;
+    await deleteCoachingNote(userId, id);
+    setCoachingNotes(prev => prev.filter(item => item.id !== id));
+  }, [userId]);
+
   const saveQuiz = useCallback(async (quiz: Quiz): Promise<Quiz | void> => {
     const res = await upsertQuiz(quiz, userId);
     if (res.data) {
@@ -499,11 +613,16 @@ function useSupabaseLearning(userId: string | undefined, role: string): Learning
 
   return {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
-    progress, teamData, coachingNotes, recommendations, auditLinks,
+    qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, assignedModuleIds,
     loading, error,
     completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
+    saveModule, removeModule, saveSOP, removeSOP,
+    saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
+    saveStandard, removeStandard, saveOnboardingTrack, removeOnboardingTrack,
+    saveBestPractice, removeBestPractice, saveTeamMember, removeTeamMember,
+    removeCoachingNote, saveCoachingNoteWithId,
   };
 }
 
@@ -891,19 +1010,12 @@ const DefectsTab = memo(function DefectsTab({ defects }: { defects: DefectExampl
 
 // ─── Tab: Standards ───────────────────────────────────────────────────────────
 
-const QUALITY_STANDARDS_DATA = [
-  { name:"Excellent", min:95, color:"var(--accent-emerald)", desc:"Exceeds all expectations. Exemplary service, complete documentation, proactive solutions." },
-  { name:"Good", min:85, color:"var(--accent-blue)", desc:"Meets all standards. Minor areas for improvement but overall strong performance." },
-  { name:"Needs Improvement", min:70, color:"var(--accent-amber)", desc:"Meets minimum requirements but has notable gaps. Coaching recommended." },
-  { name:"Unsatisfactory", min:0, color:"var(--accent-rose)", desc:"Does not meet minimum standards. Immediate retraining required." },
-];
-
-const StandardsTab = memo(function StandardsTab() {
+const StandardsTab = memo(function StandardsTab({ standards }: { standards: QualityStandard[] }) {
   return (
     <>
       <div className="lc-section-header"><div><div className="lc-section-title">Quality Standards</div><div className="lc-section-sub">Scoring expectations and metric definitions</div></div></div>
       <div className="lc-grid" style={{ marginBottom:"28px" }}>
-        {QUALITY_STANDARDS_DATA.map(s => (
+        {standards.map(s => (
           <div key={s.name} className="lc-standard-card">
             <div style={{ fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", color:s.color }}>{s.name}</div>
             <div className="lc-standard-score" style={{ color:s.color }}>{s.min > 0 ? `${s.min}%+` : "<70%"}</div>
@@ -1162,124 +1274,6 @@ const AnalyticsTab = memo(function AnalyticsTab({
   );
 });
 
-// ─── Tab: Coaching ────────────────────────────────────────────────────────────
-
-const CoachingTab = memo(function CoachingTab({
-  teamData, modules, coachingNotes, assignedMap, onSelectModule, onSaveNote, onAssign,
-}: {
-  teamData: TeamMember[]; modules: LearningModule[];
-  coachingNotes: CoachingNote[]; assignedMap: Record<string, string[]>;
-  onSelectModule: (mod: LearningModule) => void;
-  onSaveNote: (agentId: string, note: string, metric?: string) => void;
-  onAssign: (agentId: string, moduleId: string) => void;
-}) {
-  const [localNotes, setLocalNotes] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    const noteMap: Record<string, string> = {};
-    coachingNotes.forEach(n => { if (!noteMap[n.agentId]) noteMap[n.agentId] = n.note; });
-    setLocalNotes(noteMap);
-  }, [coachingNotes]);
-
-  const handleSave = useCallback(async (agentId: string, metric?: string) => {
-    const note = localNotes[agentId]?.trim();
-    if (!note) return;
-    setSaving(prev => ({ ...prev, [agentId]: true }));
-    await onSaveNote(agentId, note, metric);
-    setSaving(prev => ({ ...prev, [agentId]: false }));
-  }, [localNotes, onSaveNote]);
-
-  return (
-    <>
-      <div className="lc-section-header">
-        <div>
-          <div className="lc-section-title">Supervisor Coaching Mode</div>
-          <div className="lc-section-sub">Assign modules, log coaching notes, and track your team's progress</div>
-        </div>
-        <span className="lc-badge lc-badge-violet">{teamData.length} agents</span>
-      </div>
-      {!teamData.length && (
-        <div style={{ padding:"32px", textAlign:"center", color:"var(--fg-muted)", fontSize:"13px" }}>
-          No team members found. Ensure agents have you set as their supervisor.
-        </div>
-      )}
-      <div>
-        {teamData.map(agent => {
-          const scoreColor = agent.score >= 85 ? "var(--accent-emerald)" : agent.score >= 70 ? "var(--accent-amber)" : "var(--accent-rose)";
-          const recommended = modules.filter(m => agent.failedMetrics.some(fm => m.metrics?.includes(fm)));
-          const isSaving = saving[agent.id];
-
-          return (
-            <div key={agent.id} style={{ marginBottom:"16px" }}>
-              <div className="lc-coaching-agent">
-                <div className="lc-coaching-agent-info">
-                  <div className="lc-coaching-avatar">{agent.initials}</div>
-                  <div>
-                    <div style={{ fontSize:"13px", fontWeight:700, color:"var(--fg-default)" }}>{agent.name}</div>
-                    <div style={{ fontSize:"11px", color:scoreColor, fontWeight:600 }}>Score: {agent.score}%</div>
-                  </div>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:"8px", flexWrap:"wrap" }}>
-                  {agent.failedMetrics.map(m => <span key={m} className="lc-badge lc-badge-rose">{m}</span>)}
-                  {(assignedMap[agent.id]?.length ?? 0) > 0 && (
-                    <span className="lc-badge lc-badge-blue">{assignedMap[agent.id].length} assigned</span>
-                  )}
-                </div>
-              </div>
-              <div style={{ padding:"12px 18px", background:"var(--bg-subtle)", borderRadius:"0 0 10px 10px", border:"1px solid var(--border)", borderTop:"none" }}>
-                {recommended.length > 0 && (
-                  <>
-                    <div style={{ fontSize:"11px", fontWeight:600, color:"var(--fg-muted)", marginBottom:"8px", letterSpacing:"0.05em", textTransform:"uppercase" }}>Recommended Training</div>
-                    <div style={{ display:"flex", gap:"8px", flexWrap:"wrap", marginBottom:"10px" }}>
-                      {recommended.map(mod => {
-                        const isAssigned = assignedMap[agent.id]?.includes(mod.id);
-                        return (
-                          <div key={mod.id} style={{ display:"flex", gap:"6px" }}>
-                            <button className="lc-assign-btn" onClick={() => onSelectModule(mod)}>📚 {mod.title}</button>
-                            <button
-                              className="lc-assign-btn"
-                              style={isAssigned ? { background:"color-mix(in srgb,var(--accent-emerald) 14%,transparent)", color:"var(--accent-emerald)", borderColor:"color-mix(in srgb,var(--accent-emerald) 25%,transparent)" } : {}}
-                              onClick={() => !isAssigned && onAssign(agent.id, mod.id)}
-                            >
-                              {isAssigned ? "✓ Assigned" : "Assign"}
-                            </button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-                <div style={{ display:"flex", gap:"8px", alignItems:"flex-start" }}>
-                  <textarea
-                    placeholder="Add coaching note… (saved to agent's record)"
-                    value={localNotes[agent.id] || ""}
-                    onChange={e => setLocalNotes(prev => ({ ...prev, [agent.id]: e.target.value }))}
-                    style={{ flex:1, minHeight:"52px", padding:"8px 10px", borderRadius:"7px", border:"1px solid var(--border-strong)", background:"var(--bg-elevated)", color:"var(--fg-default)", fontSize:"12px", fontFamily:"inherit", resize:"vertical", outline:"none" }}
-                  />
-                  <button
-                    className="lc-assign-btn"
-                    style={{ height:"auto", padding:"8px 14px", alignSelf:"flex-end" }}
-                    disabled={isSaving || !localNotes[agent.id]?.trim()}
-                    onClick={() => handleSave(agent.id, agent.failedMetrics[0])}
-                  >
-                    {isSaving ? "Saving…" : "Save Note"}
-                  </button>
-                </div>
-                {coachingNotes.find(n => n.agentId === agent.id) && (
-                  <div style={{ marginTop:"8px", fontSize:"11px", color:"var(--fg-muted)" }}>
-                    Last saved: {coachingNotes.find(n => n.agentId === agent.id)?.sessionDate}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-});
-
 // ─── Loading skeleton ─────────────────────────────────────────────────────────
 
 const LoadingSkeleton = memo(function LoadingSkeleton() {
@@ -1315,14 +1309,18 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
   const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
   const [showCerts, setShowCerts] = useState(false);
   const [search, setSearch] = useState("");
-  const [assignedMap, setAssignedMap] = useState<Record<string, string[]>>({});
 
   const {
     modules, sops, workInstructions, defects, quizzes, lessons, bestPractices,
-    progress, teamData, coachingNotes, recommendations, auditLinks,
+    qualityStandards, progress, teamData, coachingNotes, recommendations, auditLinks,
     onboardingTracks, userUpvotes, loading, error,
     completeModule, completeQuiz, saveCoachingNote, assignModule, toggleUpvote,
     handleCertificationEarned, saveQuiz, removeQuiz,
+    saveModule, removeModule, saveSOP, removeSOP,
+    saveWorkInstruction, removeWorkInstruction, saveDefect, removeDefect,
+    saveStandard, removeStandard, saveOnboardingTrack, removeOnboardingTrack,
+    saveBestPractice, removeBestPractice, saveTeamMember, removeTeamMember,
+    removeCoachingNote, saveCoachingNoteWithId,
   } = useSupabaseLearning(userId, resolvedRole);
 
   const isAdmin      = resolvedRole === "admin" || resolvedRole === "qa";
@@ -1401,13 +1399,6 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
     setSelectedModule(null);
   }, [completeQuiz]);
 
-  const handleAssign = useCallback(async (agentId: string, moduleId: string) => {
-    setAssignedMap(prev => ({
-      ...prev,
-      [agentId]: prev[agentId]?.includes(moduleId) ? prev[agentId] : [...(prev[agentId] ?? []), moduleId],
-    }));
-    await assignModule(agentId, moduleId);
-  }, [assignModule]);
 
   const agentAllowed = useMemo<Set<LCTab>>(() => new Set([
     "home","modules","sop","work-instructions","defects",
@@ -1595,20 +1586,28 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
             />
           )}
           {activeTab === "modules" && (
-            <ModulesTab
-              progress={progress} modules={roleModules}
-              recommendations={recommendations} onSelectModule={setSelectedModule}
-            />
+            isAgent ? (
+              <ModulesTab
+                progress={progress} modules={roleModules}
+                recommendations={recommendations} onSelectModule={setSelectedModule}
+              />
+            ) : (
+              <LearningContentManager kind="modules" modules={modules} onSaveModule={saveModule} onDeleteModule={removeModule} />
+            )
           )}
-          {activeTab === "sop" && <SOPTab sops={sops} />}
-          {activeTab === "work-instructions" && <WorkInstructionsTab workInstructions={workInstructions} />}
-          {activeTab === "defects" && <DefectsTab defects={defects} />}
-          {activeTab === "standards" && <StandardsTab />}
+          {activeTab === "sop" && (isAgent ? <SOPTab sops={sops} /> : <LearningContentManager kind="sops" sops={sops} onSaveSOP={saveSOP} onDeleteSOP={removeSOP} />)}
+          {activeTab === "work-instructions" && (isAgent ? <WorkInstructionsTab workInstructions={workInstructions} /> : <LearningContentManager kind="work-instructions" workInstructions={workInstructions} onSaveWorkInstruction={saveWorkInstruction} onDeleteWorkInstruction={removeWorkInstruction} />)}
+          {activeTab === "defects" && (isAgent ? <DefectsTab defects={defects} /> : <LearningContentManager kind="defects" defects={defects} onSaveDefect={saveDefect} onDeleteDefect={removeDefect} />)}
+          {activeTab === "standards" && (isAgent ? <StandardsTab standards={qualityStandards} /> : <LearningContentManager kind="standards" standards={qualityStandards} onSaveStandard={saveStandard} onDeleteStandard={removeStandard} />)}
           {activeTab === "onboarding" && (
-            <OnboardingTab
-              progress={progress} modules={roleModules}
-              onboardingTracks={onboardingTracks} onSelectModule={setSelectedModule}
-            />
+            isAgent ? (
+              <OnboardingTab
+                progress={progress} modules={roleModules}
+                onboardingTracks={onboardingTracks} onSelectModule={setSelectedModule}
+              />
+            ) : (
+              <LearningContentManager kind="onboarding" onboardingTracks={onboardingTracks} onSaveOnboardingTrack={saveOnboardingTrack} onDeleteOnboardingTrack={removeOnboardingTrack} />
+            )
           )}
           {activeTab === "quizzes" && (
             isAgent ? (
@@ -1655,15 +1654,17 @@ export default function LearningCenter({ userRole, currentUser = null }: Learnin
           {activeTab === "audit-findings" && (
             <AuditFindingsTab auditLinks={auditLinks} modules={roleModules} onSelectModule={setSelectedModule} />
           )}
-          {activeTab === "best-practices" && <BestPracticesTab bestPractices={bestPractices} />}
+          {activeTab === "best-practices" && (isAgent ? <BestPracticesTab bestPractices={bestPractices} /> : <LearningContentManager kind="best-practices" bestPractices={bestPractices} onSaveBestPractice={saveBestPractice} onDeleteBestPractice={removeBestPractice} />)}
           {activeTab === "analytics" && <AnalyticsTab progress={progress} modules={roleModules} />}
           {activeTab === "coaching" && (isSupervisor || isAdmin) && (
-            <CoachingTab
-              teamData={teamData} modules={roleModules}
-              coachingNotes={coachingNotes} assignedMap={assignedMap}
-              onSelectModule={setSelectedModule}
-              onSaveNote={saveCoachingNote}
-              onAssign={handleAssign}
+            <LearningContentManager
+              kind="coaching"
+              teamData={teamData}
+              coachingNotes={coachingNotes}
+              onSaveTeamMember={saveTeamMember}
+              onDeleteTeamMember={removeTeamMember}
+              onSaveCoachingNote={saveCoachingNoteWithId}
+              onDeleteCoachingNote={removeCoachingNote}
             />
           )}
         </>
