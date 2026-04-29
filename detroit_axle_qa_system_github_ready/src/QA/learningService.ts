@@ -872,6 +872,24 @@ type ProfileTeamRow = {
 
 const OPERATIONAL_TEAMS: OperationalTeam[] = ["Calls", "Tickets", "Sales"];
 
+function normalizeOperationalTeam(value?: string | null): OperationalTeam | null {
+  const normalized = (value ?? "").trim().toLowerCase();
+
+  if (["call", "calls", "calls team", "call team"].includes(normalized)) {
+    return "Calls";
+  }
+
+  if (["ticket", "tickets", "tickets team", "ticket team"].includes(normalized)) {
+    return "Tickets";
+  }
+
+  if (["sale", "sales", "sales team", "sale team"].includes(normalized)) {
+    return "Sales";
+  }
+
+  return null;
+}
+
 function getInitials(name: string, email?: string | null): string {
   const source = name.trim() || email?.split("@")[0] || "TM";
   const parts = source.split(/[\s._-]+/).filter(Boolean);
@@ -893,7 +911,7 @@ function profileToTeamMember(row: ProfileTeamRow): TeamMember {
     name,
     initials: getInitials(name, row.email),
     email: row.email ?? null,
-    team: row.team ?? null,
+    team: normalizeOperationalTeam(row.team),
     score: 0,
     failedMetrics: [],
     source: "profiles",
@@ -1513,15 +1531,24 @@ export async function toggleLessonUpvote(
 export async function fetchTeamMembers(
   _supervisorId?: string
 ): Promise<ServiceResult<TeamMember[]>> {
-  const teams = OPERATIONAL_TEAMS.join(",");
-
+  // Pull directly from the existing app profiles table. Do not require role = agent here:
+  // some existing Detroit Axle accounts are grouped by team first and may not have the
+  // exact lowercase role value the Learning Center previously filtered on.
   const remoteProfiles = await supabaseJson<ProfileTeamRow[]>(
-    `profiles?select=id,agent_id,agent_name,display_name,email,team,role&role=eq.agent&team=in.(${teams})&order=team.asc,agent_name.asc`,
+    "profiles?select=id,agent_id,agent_name,display_name,email,team,role&order=team.asc,agent_name.asc",
     { method: "GET" }
   );
 
   if (remoteProfiles) {
-    return ok(remoteProfiles.map(profileToTeamMember));
+    return ok(
+      remoteProfiles
+        .map(profileToTeamMember)
+        .filter(
+          (member) =>
+            member.team !== null &&
+            OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
+        )
+    );
   }
 
   const local = mergeItems(
@@ -1532,8 +1559,17 @@ export async function fetchTeamMembers(
 
   return ok(
     local
-      .map(normalizeTeamMember)
-      .filter((member) => OPERATIONAL_TEAMS.includes(member.team as OperationalTeam))
+      .map((member) =>
+        normalizeTeamMember({
+          ...member,
+          team: normalizeOperationalTeam(member.team),
+        })
+      )
+      .filter(
+        (member) =>
+          member.team !== null &&
+          OPERATIONAL_TEAMS.includes(member.team as OperationalTeam)
+      )
   );
 }
 
