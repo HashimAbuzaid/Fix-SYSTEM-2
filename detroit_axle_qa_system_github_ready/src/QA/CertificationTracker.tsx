@@ -153,13 +153,13 @@ function evaluateCertification(
 ): EvaluatedCert {
   const alreadyEarned = earnedCerts.find((c) => c.id === def.id);
 
-  const scores = Object.values(progress.quizScores);
+  const scores = Object.values(progress.quizScores) as number[];
   const avgScore =
     scores.length > 0
       ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
       : 0;
   const hasPerfect = scores.some((s) => s === 100);
-  const completedModuleCount = progress.completedModules.filter((id) =>
+  const completedModuleCount = progress.completedModules.filter((id: string) =>
     modules.some((m) => m.id === id)
   ).length;
 
@@ -584,14 +584,14 @@ function CertificationTracker({
   const moduleCompletionRate = useMemo(() => {
     if (modules.length === 0) return 0;
     return Math.round(
-      (progress.completedModules.filter((id) => modules.some((m) => m.id === id)).length /
+      (progress.completedModules.filter((id: string) => modules.some((m) => m.id === id)).length /
         modules.length) *
         100
     );
   }, [modules, progress.completedModules]);
 
   const avgQuizScore = useMemo(() => {
-    const scores = Object.values(progress.quizScores);
+    const scores = Object.values(progress.quizScores) as number[];
     if (scores.length === 0) return 0;
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }, [progress.quizScores]);
@@ -732,7 +732,7 @@ function CertificationTracker({
             </div>
           </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
-            {progress.badges.map((badge) => (
+            {progress.badges.map((badge: string) => (
               <div
                 key={badge}
                 style={{

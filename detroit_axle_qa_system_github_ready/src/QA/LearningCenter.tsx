@@ -178,12 +178,12 @@ function injectLCStyles() {
 // ─── Small reusable components (pure presentation) ───────────────────────────
 
 const DifficultyBadge = memo(function DifficultyBadge({ difficulty }: { difficulty: LearningModule["difficulty"] }) {
-  const map = { beginner: "lc-badge-emerald", intermediate: "lc-badge-amber", advanced: "lc-badge-rose" };
+  const map: Record<LearningModule["difficulty"], string> = { beginner: "lc-badge-emerald", intermediate: "lc-badge-amber", advanced: "lc-badge-rose" };
   return <span className={`lc-badge ${map[difficulty]}`}>{difficulty}</span>;
 });
 
 const SeverityBadge = memo(function SeverityBadge({ severity }: { severity: DefectExample["severity"] }) {
-  const map = { low: "lc-badge-muted", medium: "lc-badge-amber", high: "lc-badge-rose", critical: "lc-badge-rose" };
+  const map: Record<DefectExample["severity"], string> = { low: "lc-badge-muted", medium: "lc-badge-amber", high: "lc-badge-rose", critical: "lc-badge-rose" };
   return <span className={`lc-badge ${map[severity]}`}>{severity}</span>;
 });
 
@@ -1094,7 +1094,7 @@ const AnalyticsTab = memo(function AnalyticsTab({
     : 0;
 
   const avgQuizScore = useMemo(() => {
-    const scores = Object.values(progress.quizScores);
+    const scores = Object.values(progress.quizScores) as number[];
     if (!scores.length) return 0;
     return Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
   }, [progress]);
