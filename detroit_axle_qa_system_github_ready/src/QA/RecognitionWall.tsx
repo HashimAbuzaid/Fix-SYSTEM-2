@@ -64,6 +64,7 @@ type RecognitionEntry = {
   helper: string;
   kind: RecognitionKind;
   team?: TeamName | null;
+  sampleSize?: number;
   rank?: number; // 1-based rank for podium effect
 };
 
@@ -337,8 +338,25 @@ function normalizeAgentName(value?: string | null) {
     .replace(/\s+/g, " ");
 }
 
-function getAgentKey(agentId?: string | null, agentName?: string | null) {
-  return `${normalizeAgentId(agentId)}|${normalizeAgentName(agentName)}`;
+const MIN_QUALITY_AUDITS = 5;
+
+function normalizeTeamName(value?: string | null): TeamName | null {
+  const team = String(value ?? "").trim().toLowerCase();
+  if (["call", "calls", "call team", "calls team"].includes(team)) return "Calls";
+  if (["ticket", "tickets", "ticket team", "tickets team"].includes(team)) return "Tickets";
+  if (["sale", "sales", "sale team", "sales team"].includes(team)) return "Sales";
+  return null;
+}
+
+function getAgentIdentityKey(agentId?: string | null, agentName?: string | null): string {
+  const id = normalizeAgentId(agentId);
+  if (id) return `id:${id}`;
+  return `name:${normalizeAgentName(agentName)}`;
+}
+
+function isFiniteScore(value: unknown): boolean {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 && n <= 100;
 }
 
 function getCurrentMonthBounds() {
@@ -547,6 +565,21 @@ const RecognitionCard = memo(function RecognitionCard({
         </div>
       )}
 
+      {isQuality && entry.sampleSize !== undefined && (
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 700,
+            color: "var(--fg-muted)",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+            marginBottom: 10,
+          }}
+        >
+          {entry.sampleSize} qualifying audits
+        </div>
+      )}
+
       {/* Agent */}
       <div className="rw-agent">
         {/* Avatar chip */}
@@ -672,17 +705,26 @@ function RecognitionWall({
     agentName?: string | null,
     team?: string | null
   ): string {
-    const key = getAgentKey(agentId, agentName);
-    const matched = profiles.find(
-      (p) =>
-        getAgentKey(p.agent_id, p.agent_name) === key &&
-        p.team === (team || null)
-    );
-    const displayName = matched?.display_name ?? null;
-    const name = agentName || "-";
-    const id = agentId || "-";
+    const normalizedId = normalizeAgentId(agentId);
+    const normalizedName = normalizeAgentName(agentName);
+    const normalizedTeam = normalizeTeamName(team);
+
+    const matched = profiles.find((profile) => {
+      const profileTeam = normalizeTeamName(profile.team);
+      if (normalizedTeam && profileTeam && profileTeam !== normalizedTeam) return false;
+
+      const profileId = normalizeAgentId(profile.agent_id);
+      const profileName = normalizeAgentName(profile.agent_name || profile.display_name);
+      return Boolean(
+        (normalizedId && profileId && normalizedId === profileId) ||
+        (normalizedName && profileName && normalizedName === profileName)
+      );
+    });
+
+    const displayName = matched?.display_name || matched?.agent_name || agentName || "-";
+    const id = normalizedId || normalizeAgentId(matched?.agent_id) || "-";
     // "Full Name - Agent ID" — parsed back out in RecognitionCard
-    return displayName ? `${displayName} - ${id}` : `${name} - ${id}`;
+    return `${displayName} - ${id}`;
   }
 
   // ── Leaders ───────────────────────────────────────────────────────────────
@@ -690,32 +732,42 @@ function RecognitionWall({
   function getQualityLeader(
     team: TeamName,
     scopedAudits: AuditItem[]
-  ): { label: string; average: number } | null {
-    const grouped = new Map<string, { label: string; scores: number[] }>();
+  ): { label: string; average: number; auditCount: number } | null {
+    const grouped = new Map<string, { label: string; scores: number[]; auditCount: number }>();
+
     scopedAudits
-      .filter((a) => a.team === team)
-      .forEach((a) => {
-        const key = getAgentKey(a.agent_id, a.agent_name);
+      .filter((audit) => normalizeTeamName(audit.team) === team)
+      .filter((audit) => isFiniteScore(audit.quality_score))
+      .forEach((audit) => {
+        const key = getAgentIdentityKey(audit.agent_id, audit.agent_name);
+        const score = Number(audit.quality_score);
         const entry = grouped.get(key);
+
         if (entry) {
-          entry.scores.push(Number(a.quality_score));
+          entry.scores.push(score);
+          entry.auditCount += 1;
         } else {
           grouped.set(key, {
-            label: getAgentLabel(a.agent_id, a.agent_name, team),
-            scores: [Number(a.quality_score)],
+            label: getAgentLabel(audit.agent_id, audit.agent_name, team),
+            scores: [score],
+            auditCount: 1,
           });
         }
       });
 
-    const sorted = Array.from(grouped.values())
+    const eligible = Array.from(grouped.values())
       .map((item) => ({
         label: item.label,
-        average:
-          item.scores.reduce((sum, v) => sum + v, 0) / item.scores.length,
+        auditCount: item.auditCount,
+        average: item.scores.reduce((sum, value) => sum + value, 0) / item.scores.length,
       }))
-      .sort((a, b) => b.average - a.average);
+      .filter((item) => item.auditCount >= MIN_QUALITY_AUDITS)
+      .sort((a, b) => {
+        if (b.average !== a.average) return b.average - a.average;
+        return b.auditCount - a.auditCount;
+      });
 
-    return sorted[0] ?? null;
+    return eligible[0] ?? null;
   }
 
   function getVolumeLeader(
@@ -724,7 +776,7 @@ function RecognitionWall({
   ): { label: string; total: number } | null {
     const grouped = new Map<string, { label: string; total: number }>();
     records.forEach((record) => {
-      const key = getAgentKey(record.agent_id, record.agent_name);
+      const key = getAgentIdentityKey(record.agent_id, record.agent_name);
       const amount =
         team === "Calls"
           ? Number((record as CallsRecord).calls_count ?? 0)
@@ -752,7 +804,7 @@ function RecognitionWall({
 
   const teamScope: TeamName | null =
     currentUser?.role === "agent" || currentUser?.role === "supervisor"
-      ? (currentUser.team as TeamName) ?? null
+      ? normalizeTeamName(currentUser.team)
       : null;
 
   const monthAudits = useMemo(
@@ -772,7 +824,7 @@ function RecognitionWall({
     [salesRecords]
   );
 
-  const scopedAudits  = useMemo(() => monthAudits.filter((a)  => teamScope ? a.team === teamScope : true), [monthAudits,  teamScope]);
+  const scopedAudits  = useMemo(() => monthAudits.filter((a)  => teamScope ? normalizeTeamName(a.team) === teamScope : true), [monthAudits,  teamScope]);
   const scopedCalls   = useMemo(() => teamScope && teamScope !== "Calls"   ? [] : monthCalls,   [monthCalls,   teamScope]);
   const scopedTickets = useMemo(() => teamScope && teamScope !== "Tickets" ? [] : monthTickets, [monthTickets, teamScope]);
   const scopedSales   = useMemo(() => teamScope && teamScope !== "Sales"   ? [] : monthSales,   [monthSales,   teamScope]);
@@ -791,9 +843,10 @@ function RecognitionWall({
           value: `${qualityLeader.average.toFixed(2)}%`,
           subtitle: qualityLeader.label,
           badge: "Quality",
-          helper: "Highest average audit score this month",
+          helper: `Highest average audit score this month · ${qualityLeader.auditCount} audits`,
           kind: "quality",
           team: teamScope,
+          sampleSize: qualityLeader.auditCount,
         });
       }
 
@@ -848,9 +901,10 @@ function RecognitionWall({
           value: `${callsQuality.average.toFixed(2)}%`,
           subtitle: callsQuality.label,
           badge: "Calls Quality",
-          helper: "Highest average audit score this month",
+          helper: `Highest average audit score this month · ${callsQuality.auditCount} audits`,
           kind: "quality",
           team: "Calls",
+          sampleSize: callsQuality.auditCount,
         });
       }
 
@@ -861,9 +915,10 @@ function RecognitionWall({
           value: `${ticketsQuality.average.toFixed(2)}%`,
           subtitle: ticketsQuality.label,
           badge: "Tickets Quality",
-          helper: "Highest average audit score this month",
+          helper: `Highest average audit score this month · ${ticketsQuality.auditCount} audits`,
           kind: "quality",
           team: "Tickets",
+          sampleSize: ticketsQuality.auditCount,
         });
       }
 
@@ -916,7 +971,7 @@ function RecognitionWall({
       scopedAudits
         .filter((a) => Boolean(a.shared_with_agent))
         .forEach((a) => {
-          const key = getAgentKey(a.agent_id, a.agent_name);
+          const key = getAgentIdentityKey(a.agent_id, a.agent_name);
           const entry = releasedMap.get(key);
           if (entry) {
             entry.count += 1;
@@ -1004,7 +1059,7 @@ function RecognitionWall({
           <div className="rw-empty-icon">🏆</div>
           <div className="rw-empty-title">No leaders yet this month</div>
           <div className="rw-empty-sub">
-            Recognition entries will appear once performance data is recorded for {getCurrentMonthLabel()}.
+            Recognition entries will appear once performance data is recorded for {getCurrentMonthLabel()}. Quality champions require at least {MIN_QUALITY_AUDITS} audits so one-off 100% scores do not win the wall.
           </div>
         </div>
       )}
