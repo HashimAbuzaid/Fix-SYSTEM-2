@@ -1202,12 +1202,6 @@ const NavIcon = memo(function NavIcon({ label, size = 15 }: { label: string; siz
   return icons[label] ?? <svg {...p}><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none" /></svg>;
 });
 
-// nav icons for bottom bar
-const NAV_ICONS_EMOJI: Record<string, string> = {
-  Dashboard: "⬛", "My Portal": "👤", Overview: "🏠", "Learning Center": "📚",
-  Monitoring: "📈", Reports: "📊", "New Audit": "➕", "Audits List": "📋",
-  Accounts: "👥", "Team Dashboard": "📊", Help: "❓",
-};
 
 // ─────────────────────────────────────────────────────────────
 // LiveClock
