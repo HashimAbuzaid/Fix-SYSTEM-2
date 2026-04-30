@@ -27,7 +27,6 @@ import {
 } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import RecognitionWall from './RecognitionWall';
 import DigitalTrophyCabinet from './DigitalTrophyCabinet';
 import VoiceOfEmployeeSupabase from './VoiceOfEmployeeSupabase';
 import {
@@ -1245,7 +1244,6 @@ function Dashboard({ currentUser = null }: {
           </div>
 
           <div style={{ marginBottom: '28px' }}>
-            <RecognitionWall currentUser={currentUser as any} />
           </div>
           <div style={{ marginBottom: '28px' }}>
             <DigitalTrophyCabinet scope="global" currentUser={currentUser} />
