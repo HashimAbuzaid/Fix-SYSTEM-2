@@ -7,7 +7,6 @@ import {
 } from '../lib/viewCache';
 import MonitoringWidget from './MonitoringWidget';
 import MonitoringDrawer from './MonitoringDrawer';
-import RecognitionWall from './RecognitionWall';
 import DigitalTrophyCabinet from './DigitalTrophyCabinet';
 import VoiceOfEmployeeSupabase from './VoiceOfEmployeeSupabase';
 import QaAcademy from './QaAcademy';
@@ -1558,10 +1557,8 @@ function AgentPortal({ currentUser }: AgentPortalProps) {
       )}
 
       <DigitalTrophyCabinet scope="agent" currentUser={currentUser} />
-      <RecognitionWall compact currentUser={currentUser as any} />
       <QaAcademy team={currentUser.team} />
       <VoiceOfEmployeeSupabase currentUser={currentUser} />
-
       <MonitoringWidget
         count={monitoringItems.length}
         onClick={() => {
