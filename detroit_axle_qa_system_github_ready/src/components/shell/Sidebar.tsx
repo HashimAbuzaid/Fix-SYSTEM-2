@@ -6,8 +6,9 @@
 
 import { useMemo, memo, type CSSProperties } from "react";
 import type { UserProfile } from "../../context/AuthContext";
-import { GROUP_ACCENT, ROLE_COLORS } from "../../config/routes";
+import { GROUP_ACCENT } from "../../config/routes";
 import {
+  ROLE_COLORS,
   LEVEL_COLORS,
   LEVEL_NAMES,
   LEVEL_THRESHOLDS,
