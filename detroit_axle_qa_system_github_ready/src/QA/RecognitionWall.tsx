@@ -59,12 +59,15 @@ type RecognitionKind = "quality" | "volume" | "released";
 type RecognitionEntry = {
   title: string;
   value: string;
+  /** @deprecated kept only for keying — use agentName + agentId directly */
   subtitle: string;
+  agentName: string;
+  agentId: string;
   badge: string;
   helper: string;
   kind: RecognitionKind;
   team?: TeamName | null;
-  rank?: number; // 1-based rank for podium effect
+  rank?: number;
 };
 
 type RecognitionWallProps = {
@@ -483,7 +486,8 @@ const RecognitionCard = memo(function RecognitionCard({
   showTeam: boolean;
 }) {
   const cfg = getKindConfig(entry.kind, entry.team as TeamName | null);
-  const { name, id } = parseSubtitle(entry.subtitle);
+  const name = entry.agentName;
+  const id   = entry.agentId;
   const delay = index * 60;
 
   // For quality cards: extract numeric score for the progress bar
