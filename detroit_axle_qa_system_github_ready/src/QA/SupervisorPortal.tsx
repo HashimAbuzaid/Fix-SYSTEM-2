@@ -19,7 +19,6 @@ import { supabase } from "../lib/supabase";
 import MonitoringWidget from "./MonitoringWidget";
 import MonitoringDrawer from "./MonitoringDrawer";
 import SupervisorRequestsSupabase from "./SupervisorRequestsSupabase";
-import RecognitionWall from "./RecognitionWall";
 import DigitalTrophyCabinet from "./DigitalTrophyCabinet";
 import SupervisorTeamDashboard from "./SupervisorTeamDashboard";
 
@@ -1912,9 +1911,7 @@ function SupervisorPortal({
           </SectionPanel>
 
           {/* Recognition + Trophy */}
-          <RecognitionWall compact currentUser={currentUser as any} />
           <DigitalTrophyCabinet scope="team" currentUser={currentUser} />
-
           {/* Monitoring */}
           <MonitoringWidget count={monitoringItems.length} onClick={handleMonitoringClick} />
           <MonitoringDrawer
