@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion';
 import { ChevronUp, ChevronDown, Search } from 'lucide-react';
-import { useState, useMemo, useRef, useCallback } from 'react';
-import type { ReactNode, CSSProperties } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useState, useMemo, useCallback } from 'react';
+import type { ReactNode } from 'react';
 
 export interface Column<T> {
   key: keyof T;
@@ -22,18 +21,17 @@ interface DataTableProps<T extends { id: string }> {
   emptyState?: ReactNode;
 }
 
-// Estimated row height used as initial guess for dynamic sizing.
-// react-virtual will measure actual heights and adjust automatically.
-const ESTIMATED_ROW_HEIGHT = 57; // px — matches px-6 py-4 with text-sm
-
-// Max height for the scrollable tbody container before virtualization kicks in.
+// Max height for the scrollable tbody container.
 const TABLE_MAX_HEIGHT = 600; // px
 
 /**
  * DataTable Component
- * Advanced table with sorting, filtering, and UI virtualization via
- * @tanstack/react-virtual so only visible rows are rendered — keeping
- * performance smooth even with 1 000 + rows.
+ * Advanced table with sorting and filtering.
+ *
+ * This version intentionally avoids @tanstack/react-virtual because that
+ * dependency is not installed in the current project build. Keeping the table
+ * dependency-free fixes TS2307 and the related implicit-any errors while
+ * preserving the public component API.
  */
 export function DataTable<T extends { id: string }>({
   columns,
@@ -52,9 +50,9 @@ export function DataTable<T extends { id: string }>({
   const filteredData = useMemo(() => {
     if (!search.trim()) return data;
     const lower = search.toLowerCase();
-    return data.filter((row) =>
-      searchKeys.some((key) =>
-        String(row[key]).toLowerCase().includes(lower)
+    return data.filter((row: T) =>
+      searchKeys.some((key: keyof T) =>
+        String(row[key] ?? '').toLowerCase().includes(lower)
       )
     );
   }, [data, search, searchKeys]);
@@ -62,7 +60,7 @@ export function DataTable<T extends { id: string }>({
   // ── Sort ──────────────────────────────────────────────────────────────────
   const sortedData = useMemo(() => {
     if (!sortKey) return filteredData;
-    return [...filteredData].sort((a, b) => {
+    return [...filteredData].sort((a: T, b: T) => {
       const aVal = a[sortKey];
       const bVal = b[sortKey];
       if (aVal === bVal) return 0;
@@ -85,26 +83,6 @@ export function DataTable<T extends { id: string }>({
     [sortKey]
   );
 
-  // ── Virtualizer ───────────────────────────────────────────────────────────
-  // The scroll container is the <div> that wraps the <table> body rows.
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const rowVirtualizer = useVirtualizer({
-    count: sortedData.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ESTIMATED_ROW_HEIGHT,
-    // enableDynamicMeasurement lets the virtualizer measure each row after
-    // it renders so variable-height rows are handled correctly.
-    measureElement:
-      typeof window !== 'undefined' &&
-      navigator.userAgent.indexOf('Firefox') === -1
-        ? (el) => el?.getBoundingClientRect().height
-        : undefined,
-    overscan: 5,
-  });
-
-  const virtualItems = rowVirtualizer.getVirtualItems();
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
@@ -124,18 +102,7 @@ export function DataTable<T extends { id: string }>({
 
       {/* Table wrapper */}
       <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-        {/*
-          We use a single <table> layout split into two parts:
-          1. A sticky <thead> rendered outside the scroll container so it
-             never scrolls away.
-          2. A fixed-height, overflow-y-auto scroll container that holds
-             a <table> with only a <tbody> — this is the virtualized part.
-
-          Both tables share identical column widths via a colgroup so the
-          header cells align perfectly with the body cells.
-        */}
-
-        {/* ── Sticky header ─────────────────────────────────────────── */}
+        {/* Sticky header */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm table-fixed">
             <ColGroup columns={columns} />
@@ -175,29 +142,13 @@ export function DataTable<T extends { id: string }>({
           </table>
         </div>
 
-        {/* ── Virtualized body ───────────────────────────────────────── */}
-        <div
-          ref={scrollRef}
-          className="overflow-y-auto overflow-x-auto"
-          style={{ maxHeight: TABLE_MAX_HEIGHT }}
-        >
+        {/* Scrollable body */}
+        <div className="overflow-y-auto overflow-x-auto" style={{ maxHeight: TABLE_MAX_HEIGHT }}>
           <table className="w-full text-sm table-fixed">
             <ColGroup columns={columns} />
-            <tbody
-              style={
-                {
-                  // The total height of ALL rows (including non-rendered ones).
-                  // react-virtual uses absolute positioning internally so we
-                  // must give the container the right total height so the
-                  // scrollbar reflects the full dataset.
-                  height: rowVirtualizer.getTotalSize(),
-                  position: 'relative',
-                  display: 'block',
-                } as CSSProperties
-              }
-            >
+            <tbody>
               {loading ? (
-                <tr style={{ display: 'table-row' }}>
+                <tr>
                   <td colSpan={columns.length} className="px-6 py-8 text-center">
                     <div className="flex items-center justify-center gap-2">
                       <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse" />
@@ -208,7 +159,7 @@ export function DataTable<T extends { id: string }>({
                   </td>
                 </tr>
               ) : sortedData.length === 0 ? (
-                <tr style={{ display: 'table-row' }}>
+                <tr>
                   <td colSpan={columns.length} className="px-6 py-8 text-center">
                     {emptyState || (
                       <p className="text-neutral-500 dark:text-neutral-400">
@@ -218,46 +169,26 @@ export function DataTable<T extends { id: string }>({
                   </td>
                 </tr>
               ) : (
-                virtualItems.map((virtualRow) => {
-                  const row = sortedData[virtualRow.index];
-                  return (
-                    <motion.tr
-                      // data-index is required by the measureElement callback
-                      data-index={virtualRow.index}
-                      ref={rowVirtualizer.measureElement}
-                      key={row.id}
-                      initial={{ opacity: 0, y: 6 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.12 }}
-                      onClick={() => onRowClick?.(row)}
-                      style={
-                        {
-                          // Absolute positioning is the core of the windowing
-                          // technique — each row is placed at exactly the right
-                          // vertical offset without pushing siblings around.
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          transform: `translateY(${virtualRow.start}px)`,
-                          display: 'table',
-                          tableLayout: 'fixed',
-                        } as CSSProperties
-                      }
-                      className={`border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors ${
-                        onRowClick ? 'cursor-pointer' : ''
-                      }`}
-                    >
-                      {columns.map((column) => (
-                        <td key={String(column.key)} className="px-6 py-4">
-                          {column.render
-                            ? column.render(row[column.key], row)
-                            : String(row[column.key] ?? '-')}
-                        </td>
-                      ))}
-                    </motion.tr>
-                  );
-                })
+                sortedData.map((row: T) => (
+                  <motion.tr
+                    key={row.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.12 }}
+                    onClick={() => onRowClick?.(row)}
+                    className={`border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors ${
+                      onRowClick ? 'cursor-pointer' : ''
+                    }`}
+                  >
+                    {columns.map((column) => (
+                      <td key={String(column.key)} className="px-6 py-4">
+                        {column.render
+                          ? column.render(row[column.key], row)
+                          : String(row[column.key] ?? '-')}
+                      </td>
+                    ))}
+                  </motion.tr>
+                ))
               )}
             </tbody>
           </table>
