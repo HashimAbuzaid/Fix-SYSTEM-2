@@ -159,6 +159,78 @@ type ProcedureCaseItem = {
 
 const ISSUE_RESULTS = new Set(['Borderline', 'Fail', 'Auto-Fail']);
 
+const SUPABASE_PAGE_SIZE = 1000;
+
+function normalizeComparable(value?: string | number | null) {
+  return String(value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeAgentId(value?: string | number | null) {
+  const normalized = normalizeComparable(value);
+  if (!normalized) return '';
+  return normalized.replace(/\.0$/, '');
+}
+
+function normalizeTeamName(value?: string | null) {
+  const normalized = normalizeComparable(value);
+  if (normalized === 'calls') return 'Calls';
+  if (normalized === 'tickets') return 'Tickets';
+  if (normalized === 'sales') return 'Sales';
+  return String(value ?? '').trim();
+}
+
+function valuesMatch(a?: string | number | null, b?: string | number | null) {
+  return normalizeComparable(a) !== '' && normalizeComparable(a) === normalizeComparable(b);
+}
+
+function agentIdsMatch(a?: string | number | null, b?: string | number | null) {
+  return normalizeAgentId(a) !== '' && normalizeAgentId(a) === normalizeAgentId(b);
+}
+
+async function fetchAllRows<T>(tableName: string, orderColumn: string, ascending = false): Promise<T[]> {
+  const rows: T[] = [];
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from(tableName)
+      .select('*')
+      .order(orderColumn, { ascending })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const page = (data || []) as T[];
+    rows.push(...page);
+
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
+async function fetchAllAgentProfiles(): Promise<AgentProfile[]> {
+  const rows: AgentProfile[] = [];
+  for (let from = 0; ; from += SUPABASE_PAGE_SIZE) {
+    const to = from + SUPABASE_PAGE_SIZE - 1;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, agent_id, agent_name, display_name, team')
+      .eq('role', 'agent')
+      .order('agent_name', { ascending: true })
+      .range(from, to);
+
+    if (error) throw error;
+
+    const page = (data || []) as AgentProfile[];
+    rows.push(...page);
+
+    if (page.length < SUPABASE_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
+
 // ─────────────────────────────────────────────────────────────
 // CSS Injection — reports-specific classes that extend App.tsx tokens
 // ─────────────────────────────────────────────────────────────
@@ -1760,27 +1832,54 @@ function ReportsSupabase() {
 
   async function loadReportsData() {
     setLoading(true);
-    const [auditsR, profilesR, callsR, ticketsR, salesR, requestsR, feedbackR] = await Promise.all([
-      supabase.from('audits').select('*').order('audit_date', { ascending: false }),
-      supabase.from('profiles').select('id, agent_id, agent_name, display_name, team').eq('role', 'agent').order('agent_name', { ascending: true }),
-      supabase.from('calls_records').select('*').order('call_date', { ascending: false }),
-      supabase.from('tickets_records').select('*').order('ticket_date', { ascending: false }),
-      supabase.from('sales_records').select('*').order('sale_date', { ascending: false }),
-      supabase.from('supervisor_requests').select('*').order('created_at', { ascending: false }),
-      supabase.from('agent_feedback').select('*').order('created_at', { ascending: false }),
-    ]);
-    setAudits((auditsR.data as AuditItem[]) || []);
-    setProfiles((profilesR.data as AgentProfile[]) || []);
-    setCallsRecords((callsR.data as CallsRecord[]) || []);
-    setTicketsRecords((ticketsR.data as TicketsRecord[]) || []);
-    setSalesRecords((salesR.data as SalesRecord[]) || []);
-    setSupervisorRequests((requestsR.data as SupervisorRequest[]) || []);
-    setAgentFeedback((feedbackR.data as AgentFeedback[]) || []);
-    setLoading(false);
+    try {
+      const [
+        auditsData,
+        profilesData,
+        callsData,
+        ticketsData,
+        salesData,
+        requestsData,
+        feedbackData,
+      ] = await Promise.all([
+        fetchAllRows<AuditItem>('audits', 'audit_date'),
+        fetchAllAgentProfiles(),
+        fetchAllRows<CallsRecord>('calls_records', 'call_date'),
+        fetchAllRows<TicketsRecord>('tickets_records', 'ticket_date'),
+        fetchAllRows<SalesRecord>('sales_records', 'sale_date'),
+        fetchAllRows<SupervisorRequest>('supervisor_requests', 'created_at'),
+        fetchAllRows<AgentFeedback>('agent_feedback', 'created_at'),
+      ]);
+
+      setAudits(auditsData);
+      setProfiles(profilesData);
+      setCallsRecords(callsData);
+      setTicketsRecords(ticketsData);
+      setSalesRecords(salesData);
+      setSupervisorRequests(requestsData);
+      setAgentFeedback(feedbackData);
+    } catch (error) {
+      console.error('Could not load reports data', error);
+      setAudits([]);
+      setProfiles([]);
+      setCallsRecords([]);
+      setTicketsRecords([]);
+      setSalesRecords([]);
+      setSupervisorRequests([]);
+      setAgentFeedback([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   function getDisplayName(agentId?: string | null, agentName?: string | null, team?: string | null) {
-    return profiles.find((p) => p.agent_id === (agentId || null) && p.agent_name === (agentName || '') && p.team === (team || null))?.display_name || null;
+    const normalizedTeam = normalizeTeamName(team);
+    return profiles.find((profile) => {
+      const teamMatches = normalizedTeam ? normalizeTeamName(profile.team) === normalizedTeam : true;
+      const idMatches = agentIdsMatch(profile.agent_id, agentId);
+      const nameMatches = valuesMatch(profile.agent_name, agentName);
+      return teamMatches && (idMatches || nameMatches);
+    })?.display_name || null;
   }
 
   function getAgentLabel(profile: AgentProfile) {
@@ -1789,6 +1888,7 @@ function ReportsSupabase() {
 
   function matchesDate(dateValue: string) {
     const raw = String(dateValue || '').slice(0, 10);
+    if (!raw) return true;
     return (dateFrom ? raw >= dateFrom : true) && (dateTo ? raw <= dateTo : true);
   }
 
@@ -1799,27 +1899,27 @@ function ReportsSupabase() {
 
   const selectedAgent = selectedAgents.length === 1 ? selectedAgents[0] : null;
 
-  function matchesSelectedAgent(itemAgentId?: string | null, itemAgentName?: string | null) {
+  function matchesSelectedAgent(itemAgentId?: string | null, itemAgentName?: string | null, itemTeam?: string | null) {
     if (selectedAgents.length === 0) return true;
 
+    const normalizedItemTeam = normalizeTeamName(itemTeam);
     return selectedAgents.some((agent) => {
-      if (agent.agent_id && itemAgentId) {
-        return String(itemAgentId).trim() === String(agent.agent_id).trim();
-      }
-
-      return String(itemAgentName || '').trim().toLowerCase() ===
-        String(agent.agent_name || '').trim().toLowerCase();
+      const teamMatches = normalizedItemTeam ? normalizeTeamName(agent.team) === normalizedItemTeam : true;
+      const idMatches = agentIdsMatch(itemAgentId, agent.agent_id);
+      const agentNameMatches = valuesMatch(itemAgentName, agent.agent_name);
+      const displayNameMatches = valuesMatch(itemAgentName, agent.display_name);
+      return teamMatches && (idMatches || agentNameMatches || displayNameMatches);
     });
   }
 
   const visibleAgentProfiles = useMemo(() => {
-    const scoped = teamFilter ? profiles.filter((p) => p.team === teamFilter) : profiles;
-    const q = agentSearch.trim().toLowerCase();
+    const scoped = teamFilter ? profiles.filter((p) => normalizeTeamName(p.team) === normalizeTeamName(teamFilter)) : profiles;
+    const q = normalizeComparable(agentSearch);
     if (!q) return scoped;
     return scoped.filter((p) =>
-      p.agent_name.toLowerCase().includes(q) ||
-      (p.agent_id || '').toLowerCase().includes(q) ||
-      (p.display_name || '').toLowerCase().includes(q)
+      normalizeComparable(p.agent_name).includes(q) ||
+      normalizeAgentId(p.agent_id).includes(normalizeAgentId(q)) ||
+      normalizeComparable(p.display_name).includes(q)
     );
   }, [profiles, teamFilter, agentSearch]);
 
@@ -1841,34 +1941,34 @@ function ReportsSupabase() {
   // ── Filtered datasets ──────────────────────────────────────
 
   const filteredAudits = useMemo(() => audits.filter((item) => {
-    const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.audit_date);
-  }), [audits, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(item.team) === normalizeTeamName(teamFilter) : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, item.team) && matchesDate(item.audit_date);
+  }), [audits, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   const filteredCalls = useMemo(() => callsRecords.filter((item) => {
-    const matchesTeam = teamFilter ? teamFilter === 'Calls' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.call_date);
-  }), [callsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(teamFilter) === 'Calls' : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Calls') && matchesDate(item.call_date);
+  }), [callsRecords, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   const filteredTickets = useMemo(() => ticketsRecords.filter((item) => {
-    const matchesTeam = teamFilter ? teamFilter === 'Tickets' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.ticket_date);
-  }), [ticketsRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(teamFilter) === 'Tickets' : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Tickets') && matchesDate(item.ticket_date);
+  }), [ticketsRecords, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   const filteredSales = useMemo(() => salesRecords.filter((item) => {
-    const matchesTeam = teamFilter ? teamFilter === 'Sales' : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name) && matchesDate(item.sale_date);
-  }), [salesRecords, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(teamFilter) === 'Sales' : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id, item.agent_name, 'Sales') && matchesDate(item.sale_date);
+  }), [salesRecords, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   const filteredRequests = useMemo(() => supervisorRequests.filter((item) => {
-    const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null) && matchesDate(item.created_at.slice(0, 10));
-  }), [supervisorRequests, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(item.team) === normalizeTeamName(teamFilter) : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null, item.team || null) && matchesDate(item.created_at.slice(0, 10));
+  }), [supervisorRequests, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   const filteredFeedback = useMemo(() => agentFeedback.filter((item) => {
-    const matchesTeam = teamFilter ? item.team === teamFilter : true;
-    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null) && matchesDate(item.created_at.slice(0, 10));
-  }), [agentFeedback, teamFilter, dateFrom, dateTo, selectedAgentProfileIds]);
+    const matchesTeam = teamFilter ? normalizeTeamName(item.team) === normalizeTeamName(teamFilter) : true;
+    return matchesTeam && matchesSelectedAgent(item.agent_id || null, item.agent_name || null, item.team || null) && matchesDate(item.created_at.slice(0, 10));
+  }), [agentFeedback, teamFilter, dateFrom, dateTo, selectedAgents]);
 
   // ── Aggregates ─────────────────────────────────────────────
 
@@ -1884,9 +1984,9 @@ function ReportsSupabase() {
   const openFeedback = filteredFeedback.filter((i) => i.status !== 'Closed').length;
   const closedFeedback = filteredFeedback.filter((i) => i.status === 'Closed').length;
 
-  const callsAudits = filteredAudits.filter((i) => i.team === 'Calls');
-  const ticketsAudits = filteredAudits.filter((i) => i.team === 'Tickets');
-  const salesAudits = filteredAudits.filter((i) => i.team === 'Sales');
+  const callsAudits = filteredAudits.filter((i) => normalizeTeamName(i.team) === 'Calls');
+  const ticketsAudits = filteredAudits.filter((i) => normalizeTeamName(i.team) === 'Tickets');
+  const salesAudits = filteredAudits.filter((i) => normalizeTeamName(i.team) === 'Sales');
 
   const teamAvg = (arr: AuditItem[]) =>
     arr.length > 0 ? (arr.reduce((s, i) => s + Number(i.quality_score), 0) / arr.length).toFixed(2) : '0.00';
@@ -1903,7 +2003,7 @@ function ReportsSupabase() {
 
   const trendTeamFilter = selectedAgent?.team || teamFilter || '';
   const trendTeamAudits = useMemo(() =>
-    audits.filter((item) => (trendTeamFilter ? item.team === trendTeamFilter : true) && matchesDate(item.audit_date)),
+    audits.filter((item) => (trendTeamFilter ? normalizeTeamName(item.team) === normalizeTeamName(trendTeamFilter) : true) && matchesDate(item.audit_date)),
     [audits, trendTeamFilter, dateFrom, dateTo]
   );
 
@@ -2019,7 +2119,7 @@ function ReportsSupabase() {
                 onClick={() => setIsAgentPickerOpen((p) => !p)}
                 aria-expanded={isAgentPickerOpen}
               >
-                <span className="rpt-picker-btn-text" style={{ color: selectedAgent ? 'var(--fg-default)' : 'var(--fg-muted)' }}>
+                <span className="rpt-picker-btn-text" style={{ color: selectedAgents.length > 0 ? 'var(--fg-default)' : 'var(--fg-muted)' }}>
                   {selectedAgents.length === 0 ? 'Select agent…' : selectedAgents.length === 1 ? getAgentLabel(selectedAgents[0]) : `${selectedAgents.length} agents selected`}
                 </span>
                 <span className="rpt-picker-btn-arrow">▾</span>
