@@ -79,6 +79,36 @@ type ImportedProgressRow = {
   averageScore?: number | null;
 };
 
+type TeamName = 'Calls' | 'Tickets' | 'Sales';
+type ProgressEvaluation = {
+  id: string;
+  audit_date: string;
+  quality_score: number;
+  case_type: string;
+};
+type ProgressGroupedRow = {
+  agent_id: string;
+  agent_name: string;
+  display_name: string | null;
+  team: TeamName;
+  evaluations: ProgressEvaluation[];
+};
+
+function createProgressGroupedRow(
+  agentId: string,
+  agentName: string,
+  displayName: string | null,
+  team: TeamName,
+): ProgressGroupedRow {
+  return {
+    agent_id: agentId,
+    agent_name: agentName,
+    display_name: displayName,
+    team,
+    evaluations: [],
+  };
+}
+
 /* ═══════════════════════════════════════════════════════════
    Constants  (unchanged)
    ═══════════════════════════════════════════════════════════ */
@@ -533,13 +563,13 @@ function AuditsListSupabase() {
   /* ── Memoised lookup maps (unchanged logic) ── */
   const displayNameByKey = useMemo(() => {
     const m = new Map<string, string | null>();
-    profiles.forEach((p) => { if (!p.agent_id || !p.team) return; m.set(agentKey(p.agent_id, p.team), p.display_name || null); });
+    profiles.forEach((p: AgentProfile) => { if (!p.agent_id || !p.team) return; m.set(agentKey(p.agent_id, p.team), p.display_name || null); });
     return m;
   }, [profiles]);
 
   const profileByAuditKey = useMemo(() => {
     const m = new Map<string, AgentProfile>();
-    profiles.forEach((p) => { if (!p.agent_id || !p.team) return; m.set(`${p.agent_id}||${p.agent_name}||${p.team}`, p); });
+    profiles.forEach((p: AgentProfile) => { if (!p.agent_id || !p.team) return; m.set(`${p.agent_id}||${p.agent_name}||${p.team}`, p); });
     return m;
   }, [profiles]);
 
@@ -550,22 +580,22 @@ function AuditsListSupabase() {
   const filteredAudits = useMemo(() => {
     const s = deferredSearch.trim().toLowerCase();
     if (!s) return audits;
-    return audits.filter((a) => {
+    return audits.filter((a: AuditItem) => {
       const dn = (displayNameByKey.get(agentKey(a.agent_id, a.team)) || '').toLowerCase();
       return a.agent_name.toLowerCase().includes(s) || a.agent_id.toLowerCase().includes(s) || dn.includes(s);
     });
   }, [audits, deferredSearch, displayNameByKey]);
 
   const uniqueCaseTypes = useMemo(
-    () => Array.from(new Set(audits.map((a) => a.case_type))),
+    () => Array.from(new Set(audits.map((a: AuditItem) => a.case_type))),
     [audits],
   );
 
   const { sharedFiltered, hiddenFiltered, sharedAll, hiddenAll } = useMemo(() => ({
-    sharedFiltered: filteredAudits.filter((a) => a.shared_with_agent).length,
-    hiddenFiltered: filteredAudits.filter((a) => !a.shared_with_agent).length,
-    sharedAll:  audits.filter((a) => a.shared_with_agent).length,
-    hiddenAll:  audits.filter((a) => !a.shared_with_agent).length,
+    sharedFiltered: filteredAudits.filter((a: AuditItem) => a.shared_with_agent).length,
+    hiddenFiltered: filteredAudits.filter((a: AuditItem) => !a.shared_with_agent).length,
+    sharedAll:  audits.filter((a: AuditItem) => a.shared_with_agent).length,
+    hiddenAll:  audits.filter((a: AuditItem) => !a.shared_with_agent).length,
   }), [filteredAudits, audits]);
 
   /* ── Stable helper callbacks ── */
@@ -576,17 +606,17 @@ function AuditsListSupabase() {
   const getAgentLabel    = useCallback((p: AgentProfile) => p.display_name ? `${p.agent_name} — ${p.display_name}` : `${p.agent_name} · ${p.agent_id}`, []);
 
   const editTeamAgents = useMemo(
-    () => profiles.filter((p) => p.role === 'agent' && p.team === editForm.team && p.agent_id && p.agent_name),
+    () => profiles.filter((p: AgentProfile) => p.role === 'agent' && p.team === editForm.team && p.agent_id && p.agent_name),
     [profiles, editForm.team],
   );
   const visibleAgents = useMemo(() => {
     const s = deferredAgentSearch.trim().toLowerCase();
     if (!s) return editTeamAgents;
-    return editTeamAgents.filter((p) => p.agent_name.toLowerCase().includes(s) || (p.agent_id || '').toLowerCase().includes(s) || (p.display_name || '').toLowerCase().includes(s));
+    return editTeamAgents.filter((p: AgentProfile) => p.agent_name.toLowerCase().includes(s) || (p.agent_id || '').toLowerCase().includes(s) || (p.display_name || '').toLowerCase().includes(s));
   }, [editTeamAgents, deferredAgentSearch]);
 
   const selectedAgent = useMemo(
-    () => editTeamAgents.find((p) => p.id === selectedAgentProfileId) || null,
+    () => editTeamAgents.find((p: AgentProfile) => p.id === selectedAgentProfileId) || null,
     [editTeamAgents, selectedAgentProfileId],
   );
 
@@ -598,28 +628,28 @@ function AuditsListSupabase() {
   /* ── Progress board (unchanged logic, uses stable map) ── */
   const progressData = useMemo(() => {
     const ns = deferredSearch.trim().toLowerCase();
-    const scopedProfiles = profiles.filter((p) =>
+    const scopedProfiles = profiles.filter((p: AgentProfile) =>
       (teamFilter ? p.team === teamFilter : true) &&
       (!ns || p.agent_name.toLowerCase().includes(ns) || (p.agent_id || '').toLowerCase().includes(ns) || (p.display_name || '').toLowerCase().includes(ns)),
     );
-    const grouped = new Map<string, { agent_id: string; agent_name: string; display_name: string | null; team: 'Calls'|'Tickets'|'Sales'; evaluations: Array<{id:string;audit_date:string;quality_score:number;case_type:string}> }>();
-    filteredAudits.forEach((a) => {
+    const grouped = new Map<string, ProgressGroupedRow>();
+    filteredAudits.forEach((a: AuditItem) => {
       const k = agentKey(a.agent_id, a.team);
       const dn = displayNameByKey.get(k) || null;
-      const ex = grouped.get(k) || { agent_id: a.agent_id, agent_name: a.agent_name, display_name: dn, team: a.team, evaluations: [] };
+      const ex = grouped.get(k) ?? createProgressGroupedRow(a.agent_id, a.agent_name, dn, a.team);
       ex.evaluations.push({ id: a.id, audit_date: a.audit_date, quality_score: Number(a.quality_score), case_type: a.case_type });
       if (!ex.display_name) ex.display_name = dn;
       grouped.set(k, ex);
     });
-    scopedProfiles.forEach((p) => {
+    scopedProfiles.forEach((p: AgentProfile) => {
       if (!p.agent_id || !p.team) return;
       const k = agentKey(p.agent_id, p.team);
-      if (!grouped.has(k)) grouped.set(k, { agent_id: p.agent_id, agent_name: p.agent_name, display_name: p.display_name, team: p.team, evaluations: [] });
+      if (!grouped.has(k)) grouped.set(k, createProgressGroupedRow(p.agent_id, p.agent_name, p.display_name ?? null, p.team));
     });
     Object.entries(importedProgressByAgent).forEach(([k, ir]) => {
       if (teamFilter && ir.team !== teamFilter) return;
       if (ns) { const hay = [ir.agent_name, ir.display_name || '', ir.agent_id].join(' ').toLowerCase(); if (!hay.includes(ns)) return; }
-      const ex = grouped.get(k) || { agent_id: ir.agent_id, agent_name: ir.agent_name, display_name: ir.display_name, team: ir.team, evaluations: [] };
+      const ex = grouped.get(k) ?? createProgressGroupedRow(ir.agent_id, ir.agent_name, ir.display_name, ir.team);
       grouped.set(k, ex);
     });
     const rows = Array.from(grouped.values()).map((row) => {
@@ -710,7 +740,7 @@ function AuditsListSupabase() {
       const li = fi('latest', 'latestscore'), avgi = fi('average', 'avg', 'averagescore');
       if (ani === -1 && aii === -1) { setErrorMessage('CSV must have Agent Name or Agent ID.'); return; }
       const next: Record<string, ImportedProgressRow> = {};
-      rows.slice(1).forEach((cells) => {
+      rows.slice(1).forEach((cells: string[]) => {
         const an  = normalizeText(cells[ani] || '');
         const dn  = dni >= 0 ? normalizeText(cells[dni] || '') : '';
         const aid = normalizeAgentId(cells[aii] || '');
@@ -838,7 +868,7 @@ function AuditsListSupabase() {
     if (filteredAudits.length === 0) { setErrorMessage('No audits match filters.'); return; }
     if (!window.confirm(share ? `Share ${filteredAudits.length} filtered audits?` : `Hide ${filteredAudits.length} filtered audits?`)) return;
     setBulkSaving(true);
-    const ids = filteredAudits.map((a) => a.id);
+    const ids = filteredAudits.map((a: AuditItem) => a.id);
     const { data, error } = await supabase.from('audits').update({ shared_with_agent: share, shared_at: share ? new Date().toISOString() : null }).in('id', ids).select('id, shared_with_agent, shared_at');
     setBulkSaving(false);
     if (error) { setErrorMessage(error.message); return; }
@@ -854,7 +884,7 @@ function AuditsListSupabase() {
     if (audits.length === 0) { setErrorMessage('No audits to hide.'); return; }
     if (!window.confirm(`Hide all ${audits.length} audits?`)) return;
     setBulkSaving(true);
-    const { data, error } = await supabase.from('audits').update({ shared_with_agent: false, shared_at: null }).in('id', audits.map((a) => a.id)).select('id, shared_with_agent, shared_at');
+    const { data, error } = await supabase.from('audits').update({ shared_with_agent: false, shared_at: null }).in('id', audits.map((a: AuditItem) => a.id)).select('id, shared_with_agent, shared_at');
     setBulkSaving(false);
     if (error) { setErrorMessage(error.message); return; }
     if (!data?.length) { setErrorMessage('Hide all did not persist.'); return; }
@@ -1025,7 +1055,7 @@ function AuditsListSupabase() {
               <p style={S.releaseDesc}>Filtered audits displayed below. Import a CSV to overlay Eval columns.</p>
             </div>
             <div style={S.metaPills}>
-              {[`Today: ${todayStatusDate}`, `Rows: ${progressData.rows.length}`, `Visible: ${visibleCols.length} evals`, importedFileName ? `CSV: ${importedFileName}` : null].filter(Boolean).map((t) => <span key={t} style={S.metaPill}>{t}</span>)}
+              {[`Today: ${todayStatusDate}`, `Rows: ${progressData.rows.length}`, `Visible: ${visibleCols.length} evals`, importedFileName ? `CSV: ${importedFileName}` : null].filter((t): t is string => Boolean(t)).map((t: string) => <span key={t} style={S.metaPill}>{t}</span>)}
             </div>
           </div>
           <div style={S.progressControls}>
@@ -1103,7 +1133,7 @@ function AuditsListSupabase() {
             <div style={{ ...S.auditRow, ...S.auditHeader }}>
               {['Agent','Date','Case Type','Reference','Quality','Status','Created By','Comments','Actions'].map((h) => <div key={h} style={S.th}>{h}</div>)}
             </div>
-            {filteredAudits.map((audit) => (
+            {filteredAudits.map((audit: AuditItem) => (
               <AuditTableRow
                 key={audit.id}
                 audit={audit}
@@ -1316,7 +1346,7 @@ function EditAuditForm({ editForm, setEditForm, editScores, editMetricComments, 
                   <input type="text" value={agentSearch} onChange={(e) => setAgentSearch(e.target.value)} placeholder="Search agents…" style={S.input} />
                 </div>
                 <div style={{ maxHeight: '260px', overflowY: 'auto', padding: '8px', display: 'grid', gap: '6px' }}>
-                  {visibleAgents.length === 0 ? <div style={{ padding: '12px', color: 'var(--al-subtle)' }}>No agents found</div> : visibleAgents.map((p) => (
+                  {visibleAgents.length === 0 ? <div style={{ padding: '12px', color: 'var(--al-subtle)' }}>No agents found</div> : visibleAgents.map((p: AgentProfile) => (
                     <button key={p.id} onClick={() => { setSelectedAgentProfileId(p.id); setAgentSearch(getAgentLabel(p)); setIsAgentPickerOpen(false); }}
                       style={{ ...S.pickerOption, ...(selectedAgentProfileId === p.id ? S.pickerOptionActive : {}) }}>
                       {getAgentLabel(p)}
