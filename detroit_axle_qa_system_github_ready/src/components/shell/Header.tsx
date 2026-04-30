@@ -6,7 +6,7 @@
 
 import { useState, useEffect, useRef, useCallback, memo } from "react";
 import type { UserProfile } from "../../context/AuthContext";
-import { ROLE_COLORS } from "../../config/routes";
+import { ROLE_COLORS } from "../../config/navItems";
 import type { ThemeMode } from "../../lib/theme";
 
 // ── Icon primitives ───────────────────────────────────────────
