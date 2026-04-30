@@ -48,9 +48,6 @@ import {
   getUserInitials,
   getActiveRouteLabel,
   ROLE_COLORS,
-  LEVEL_COLORS,
-  LEVEL_NAMES,
-  LEVEL_THRESHOLDS,
   type NavItem,
 } from "./config/navItems";
 
