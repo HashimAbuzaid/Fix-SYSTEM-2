@@ -41,6 +41,7 @@ export type ScoreDetail = {
 
 export type AuditItem = {
   id: string;
+  created_at?: string | null;
   agent_id: string;
   agent_name: string;
   team: 'Calls' | 'Tickets' | 'Sales';
@@ -127,6 +128,7 @@ async function fetchAuditsPage(
   let query = supabase
     .from('audits')
     .select('*')
+    .order('created_at', { ascending: false })
     .order('audit_date', { ascending: false })
     .range(from, to);
 
