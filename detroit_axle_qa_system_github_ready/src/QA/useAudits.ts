@@ -20,6 +20,7 @@ import {
   type UseInfiniteQueryResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
+import { fetchAuditsPageFromPythonApi, isPythonAuditsApiEnabled } from '../lib/auditsApi';
 import { supabase } from '../lib/supabase';
 
 /* ─── Constants ─────────────────────────────────────────── */
@@ -118,7 +119,7 @@ export const auditKeys = {
    All other filters are pushed to Supabase.
 */
 
-async function fetchAuditsPage(
+async function fetchAuditsPageLegacy(
   filters: AuditFilters,
   pageParam: number,
 ): Promise<{ data: AuditItem[]; nextPage: number | null }> {
@@ -148,6 +149,21 @@ async function fetchAuditsPage(
     data: rows,
     nextPage: rows.length === PAGE_SIZE ? pageParam + 1 : null,
   };
+}
+
+async function fetchAuditsPage(
+  filters: AuditFilters,
+  pageParam: number,
+): Promise<{ data: AuditItem[]; nextPage: number | null }> {
+  if (isPythonAuditsApiEnabled()) {
+    try {
+      return fetchAuditsPageFromPythonApi(filters, pageParam, PAGE_SIZE);
+    } catch (error) {
+      console.warn('Python audits API failed, falling back to Supabase query.', error);
+    }
+  }
+
+  return fetchAuditsPageLegacy(filters, pageParam);
 }
 
 export function useAuditsInfinite(
