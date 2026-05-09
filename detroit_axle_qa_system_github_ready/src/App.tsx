@@ -196,7 +196,7 @@ function readTheme(): ThemeMode {
 }
 
 const useAppStore = create<AppState>()(
-  subscribeWithSelector((set, get) => ({
+  subscribeWithSelector((set, _get) => ({
     sidebarPinned:   false,
     sidebarHovered:  false,
     collapsedGroups: readCollapsed(),
@@ -254,7 +254,7 @@ interface NotifState {
 
 let notifSeq = 0;
 
-const useNotifStore = create<NotifState>()((set, get) => ({
+const useNotifStore = create<NotifState>()((set, _get) => ({
   notifications: [],
   toasts:        [],
   unreadCount:   0,
@@ -341,12 +341,6 @@ function useShortcutRegistry() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, []);
-}
-
-/** Register a shortcut for the lifetime of the calling component. */
-function useShortcut(def: ShortcutDef) {
-  // Re-register when handler reference changes
-  useEffect(() => registry.register(def), [def.combo]);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1199,7 +1193,7 @@ function AppShell() {
       {
         combo: "⌘/", description: "Toggle help drawer", global: true,
         handler: (e: KeyboardEvent) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "/") { e.preventDefault(); setHelpOpen((o: boolean) => !o); }
+          if ((e.metaKey || e.ctrlKey) && e.key === "/") { e.preventDefault(); setHelpOpen(!useAppStore.getState().helpOpen); }
         },
       },
       {
@@ -1217,7 +1211,7 @@ function AppShell() {
       {
         combo: "?", description: "Show shortcuts",
         handler: (e: KeyboardEvent) => {
-          if (e.key === "?") setShortcutsOpen((o: boolean) => !o);
+          if (e.key === "?") setShortcutsOpen(!useAppStore.getState().shortcutsOpen);
         },
       },
       {
