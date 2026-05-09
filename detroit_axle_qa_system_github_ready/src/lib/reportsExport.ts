@@ -257,15 +257,21 @@ function concatUint8Arrays(parts: Uint8Array[]): Uint8Array<ArrayBuffer> {
 
 async function makeZip(files: { name: string; blob: Blob }[]): Promise<Blob> {
   const encoder = new TextEncoder();
+
+  const processedFiles = await Promise.all(
+    files.map(async (file) => {
+      const nameBytes = encoder.encode(file.name);
+      const data = await blobToBytes(file.blob);
+      const crc = crc32(data);
+      return { nameBytes, data, crc };
+    }),
+  );
+
   const localParts: Uint8Array[] = [];
   const centralParts: Uint8Array[] = [];
   let offset = 0;
 
-  for (const file of files) {
-    const nameBytes = encoder.encode(file.name);
-    const data = await blobToBytes(file.blob);
-    const crc = crc32(data);
-
+  for (const { nameBytes, data, crc } of processedFiles) {
     const localHeader = new Uint8Array([
       ...u32(0x04034b50),
       ...u16(20),
