@@ -29,6 +29,8 @@ import {
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -36,6 +38,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import { motion } from 'framer-motion';
 
 /* ═══════════════════════════════════════════════════════════════════════════
    TYPES
@@ -43,16 +46,12 @@ import {
 
 type BadgeStatus = 'Active' | 'Pending' | 'Failed' | 'Completed';
 type DeltaDir    = 'up' | 'down' | 'neutral';
-type NavGroup    = { label: string; items: NavItemDef[] };
 
-interface NavItemDef {
-  label:  string;
-  icon:   string;   // Tabler icon name without "ti-"
-  path?:  string;
-  badge?: number;
-}
+
+
 
 interface KpiDef {
+  trend?: { val: number }[];
   label:   string;
   value:   string;
   icon:    string;
@@ -90,8 +89,6 @@ interface QuickStat {
 }
 
 interface DashboardProps {
-  /** Active nav path — controls which nav item is highlighted */
-  activePath?: string;
   /** User info shown in sidebar footer + header avatar */
   currentUser?: {
     name?:        string | null;
@@ -99,8 +96,6 @@ interface DashboardProps {
     role?:        string | null;
     email?:       string | null;
   } | null;
-  /** Called when a nav item is clicked */
-  onNavigate?: (path: string) => void;
   /** Called when the "New record" CTA is clicked */
   onNewRecord?: () => void;
   /** Override KPI data — defaults to MOCK_KPIS */
@@ -124,78 +119,65 @@ const DASH_CSS = `
 
 /* ── Token layer ── */
 .db-root {
-  --db-font-body:    'Inter', system-ui, sans-serif;
-  --db-font-mono:    'JetBrains Mono', monospace;
+  --db-font-body:    var(--font-sans, 'Inter', system-ui, sans-serif);
+  --db-font-mono:    var(--font-mono, 'Geist Mono', monospace);
 
   /* Geometry */
-  --db-r-sm:  6px;
-  --db-r-md:  8px;
-  --db-r-lg:  12px;
-  --db-r-xl:  16px;
+  --db-r-sm:  8px;
+  --db-r-md:  10px;
+  --db-r-lg:  14px;
+  --db-r-xl:  20px;
 
   /* Motion */
   --db-ease:      cubic-bezier(0.16, 1, 0.3, 1);
   --db-dur-fast:  120ms;
   --db-dur-mid:   220ms;
 
-  /* Palette — light (default) */
-  --db-page:          #F4F5F9;
-  --db-surface:       #FFFFFF;
-  --db-surface-alt:   #F8F9FB;
-  --db-surface-hover: rgba(0,0,0,0.028);
-  --db-border:        rgba(0,0,0,0.07);
-  --db-border-mid:    rgba(0,0,0,0.11);
-  --db-border-strong: rgba(0,0,0,0.18);
-  --db-text:          #0D0F1A;
-  --db-text-sub:      #4A5175;
-  --db-text-muted:    #A0A8C4;
+  /* Palette aligned with project tokens */
+  --db-page:          var(--bg-base);
+  --db-surface:       var(--bg-elevated);
+  --db-surface-alt:   var(--bg-subtle);
+  --db-surface-hover: var(--bg-subtle-hover);
+  --db-border:        var(--border);
+  --db-border-mid:    var(--border-strong);
+  --db-border-strong: rgba(255,255,255,0.15);
+  --db-text:          var(--fg-default);
+  --db-text-sub:      var(--fg-muted);
+  --db-text-muted:    var(--fg-subtle);
 
-  /* Accent — indigo */
-  --db-accent:        #4F46E5;
-  --db-accent-soft:   #EEF2FF;
-  --db-accent-text:   #3730A3;
+  /* Accent — blue */
+  --db-accent:        var(--accent-blue);
+  --db-accent-soft:   color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  --db-accent-text:   var(--accent-blue);
 
   /* Semantic */
-  --db-success:       #16A34A;
-  --db-success-bg:    #EAF3DE;
-  --db-success-text:  #27500A;
-  --db-warning:       #D97706;
-  --db-warning-bg:    #FAEEDA;
-  --db-warning-text:  #633806;
-  --db-danger:        #DC2626;
-  --db-danger-bg:     #FCEBEB;
-  --db-danger-text:   #791F1F;
-  --db-info:          #2563EB;
-  --db-info-bg:       #E6F1FB;
-  --db-info-text:     #0C447C;
+  --db-success:       var(--accent-emerald);
+  --db-success-bg:    color-mix(in srgb, var(--accent-emerald) 10%, transparent);
+  --db-success-text:  var(--accent-emerald);
+  --db-warning:       var(--accent-amber);
+  --db-warning-bg:    color-mix(in srgb, var(--accent-amber) 10%, transparent);
+  --db-warning-text:  var(--accent-amber);
+  --db-danger:        var(--accent-rose);
+  --db-danger-bg:     color-mix(in srgb, var(--accent-rose) 10%, transparent);
+  --db-danger-text:   var(--accent-rose);
+  --db-info:          var(--accent-blue);
+  --db-info-bg:       color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  --db-info-text:     var(--accent-blue);
 
   /* Chart */
-  --db-chart-a:  #4F46E5;
-  --db-chart-b:  #A5B4FC;
+  --db-chart-a:  var(--accent-blue);
+  --db-chart-b:  var(--accent-violet);
+  --db-glass-bg: rgba(15, 15, 24, 0.7);
+  --db-glass-border: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Dark mode overrides ── */
 [data-theme="dark"] .db-root,
 .db-root[data-dark="true"] {
-  --db-page:          #08090E;
-  --db-surface:       #0D0F1A;
-  --db-surface-alt:   #111420;
-  --db-surface-hover: rgba(255,255,255,0.04);
-  --db-border:        rgba(255,255,255,0.07);
-  --db-border-mid:    rgba(255,255,255,0.11);
-  --db-border-strong: rgba(255,255,255,0.18);
-  --db-text:          #EEF0F6;
-  --db-text-sub:      #7B84A0;
-  --db-text-muted:    #3D4360;
-  --db-accent:        #6366F1;
-  --db-accent-soft:   rgba(99,102,241,0.12);
-  --db-accent-text:   #A5B4FC;
-  --db-success-bg:    rgba(22,163,74,0.12);
-  --db-warning-bg:    rgba(217,119,6,0.12);
-  --db-danger-bg:     rgba(220,38,38,0.12);
-  --db-info-bg:       rgba(37,99,235,0.12);
-  --db-chart-a:  #6366F1;
-  --db-chart-b:  #818CF8;
+  --db-glass-bg: rgba(15, 15, 24, 0.7);
+}
+[data-theme="light"] .db-root {
+  --db-glass-bg: rgba(255, 255, 255, 0.7);
 }
 
 /* ── Base ── */
@@ -211,190 +193,10 @@ const DASH_CSS = `
 .db-root input,
 .db-root select { font-family: var(--db-font-body); }
 
-/* ── Layout shell ── */
-.db-shell {
-  display:               grid;
-  grid-template-columns: var(--db-sidebar-w, 220px) 1fr;
-  grid-template-rows:    52px 1fr;
-  min-height:            100vh;
-}
-
-/* ── Sidebar ── */
-.db-sidebar {
-  grid-row:   1 / 3;
-  display:    flex;
-  flex-direction: column;
-  background: var(--db-surface);
-  border-right: 1px solid var(--db-border);
-  width: var(--db-sidebar-w, 220px);
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  overflow-y: auto;
-  scrollbar-width: none;
-  transition: width var(--db-dur-mid) var(--db-ease);
-}
-.db-sidebar::-webkit-scrollbar { display: none; }
-
-.db-sidebar-top {
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--db-border);
-  flex-shrink: 0;
-}
-
-.db-logo {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  text-decoration: none;
-}
-.db-logomark {
-  width: 28px; height: 28px;
-  border-radius: 8px;
-  background: var(--db-accent);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.db-logomark svg { color: #fff; }
-.db-brand {
-  font-size: 14px; font-weight: 600;
-  color: var(--db-text);
-  white-space: nowrap;
-}
-
-.db-nav { padding: 10px 8px; flex: 1; }
-.db-nav-section {
-  font-size: 10px; font-weight: 600;
-  letter-spacing: .07em; text-transform: uppercase;
-  color: var(--db-text-muted);
-  padding: 10px 8px 5px;
-}
-.db-nav-item {
-  display: flex; align-items: center; gap: 9px;
-  padding: 7px 8px; border-radius: var(--db-r-md);
-  border: none; background: transparent;
-  font-size: 13px; font-weight: 400;
-  color: var(--db-text-sub);
-  width: 100%; text-align: left;
-  cursor: pointer;
-  transition: background var(--db-dur-fast) ease,
-              color    var(--db-dur-fast) ease;
-  white-space: nowrap;
-  position: relative;
-}
-.db-nav-item svg { flex-shrink: 0; opacity: 0.75; }
-.db-nav-item:hover {
-  background: var(--db-surface-hover);
-  color: var(--db-text);
-}
-.db-nav-item:hover svg { opacity: 1; }
-.db-nav-item.active {
-  background: var(--db-accent-soft);
-  color: var(--db-accent-text);
-  font-weight: 500;
-}
-.db-nav-item.active svg { opacity: 1; color: var(--db-accent); }
-.db-nav-badge {
-  margin-left: auto;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: var(--db-danger-bg);
-  color: var(--db-danger-text);
-  font-size: 10px; font-weight: 600;
-  font-family: var(--db-font-mono);
-}
-
-.db-sidebar-footer {
-  padding: 10px 12px;
-  border-top: 1px solid var(--db-border);
-  display: flex; align-items: center; gap: 9px;
-  flex-shrink: 0;
-}
-.db-user-avatar {
-  width: 30px; height: 30px; border-radius: 50%;
-  background: var(--db-accent-soft);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 11px; font-weight: 600;
-  color: var(--db-accent-text);
-  flex-shrink: 0;
-  border: 1px solid var(--db-border-mid);
-}
-.db-user-name  { font-size: 12px; font-weight: 500; color: var(--db-text); }
-.db-user-role  { font-size: 11px; color: var(--db-text-muted); }
-
-/* ── Header ── */
-.db-header {
-  background: var(--db-surface);
-  border-bottom: 1px solid var(--db-border);
-  display: flex; align-items: center;
-  padding: 0 20px; gap: 12px;
-  position: sticky; top: 0; z-index: 100;
-}
-
-.db-search {
-  flex: 1; max-width: 300px; position: relative;
-}
-.db-search-icon {
-  position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
-  color: var(--db-text-muted); pointer-events: none;
-}
-.db-search input {
-  width: 100%; padding: 0 10px 0 34px; height: 32px;
-  border-radius: var(--db-r-md);
-  border: 1px solid var(--db-border);
-  background: var(--db-surface-alt);
-  font-size: 12px; color: var(--db-text);
-  outline: none;
-  transition: border-color var(--db-dur-fast) ease;
-}
-.db-search input::placeholder { color: var(--db-text-muted); }
-.db-search input:focus { border-color: var(--db-accent); }
-
-.db-header-right {
-  display: flex; align-items: center; gap: 8px; margin-left: auto;
-}
-.db-icon-btn {
-  width: 32px; height: 32px; border-radius: var(--db-r-md);
-  border: 1px solid var(--db-border);
-  background: transparent;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; position: relative;
-  color: var(--db-text-sub);
-  transition: background var(--db-dur-fast) ease,
-              color    var(--db-dur-fast) ease;
-}
-.db-icon-btn:hover { background: var(--db-surface-hover); color: var(--db-text); }
-.db-notif-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--db-danger);
-  border: 1.5px solid var(--db-surface);
-  position: absolute; top: 5px; right: 5px;
-}
-.db-header-avatar {
-  width: 32px; height: 32px; border-radius: 50%;
-  background: var(--db-accent-soft);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 600;
-  color: var(--db-accent-text);
-  border: 1px solid var(--db-border-mid);
-  cursor: pointer;
-}
-.db-cta-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 0 14px; height: 32px;
-  border-radius: var(--db-r-md);
-  border: none; background: var(--db-accent);
-  color: #fff; font-size: 12px; font-weight: 500;
-  cursor: pointer; white-space: nowrap;
-  transition: filter var(--db-dur-fast) ease, transform var(--db-dur-fast) ease;
-}
-.db-cta-btn:hover  { filter: brightness(1.1); }
-.db-cta-btn:active { transform: scale(0.97); }
-
 /* ── Main content ── */
 .db-main { padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
 
-.db-page-title { font-size: 18px; font-weight: 600; color: var(--db-text); }
+.db-page-title { font-size: 26px; font-weight: 800; color: var(--db-text); letter-spacing: -0.03em; }
 .db-page-sub   { font-size: 12px; color: var(--db-text-sub); margin-top: 2px; }
 
 /* ── KPI strip ── */
@@ -404,12 +206,14 @@ const DASH_CSS = `
   gap: 10px;
 }
 .db-kpi-card {
-  background: var(--db-surface);
-  border: 1px solid var(--db-border);
+  background: var(--db-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--db-glass-border);
   border-radius: var(--db-r-lg);
-  padding: 16px;
-  transition: border-color var(--db-dur-fast) ease,
-              transform   var(--db-dur-mid)  var(--db-ease);
+  padding: 18px;
+  transition: all var(--db-dur-mid) var(--db-ease);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
 }
 .db-kpi-card:hover { border-color: var(--db-border-mid); transform: translateY(-1px); }
 .db-kpi-top  { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
@@ -437,10 +241,13 @@ const DASH_CSS = `
 
 /* ── Card base ── */
 .db-card {
-  background: var(--db-surface);
-  border: 1px solid var(--db-border);
+  background: var(--db-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--db-glass-border);
   border-radius: var(--db-r-lg);
   overflow: hidden;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.12);
 }
 .db-card-head {
   padding: 13px 16px;
@@ -497,47 +304,20 @@ const DASH_CSS = `
 
 /* ── Status badges ── */
 .db-badge {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 8px; border-radius: 4px;
-  font-size: 10px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px;
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
 }
 .db-badge-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
-.db-badge-active    { background: var(--db-success-bg); color: var(--db-success-text); }
-.db-badge-pending   { background: var(--db-warning-bg); color: var(--db-warning-text); }
-.db-badge-failed    { background: var(--db-danger-bg);  color: var(--db-danger-text);  }
-.db-badge-completed { background: var(--db-info-bg);    color: var(--db-info-text);    }
+.db-badge-active    { background: var(--db-success-bg); color: var(--db-success-text); border-color: color-mix(in srgb, var(--db-success) 20%, transparent); }
+.db-badge-pending   { background: var(--db-warning-bg); color: var(--db-warning-text); border-color: color-mix(in srgb, var(--db-warning) 20%, transparent); }
+.db-badge-failed    { background: var(--db-danger-bg);  color: var(--db-danger-text); border-color: color-mix(in srgb, var(--db-danger) 20%, transparent); }
+.db-badge-completed { background: var(--db-info-bg);    color: var(--db-info-text); border-color: color-mix(in srgb, var(--db-info) 20%, transparent); }
 
-/* ── Progress panel ── */
-.db-prog-row { padding: 11px 14px; border-bottom: 1px solid var(--db-border); }
-.db-prog-row:last-child { border-bottom: none; }
-.db-prog-lbl  { display: flex; justify-content: space-between; margin-bottom: 6px; }
-.db-prog-name { font-size: 12px; color: var(--db-text-sub); }
-.db-prog-pct  { font-size: 12px; font-weight: 600; color: var(--db-text); font-variant-numeric: tabular-nums; }
-.db-prog-track { height: 5px; border-radius: 3px; background: var(--db-surface-alt); overflow: hidden; }
-.db-prog-fill  { height: 100%; border-radius: 3px; transition: width 600ms var(--db-ease); }
-
-/* ── Quick stats ── */
-.db-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px; }
-.db-stat-mini { background: var(--db-surface-alt); border-radius: var(--db-r-md); padding: 10px; }
-.db-stat-lbl  { font-size: 10px; color: var(--db-text-muted); margin-bottom: 4px; }
-.db-stat-val  { font-size: 16px; font-weight: 600; color: var(--db-text); font-variant-numeric: tabular-nums; }
-
-/* ── Scrollbar ── */
-.db-root ::-webkit-scrollbar { width: 4px; height: 4px; }
-.db-root ::-webkit-scrollbar-track { background: transparent; }
-.db-root ::-webkit-scrollbar-thumb { background: var(--db-border-mid); border-radius: 999px; }
-
-/* ── Focus ring ── */
-.db-root :focus-visible { outline: 2px solid var(--db-accent); outline-offset: 2px; border-radius: var(--db-r-sm); }
-
-/* ── Keyframes ── */
-@keyframes db-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-.db-anim { animation: db-up 280ms var(--db-ease) var(--delay, 0ms) both; }
 `;
-
 function useDashboardStyles() {
   useEffect(() => {
     const id = 'apex-dashboard-v1';
@@ -549,10 +329,6 @@ function useDashboardStyles() {
     return () => { document.getElementById(id)?.remove(); };
   }, []);
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   THEME DETECTION
-   ═══════════════════════════════════════════════════════════════════════════ */
 
 function useIsDark(): boolean {
   const [dark, setDark] = useState(() => {
@@ -586,38 +362,13 @@ function useIsDark(): boolean {
    MOCK DATA — replace with real fetches / props
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const MOCK_NAV_GROUPS: NavGroup[] = [
-  {
-    label: 'Main',
-    items: [
-      { label: 'Dashboard', icon: 'layout-dashboard' },
-      { label: 'Reports',   icon: 'chart-bar' },
-      { label: 'Users',     icon: 'users' },
-    ],
-  },
-  {
-    label: 'Workspace',
-    items: [
-      { label: 'Tasks',         icon: 'checklist',    badge: 12 },
-      { label: 'Notifications', icon: 'bell' },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { label: 'Settings', icon: 'settings' },
-      { label: 'Support',  icon: 'help-circle' },
-    ],
-  },
-];
 
 const MOCK_KPIS: KpiDef[] = [
-  { label: 'Total records',   value: '14,830', icon: 'database',      iconBg: '#EEF2FF', iconColor: '#4F46E5', delta: '+8.2%',  dir: 'up',      sub: 'vs last month' },
-  { label: 'Pending tasks',   value: '247',    icon: 'clock',         iconBg: '#FAEEDA', iconColor: '#854F0B', delta: '+12%',   dir: 'down',    sub: 'needs attention' },
-  { label: 'Completed work',  value: '3,419',  icon: 'circle-check',  iconBg: '#EAF3DE', iconColor: '#3B6D11', delta: '+5.1%',  dir: 'up',      sub: 'this week' },
-  { label: 'Error rate',      value: '1.4%',   icon: 'alert-triangle',iconBg: '#FCEBEB', iconColor: '#A32D2D', delta: '-0.3%',  dir: 'up',      sub: 'improving' },
-  { label: 'Weekly progress', value: '74%',    icon: 'trending-up',   iconBg: '#E6F1FB', iconColor: '#185FA5', delta: 'On track',dir: 'neutral', sub: 'target: 80%' },
-];
+  { label: 'Total records',   value: '14,830', icon: 'database',      iconBg: '#EEF2FF', iconColor: '#4F46E5', delta: '+8.2%',  dir: 'up',      sub: 'vs last month' , trend: [{val:10}, {val:15}, {val:8}, {val:20}, {val:18}, {val:25}, {val:22}] },
+  { label: 'Pending tasks',   value: '247',    icon: 'clock',         iconBg: '#FAEEDA', iconColor: '#854F0B', delta: '+12%',   dir: 'down',    sub: 'needs attention' , trend: [{val:10}, {val:15}, {val:8}, {val:20}, {val:18}, {val:25}, {val:22}] },
+  { label: 'Completed work',  value: '3,419',  icon: 'circle-check',  iconBg: '#EAF3DE', iconColor: '#3B6D11', delta: '+5.1%',  dir: 'up',      sub: 'this week' , trend: [{val:10}, {val:15}, {val:8}, {val:20}, {val:18}, {val:25}, {val:22}] },
+  { label: 'Error rate',      value: '1.4%',   icon: 'alert-triangle',iconBg: '#FCEBEB', iconColor: '#A32D2D', delta: '-0.3%',  dir: 'up',      sub: 'improving' , trend: [{val:10}, {val:15}, {val:8}, {val:20}, {val:18}, {val:25}, {val:22}] },
+  { label: 'Weekly progress', value: '74%',    icon: 'trending-up',   iconBg: '#E6F1FB', iconColor: '#185FA5', delta: 'On track',dir: 'neutral', sub: 'target: 80%' , trend: [{val:10}, {val:15}, {val:8}, {val:20}, {val:18}, {val:25}, {val:22}] }];
 
 const MOCK_CHART: ChartDatum[] = [
   { day: 'Mon', Completed: 312, Pending: 80  },
@@ -785,106 +536,11 @@ const DeltaChip = memo(function DeltaChip({ delta, dir }: { delta: string; dir: 
    SIDEBAR
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface SidebarProps {
-  groups:     NavGroup[];
-  activePath: string;
-  onNavigate: (path: string) => void;
-  userName:   string;
-  userInitials: string;
-  userRole:   string;
-}
-
-const Sidebar = memo(function Sidebar({
-  groups, activePath, onNavigate, userName, userInitials, userRole,
-}: SidebarProps) {
-  return (
-    <aside className="db-sidebar" aria-label="Main navigation">
-      {/* Logo */}
-      <div className="db-sidebar-top">
-        <div className="db-logo">
-          <div className="db-logomark" aria-hidden="true">
-            <NavIcon name="bolt" size={14} />
-          </div>
-          <span className="db-brand">Apex Ops</span>
-        </div>
-      </div>
-
-      {/* Nav groups */}
-      <nav className="db-nav">
-        {groups.map((group) => (
-          <div key={group.label}>
-            <div className="db-nav-section">{group.label}</div>
-            {group.items.map((item) => {
-              const isActive = activePath === (item.path ?? `/${item.label.toLowerCase().replace(/\s+/g, '-')}`);
-              return (
-                <button
-                  key={item.label}
-                  className={`db-nav-item${isActive ? ' active' : ''}`}
-                  onClick={() => onNavigate(item.path ?? `/${item.label.toLowerCase().replace(/\s+/g, '-')}`)}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  <NavIcon name={item.icon} size={16} />
-                  {item.label}
-                  {item.badge ? <span className="db-nav-badge">{item.badge}</span> : null}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </nav>
-
-      {/* User footer */}
-      <div className="db-sidebar-footer">
-        <div className="db-user-avatar" aria-hidden="true">{userInitials}</div>
-        <div style={{ minWidth: 0 }}>
-          <div className="db-user-name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</div>
-          <div className="db-user-role">{userRole}</div>
-        </div>
-      </div>
-    </aside>
-  );
-});
 
 /* ═══════════════════════════════════════════════════════════════════════════
    HEADER
    ═══════════════════════════════════════════════════════════════════════════ */
 
-interface HeaderProps {
-  userInitials: string;
-  onNewRecord:  () => void;
-  notifCount:   number;
-}
-
-const Header = memo(function Header({ userInitials, onNewRecord, notifCount }: HeaderProps) {
-  return (
-    <header className="db-header">
-      <div className="db-search">
-        <span className="db-search-icon" aria-hidden="true"><NavIcon name="search" size={15} /></span>
-        <input
-          type="search"
-          placeholder="Search records, users, tasks…"
-          aria-label="Search"
-        />
-      </div>
-      <div className="db-header-right">
-        <button className="db-icon-btn" aria-label={`Notifications${notifCount > 0 ? ` (${notifCount} unread)` : ''}`}>
-          <NavIcon name="bell" size={16} />
-          {notifCount > 0 && <span className="db-notif-dot" aria-hidden="true" />}
-        </button>
-        <button className="db-icon-btn" aria-label="Settings">
-          <NavIcon name="settings" size={16} />
-        </button>
-        <div className="db-header-avatar" role="button" tabIndex={0} aria-label="User profile">
-          {userInitials}
-        </div>
-        <button className="db-cta-btn" onClick={onNewRecord}>
-          <NavIcon name="plus" size={14} />
-          New record
-        </button>
-      </div>
-    </header>
-  );
-});
 
 /* ═══════════════════════════════════════════════════════════════════════════
    KPI STRIP
@@ -894,7 +550,13 @@ const KpiStrip = memo(function KpiStrip({ kpis }: { kpis: KpiDef[] }) {
   return (
     <div className="db-kpi-grid" role="region" aria-label="Key performance indicators">
       {kpis.map((k, i) => (
-        <div key={k.label} className="db-kpi-card db-anim" style={{ '--delay': `${i * 40}ms` } as CSSProperties}>
+        <motion.div
+          key={k.label}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: i * 0.1 }}
+          className="db-kpi-card"
+        >
           <div className="db-kpi-top">
             <span className="db-kpi-lbl">{k.label}</span>
             <div className="db-kpi-icon" style={{ background: k.iconBg }} aria-hidden="true">
@@ -903,12 +565,32 @@ const KpiStrip = memo(function KpiStrip({ kpis }: { kpis: KpiDef[] }) {
               </span>
             </div>
           </div>
-          <div className="db-kpi-val">{k.value}</div>
-          <div className="db-kpi-dl">
-            <DeltaChip delta={k.delta} dir={k.dir} />
-            <span className="db-kpi-sub">{k.sub}</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+            <div>
+              <div className="db-kpi-val">{k.value}</div>
+              <div className="db-kpi-dl">
+                <DeltaChip delta={k.delta} dir={k.dir} />
+                <span className="db-kpi-sub">{k.sub}</span>
+              </div>
+            </div>
+            {k.trend && (
+              <div style={{ width: 60, height: 30, marginBottom: 8 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={k.trend}>
+                    <Line 
+                      type="monotone" 
+                      dataKey="val" 
+                      stroke={k.iconColor} 
+                      strokeWidth={2} 
+                      dot={false} 
+                      isAnimationActive={false} 
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
           </div>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
@@ -918,20 +600,23 @@ const KpiStrip = memo(function KpiStrip({ kpis }: { kpis: KpiDef[] }) {
    RECHARTS CUSTOM TOOLTIP
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const ChartTooltip = memo(function ChartTooltip({ active, payload, label }: any) {
+const ChartTooltip = memo(function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { name: string; value: string | number; fill: string }[]; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
     <div style={{
-      background: 'var(--db-surface)',
-      border: '1px solid var(--db-border-mid)',
-      borderRadius: 8, padding: '10px 14px',
+      background: 'rgba(15, 15, 24, 0.8)',
+      backdropFilter: 'blur(8px)',
+      border: '1px solid rgba(255, 255, 255, 0.1)',
+      borderRadius: 12, padding: '12px 16px',
       fontSize: 12,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
     }}>
-      <div style={{ fontWeight: 600, color: 'var(--db-text)', marginBottom: 6 }}>{label}</div>
-      {payload.map((p: any) => (
-        <div key={p.name} style={{ display: 'flex', gap: 8, alignItems: 'center', color: 'var(--db-text-sub)' }}>
-          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.fill, flexShrink: 0 }} />
-          {p.name}: <span style={{ fontWeight: 600, color: 'var(--db-text)', marginLeft: 'auto', paddingLeft: 12 }}>{p.value}</span>
+      <div style={{ fontWeight: 700, color: '#fff', marginBottom: 8, fontSize: 13 }}>{label}</div>
+      {payload.map((p: { name: string; value: string | number; fill: string }) => (
+        <div key={p.name} style={{ display: 'flex', gap: 12, alignItems: 'center', color: 'rgba(255,255,255,0.7)', margin: '4px 0' }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.fill, flexShrink: 0, boxShadow: `0 0 8px ${p.fill}` }} />
+          <span style={{ flex: 1 }}>{p.name}</span>
+          <span style={{ fontWeight: 700, color: '#fff', marginLeft: 12 }}>{p.value}</span>
         </div>
       ))}
     </div>
@@ -967,7 +652,7 @@ const ChartCard = memo(function ChartCard({ data, onFilter }: ChartCardProps) {
   }, [range, onFilter]);
 
   return (
-    <div className="db-card db-anim" style={{ '--delay': '60ms' } as CSSProperties}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="db-card">
       <div className="db-card-head">
         <div>
           <div className="db-card-title">Activity overview</div>
@@ -1011,7 +696,7 @@ const ChartCard = memo(function ChartCard({ data, onFilter }: ChartCardProps) {
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -1034,7 +719,7 @@ const ActivityTable = memo(function ActivityTable({ rows }: ActivityTableProps) 
   );
 
   return (
-    <div className="db-card db-anim" style={{ '--delay': '100ms' } as CSSProperties}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }} className="db-card">
       <div className="db-card-head">
         <div>
           <div className="db-card-title">Recent activity</div>
@@ -1092,7 +777,7 @@ const ActivityTable = memo(function ActivityTable({ rows }: ActivityTableProps) 
           </tbody>
         </table>
       </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -1102,7 +787,7 @@ const ActivityTable = memo(function ActivityTable({ rows }: ActivityTableProps) 
 
 const ProgressPanel = memo(function ProgressPanel({ depts }: { depts: DeptProgress[] }) {
   return (
-    <div className="db-card db-anim" style={{ '--delay': '80ms' } as CSSProperties}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.25 }} className="db-card">
       <div className="db-card-head">
         <div className="db-card-title">Department progress</div>
       </div>
@@ -1117,7 +802,7 @@ const ProgressPanel = memo(function ProgressPanel({ depts }: { depts: DeptProgre
           </div>
         </div>
       ))}
-    </div>
+    </motion.div>
   );
 });
 
@@ -1127,7 +812,7 @@ const ProgressPanel = memo(function ProgressPanel({ depts }: { depts: DeptProgre
 
 const QuickStatsPanel = memo(function QuickStatsPanel({ stats }: { stats: QuickStat[] }) {
   return (
-    <div className="db-card db-anim" style={{ '--delay': '120ms' } as CSSProperties}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.35 }} className="db-card">
       <div className="db-card-head">
         <div className="db-card-title">Quick stats</div>
       </div>
@@ -1139,7 +824,7 @@ const QuickStatsPanel = memo(function QuickStatsPanel({ stats }: { stats: QuickS
           </div>
         ))}
       </div>
-    </div>
+    </motion.div>
   );
 });
 
@@ -1147,11 +832,92 @@ const QuickStatsPanel = memo(function QuickStatsPanel({ stats }: { stats: QuickS
    MAIN DASHBOARD COMPONENT
    ═══════════════════════════════════════════════════════════════════════════ */
 
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   QUICK ACTIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const QuickActions = memo(function QuickActions() {
+  const actions = [
+    { label: 'New Audit', icon: 'plus', color: 'var(--accent-blue)' },
+    { label: 'Upload Sales', icon: 'bolt', color: 'var(--accent-violet)' },
+    { label: 'Team Reports', icon: 'chart-bar', color: 'var(--accent-emerald)' },
+    { label: 'System Settings', icon: 'settings', color: 'var(--fg-muted)' },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }} className="db-card">
+      <div className="db-card-head">
+        <div className="db-card-title">Quick Actions</div>
+      </div>
+      <div style={{ padding: '12px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+        {actions.map((a) => (
+          <button
+            onClick={() => alert(`Action: ${a.label}`)}
+            key={a.label}
+            className="db-icon-btn"
+            style={{ 
+              width: 'auto', 
+              height: 'auto', 
+              padding: '12px 8px', 
+              flexDirection: 'column', 
+              gap: 8,
+              border: '1px solid var(--db-glass-border)',
+              background: 'rgba(255,255,255,0.03)'
+            }}
+          >
+            <div style={{ color: a.color }}><NavIcon name={a.icon} size={18} /></div>
+            <span style={{ fontSize: 11, fontWeight: 600 }}>{a.label}</span>
+          </button>
+        ))}
+      </div>
+    </motion.div>
+  );
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PERSONAL GOALS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const PersonalGoals = memo(function PersonalGoals() {
+  const goals = [
+    { label: 'Weekly Audits', current: 42, target: 50, color: 'var(--accent-blue)' },
+    { label: 'Avg Quality', current: 94, target: 92, color: 'var(--accent-emerald)' },
+  ];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }} className="db-card">
+      <div className="db-card-head">
+        <div className="db-card-title">Personal Goals</div>
+      </div>
+      <div style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {goals.map((g) => {
+          const pct = Math.min(100, (g.current / g.target) * 100);
+          return (
+            <div key={g.label}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 12 }}>
+                <span style={{ color: 'var(--db-text-sub)', fontWeight: 500 }}>{g.label}</span>
+                <span style={{ fontWeight: 700 }}>{g.current} / {g.target}</span>
+              </div>
+              <div style={{ height: 6, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 1, delay: 0.5 }}
+                  style={{ height: '100%', background: g.color, borderRadius: 3 }} 
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </motion.div>
+  );
+});
+
 function Dashboard({
-  activePath    = '/dashboard',
   currentUser   = null,
-  onNavigate,
-  onNewRecord,
   kpis          = MOCK_KPIS,
   chartData     = MOCK_CHART,
   activityRows  = MOCK_ACTIVITY,
@@ -1161,74 +927,39 @@ function Dashboard({
   useDashboardStyles();
   const isDark = useIsDark();
 
-  const userName     = currentUser?.name     ?? 'Sara Rodriguez';
-  const userInitials = currentUser?.initials ?? 'SR';
-  const userRole     = currentUser?.role     ?? 'Admin';
-
-  const handleNavigate = useCallback((path: string) => {
-    onNavigate?.(path);
-  }, [onNavigate]);
-
-  const handleNewRecord = useCallback(() => {
-    onNewRecord?.();
-  }, [onNewRecord]);
-
-  // Number of unread notifications — wire to your real store in production
-  const notifCount = 3;
+  const userName = currentUser?.name ?? 'Sara Rodriguez';
 
   return (
     <div className="db-root" data-dark={isDark ? 'true' : undefined}>
-      <div className="db-shell">
-        {/* ── Sidebar ── */}
-        <Sidebar
-          groups={MOCK_NAV_GROUPS}
-          activePath={activePath}
-          onNavigate={handleNavigate}
-          userName={userName}
-          userInitials={userInitials}
-          userRole={userRole}
-        />
-
-        {/* ── Page right ── */}
-        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: '100vh' }}>
-
-          {/* Header */}
-          <Header
-            userInitials={userInitials}
-            onNewRecord={handleNewRecord}
-            notifCount={notifCount}
-          />
-
-          {/* Main */}
-          <main className="db-main">
-            {/* Page title */}
-            <div className="db-anim" style={{ '--delay': '0ms' } as CSSProperties}>
-              <div className="db-page-title">Dashboard</div>
-              <div className="db-page-sub">
-                Good morning, {userName.split(' ')[0]} — here is your overview for today.
-              </div>
-            </div>
-
-            {/* KPI strip */}
-            <KpiStrip kpis={kpis} />
-
-            {/* Content grid */}
-            <div className="db-content-grid">
-              {/* Left column */}
-              <div className="db-left">
-                <ChartCard data={chartData} />
-                <ActivityTable rows={activityRows} />
-              </div>
-
-              {/* Right column */}
-              <div className="db-right">
-                <ProgressPanel depts={deptProgress} />
-                <QuickStatsPanel stats={quickStats} />
-              </div>
-            </div>
-          </main>
+      <main className="db-main" style={{ padding: 0 }}>
+        {/* Page title */}
+        <div className="db-anim" style={{ '--delay': '0ms' } as CSSProperties}>
+          <div className="db-page-title">Dashboard</div>
+          <div className="db-page-sub">
+            {new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'}, {userName.split(' ')[0]} — here is your overview for today.
+          </div>
         </div>
-      </div>
+
+        {/* KPI strip */}
+        <KpiStrip kpis={kpis} />
+
+        {/* Content grid */}
+        <div className="db-content-grid">
+          {/* Left column */}
+          <div className="db-left">
+            <ChartCard data={chartData} />
+            <ActivityTable rows={activityRows} />
+          </div>
+
+          {/* Right column */}
+          <div className="db-right">
+            <QuickActions />
+            <PersonalGoals />
+            <ProgressPanel depts={deptProgress} />
+            <QuickStatsPanel stats={quickStats} />
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
@@ -1239,8 +970,6 @@ export default memo(Dashboard);
    NAMED EXPORTS — useful for testing individual panels
    ═══════════════════════════════════════════════════════════════════════════ */
 export {
-  Sidebar,
-  Header,
   KpiStrip,
   ChartCard,
   ActivityTable,
@@ -1263,6 +992,4 @@ export type {
   DeptProgress,
   QuickStat,
   BadgeStatus,
-  NavGroup,
-  NavItemDef,
 };
