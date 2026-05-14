@@ -149,7 +149,7 @@ export function useAuthState(): UseAuthStateReturn {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('*')
+          .select('*, is_active')
           .eq('id', userId)
           .maybeSingle();
 

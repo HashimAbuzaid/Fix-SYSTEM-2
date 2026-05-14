@@ -5,7 +5,7 @@
 //  • Zustand stores replace scattered useState: useAppStore, useNotifStore
 //  • React.lazy + Suspense for every page (code-split, parallel-load)
 //  • useDeferredValue for command-palette search (non-blocking)
-//  • Strict discriminated-union auth states (loading | recovery | unauthed | ready)
+//  • Strict discriminated-union auth states (loading | recovery | unauthed | blocked | ready)
 //  • Per-zone ErrorBoundary (shell vs route zone)
 //  • Keyboard shortcut registry (ShortcutRegistry) — decoupled from component
 //  • Breadcrumb trail derived from router + navItems
@@ -138,13 +138,23 @@ interface MiniProgress {
   completedModules: number;
 }
 
-// Discriminated union for auth state — eliminates impossible combinations
+// ---------------------------------------------------------------------------
+// Discriminated union for auth state — eliminates impossible combinations.
+//
+// • loading     – session/profile fetch in flight
+// • recovery    – password-reset flow active
+// • unauthed    – no session at all
+// • blocked     – session + profile exist but is_active === false
+// • no-profile  – session exists, profile row missing/errored
+// • ready       – fully authenticated and active user
+// ---------------------------------------------------------------------------
 type AuthPhase =
   | { phase: "loading" }
   | { phase: "recovery" }
   | { phase: "unauthed" }
+  | { phase: "blocked";    profile: UserProfile }
   | { phase: "no-profile"; error: string }
-  | { phase: "ready"; profile: UserProfile };
+  | { phase: "ready";      profile: UserProfile };
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Zustand stores
@@ -880,6 +890,117 @@ const Loader = memo(function Loader({ message = "Loading workspace…" }: { mess
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Account Disabled screen
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Shown when `profile.is_active === false`.
+ * Renders in full-screen isolation — no sidebar, no nav, no shell chrome.
+ * The only affordance is "Sign Out" so the user can try a different account.
+ */
+const AccountDisabledScreen = memo(function AccountDisabledScreen({
+  onLogout,
+}: {
+  onLogout: () => void;
+}) {
+  return (
+    <div
+      role="alert"
+      aria-live="assertive"
+      style={{
+        minHeight: "100dvh",
+        display: "grid",
+        placeItems: "center",
+        padding: 24,
+        background: "var(--surface-page)",
+      }}
+    >
+      <div
+        className="da-error-card"
+        style={{
+          maxWidth: 420,
+          width: "100%",
+          textAlign: "center",
+          padding: "40px 32px",
+          borderRadius: 16,
+          background: "var(--surface-raised)",
+          border: "1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent)",
+          boxShadow: "0 24px 64px rgba(0,0,0,0.22)",
+        }}
+      >
+        {/* Icon */}
+        <div
+          aria-hidden="true"
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: "50%",
+            background: "color-mix(in srgb, var(--accent-rose) 12%, transparent)",
+            border: "2px solid color-mix(in srgb, var(--accent-rose) 30%, transparent)",
+            display: "grid",
+            placeItems: "center",
+            margin: "0 auto 20px",
+            fontSize: 28,
+          }}
+        >
+          🚫
+        </div>
+
+        {/* Eyebrow */}
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: "0.1em",
+            textTransform: "uppercase",
+            color: "var(--accent-rose)",
+            marginBottom: 10,
+          }}
+        >
+          Access Denied
+        </div>
+
+        {/* Headline */}
+        <h1
+          style={{
+            margin: "0 0 12px",
+            fontSize: 22,
+            fontWeight: 700,
+            color: "var(--fg-default)",
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Account Disabled
+        </h1>
+
+        {/* Body */}
+        <p
+          style={{
+            margin: "0 0 28px",
+            fontSize: 13,
+            color: "var(--fg-muted)",
+            lineHeight: 1.65,
+          }}
+        >
+          Your account has been deactivated. Please contact your administrator
+          if you believe this is an error.
+        </p>
+
+        {/* Sign-out CTA */}
+        <button
+          type="button"
+          onClick={onLogout}
+          className="da-sign-out-btn"
+          style={{ margin: "0 auto" }}
+        >
+          Sign Out
+        </button>
+      </div>
+    </div>
+  );
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Profile panel
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -1132,12 +1253,27 @@ function AppShell() {
   // ── Auth-derived state ────────────────────────────────────
   const { profile, loading, recoveryMode, logout, handleRecoveryComplete, session, profileError } = auth;
 
-  // Build discriminated auth phase
+  // ---------------------------------------------------------------------------
+  // Build the discriminated auth phase.
+  //
+  // Order of checks matters:
+  //   1. loading    — never show content while hydrating
+  //   2. recovery   — password-reset flow takes over the whole screen
+  //   3. unauthed   — no session → login wall
+  //   4. no-profile — session but DB row missing
+  //   5. blocked    — profile exists but is_active is explicitly false
+  //   6. ready      — everything checks out
+  //
+  // The `blocked` check uses `=== false` (strict) so that rows where
+  // `is_active` is null / undefined (e.g. legacy rows before the column
+  // was added) are treated as active rather than accidentally locked out.
+  // ---------------------------------------------------------------------------
   const authPhase = useMemo<AuthPhase>(() => {
-    if (loading)        return { phase: "loading" };
-    if (recoveryMode)   return { phase: "recovery" };
-    if (!session)       return { phase: "unauthed" };
-    if (!profile)       return { phase: "no-profile", error: profileError ?? "No profile row found." };
+    if (loading)      return { phase: "loading" };
+    if (recoveryMode) return { phase: "recovery" };
+    if (!session)     return { phase: "unauthed" };
+    if (!profile)     return { phase: "no-profile", error: profileError ?? "No profile row found." };
+    if (profile.is_active === false) return { phase: "blocked", profile };
     return { phase: "ready", profile };
   }, [loading, recoveryMode, session, profile, profileError]);
 
@@ -1181,7 +1317,6 @@ function AppShell() {
   }, [navigate]);
 
   // ── Keyboard shortcuts ────────────────────────────────────
-  // Using effect-based registration so shortcuts stay current without re-running the registry attach
   useEffect(() => {
     const shortcuts = [
       {
@@ -1262,9 +1397,11 @@ function AppShell() {
   const handleGoToLearning   = useCallback(() => startTransition(() => navigate(ROUTES.learningCenter)), [navigate]);
 
   // ── Auth phase render ─────────────────────────────────────
-  if (authPhase.phase === "loading")    return <Loader />;
-  if (authPhase.phase === "unauthed")   return <Suspense fallback={<Loader message="Loading login…" />}><Login /></Suspense>;
-  if (authPhase.phase === "recovery")   return (
+
+  // Early exits for non-ready phases — no shell chrome rendered at all.
+  if (authPhase.phase === "loading")   return <Loader />;
+  if (authPhase.phase === "unauthed")  return <Suspense fallback={<Loader message="Loading login…" />}><Login /></Suspense>;
+  if (authPhase.phase === "recovery")  return (
     <Suspense fallback={<Loader message="Loading…" />}>
       <ResetPassword onComplete={handleRecoveryComplete} onLogout={logout} />
     </Suspense>
@@ -1288,6 +1425,15 @@ function AppShell() {
       </div>
     </div>
   );
+
+  // ---------------------------------------------------------------------------
+  // Blocked phase — account disabled.
+  // Rendered before any shell chrome so the sidebar, nav, and routes never
+  // mount. The only action available is signing out.
+  // ---------------------------------------------------------------------------
+  if (authPhase.phase === "blocked") {
+    return <AccountDisabledScreen onLogout={handleLogout} />;
+  }
 
   // authPhase.phase === "ready"
   const { profile: readyProfile } = authPhase;

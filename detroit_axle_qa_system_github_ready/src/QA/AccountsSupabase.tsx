@@ -11,6 +11,7 @@ type ProfileRow = {
   display_name: string | null;
   team: 'Calls' | 'Tickets' | 'Sales' | null;
   email: string;
+  is_active: boolean;
   created_at?: string;
 };
 
@@ -133,6 +134,7 @@ function AccountsSupabase() {
   const [displayName, setDisplayName] = useState('');
   const [team, setTeam] = useState<'Calls' | 'Tickets' | 'Sales' | ''>('');
   const [email, setEmail] = useState('');
+  const [isActive, setIsActive] = useState(true);
 
   const themeRefreshKey = useThemeRefresh();
   const themeVars = useMemo(() => getAccountsThemeVars(), [themeRefreshKey]);
@@ -170,6 +172,7 @@ function AccountsSupabase() {
     setDisplayName('');
     setTeam('');
     setEmail('');
+    setIsActive(true);
     setEditingProfileId(null);
   }
 
@@ -187,6 +190,7 @@ function AccountsSupabase() {
     );
     setTeam(roleNeedsTeam(profile.role) ? profile.team || '' : '');
     setEmail(profile.email);
+    setIsActive(profile.is_active !== false);
   }
 
   async function validateAgentUniqueness(profileIdToIgnore?: string) {
@@ -283,6 +287,7 @@ function AccountsSupabase() {
       display_name: role === 'agent' ? cleanDisplayName || null : null,
       team: roleNeedsTeam(role) ? team : null,
       email: cleanEmail,
+      is_active: isActive,
     });
 
     setSaving(false);
@@ -340,6 +345,7 @@ function AccountsSupabase() {
         display_name: role === 'agent' ? cleanDisplayName || null : null,
         team: roleNeedsTeam(role) ? team : null,
         email: cleanEmail,
+        is_active: isActive,
       })
       .eq('id', editingProfileId);
 
@@ -524,6 +530,29 @@ function AccountsSupabase() {
               placeholder="name@detroitaxle.com"
             />
           </div>
+
+          {/* Status toggle */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <label style={labelStyle}>Account Status</label>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isActive}
+              onClick={() => setIsActive((prev) => !prev)}
+              style={toggleTrackStyle(isActive)}
+            >
+              <span style={toggleThumbStyle(isActive)} />
+            </button>
+            <span
+              style={{
+                fontSize: '13px',
+                fontWeight: 700,
+                color: isActive ? 'var(--screen-success-text)' : 'var(--screen-error-text)',
+              }}
+            >
+              {isActive ? 'Active' : 'Blocked'}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -590,6 +619,7 @@ function AccountsSupabase() {
                   <th style={headerCell}>Display Name</th>
                   <th style={headerCell}>Team</th>
                   <th style={headerCell}>Email</th>
+                  <th style={headerCell}>Status</th>
                   <th style={headerCell}>Action</th>
                 </tr>
               </thead>
@@ -603,6 +633,11 @@ function AccountsSupabase() {
                     <td style={bodyCell}>{profile.display_name || '-'}</td>
                     <td style={bodyCell}>{profile.team || '-'}</td>
                     <td style={bodyCell}>{profile.email}</td>
+                    <td style={bodyCell}>
+                      <span style={profile.is_active !== false ? statusActivePill : statusBlockedPill}>
+                        {profile.is_active !== false ? 'Active' : 'Blocked'}
+                      </span>
+                    </td>
                     <td style={bodyCell}>
                       <div
                         style={{
@@ -741,7 +776,7 @@ const tableWrapStyle = {
 const tableStyle = {
   width: '100%',
   borderCollapse: 'collapse' as const,
-  minWidth: '960px',
+  minWidth: '1060px',
 };
 
 const headerCell = {
@@ -806,5 +841,63 @@ const warningCardStyle = {
   background: 'var(--screen-warning-bg)',
   color: 'var(--screen-warning-text)',
 };
+
+const statusActivePill = {
+  display: 'inline-block',
+  padding: '4px 10px',
+  borderRadius: '99px',
+  fontSize: '12px',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  border: '1px solid var(--screen-success-border)',
+  background: 'var(--screen-success-bg)',
+  color: 'var(--screen-success-text)',
+};
+
+const statusBlockedPill = {
+  display: 'inline-block',
+  padding: '4px 10px',
+  borderRadius: '99px',
+  fontSize: '12px',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  border: '1px solid var(--screen-error-border)',
+  background: 'var(--screen-error-bg)',
+  color: 'var(--screen-error-text)',
+};
+
+function toggleTrackStyle(active: boolean): CSSProperties {
+  return {
+    position: 'relative',
+    display: 'inline-flex',
+    alignItems: 'center',
+    width: '44px',
+    height: '24px',
+    borderRadius: '99px',
+    border: active
+      ? '1px solid var(--screen-success-border)'
+      : '1px solid var(--screen-error-border)',
+    background: active
+      ? 'var(--screen-success-bg)'
+      : 'var(--screen-error-bg)',
+    cursor: 'pointer',
+    padding: '2px',
+    transition: 'background 0.2s, border-color 0.2s',
+    flexShrink: 0,
+  };
+}
+
+function toggleThumbStyle(active: boolean): CSSProperties {
+  return {
+    position: 'absolute',
+    left: active ? 'calc(100% - 22px)' : '2px',
+    width: '18px',
+    height: '18px',
+    borderRadius: '50%',
+    background: active ? 'var(--screen-success-text)' : 'var(--screen-error-text)',
+    transition: 'left 0.2s, background 0.2s',
+    boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+  };
+}
 
 export default AccountsSupabase;

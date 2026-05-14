@@ -10,7 +10,6 @@ export type AuditDetail = {
   counts_toward_score?: boolean;
   metric_comment?: string | null;
 };
-
 export type AuditItem = {
   id: string;
   agent_id: string;
@@ -31,7 +30,6 @@ export type AuditItem = {
   created_by_email?: string | null;
   created_by_role?: string | null;
 };
-
 export type SalesRecord = {
   id: string;
   agent_id: string;
@@ -41,7 +39,6 @@ export type SalesRecord = {
   date_to?: string | null;
   notes: string | null;
 };
-
 export type CallsRecord = {
   id: string;
   agent_id: string;
@@ -51,7 +48,6 @@ export type CallsRecord = {
   date_to?: string | null;
   notes: string | null;
 };
-
 export type TicketsRecord = {
   id: string;
   agent_id: string;
@@ -61,7 +57,6 @@ export type TicketsRecord = {
   date_to?: string | null;
   notes: string | null;
 };
-
 export type UserProfile = {
   id: string;
   role: 'admin' | 'qa' | 'agent' | 'supervisor';
@@ -70,8 +65,8 @@ export type UserProfile = {
   display_name: string | null;
   team: 'Calls' | 'Tickets' | 'Sales' | null;
   email: string;
+  is_active: boolean;
 };
-
 export type AgentFeedback = {
   id: string;
   agent_id: string;
@@ -88,7 +83,6 @@ export type AgentFeedback = {
   acknowledged_by_agent?: boolean;
   acknowledged_at?: string | null;
 };
-
 export type MonitoringItem = {
   id: string;
   order_number: string;
@@ -107,7 +101,6 @@ export type MonitoringItem = {
   resolved_by_name: string | null;
   resolved_by_email: string | null;
 };
-
 export type SupervisorRequest = {
   id: string;
   case_reference: string;
