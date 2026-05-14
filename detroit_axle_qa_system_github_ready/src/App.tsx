@@ -91,6 +91,9 @@ import { ErrorBoundary }    from "./components/ErrorBoundary";
 import HelpDrawer           from "./components/HelpDrawer";
 import HelpTourOverlay      from "./components/HelpTourOverlay";
 
+// ── Secret game ───────────────────────────────────────────────
+import { SecretGame } from "./components/SecretGame";
+
 // ── Page components (lazy-loaded for code splitting) ──────────
 const Login                        = lazy(() => import("./QA/Login"));
 const ResetPassword                = lazy(() => import("./QA/ResetPassword"));
@@ -1004,6 +1007,11 @@ const AccountDisabledScreen = memo(function AccountDisabledScreen({
 // Profile panel
 // ═══════════════════════════════════════════════════════════════════════════
 
+// Number of rapid clicks required to unlock the secret game
+const SECRET_CLICK_COUNT  = 5;
+// Window in ms within which all clicks must land
+const SECRET_CLICK_WINDOW = 2000;
+
 const ProfilePanel = memo(function ProfilePanel({
   title,
   profile,
@@ -1013,6 +1021,30 @@ const ProfilePanel = memo(function ProfilePanel({
 }) {
   const initials  = getUserInitials(profile);
   const roleColor = ROLE_COLORS[profile.role ?? "qa"] ?? "var(--fg-muted)";
+
+  // ── Secret game state ────────────────────────────────────
+  const [showGame, setShowGame]     = useState(false);
+  const clickTimestamps             = useRef<number[]>([]);
+
+  // Only admin and qa roles can trigger the easter egg
+  const canTriggerGame = profile.role === "admin" || profile.role === "qa";
+
+  const handleAvatarClick = useCallback(() => {
+    if (!canTriggerGame) return;
+
+    const now = Date.now();
+    // Append current timestamp and drop any that are outside the window
+    clickTimestamps.current = [
+      ...clickTimestamps.current.filter((t) => now - t < SECRET_CLICK_WINDOW),
+      now,
+    ];
+
+    if (clickTimestamps.current.length >= SECRET_CLICK_COUNT) {
+      // Reset counter so the user can't accidentally re-trigger immediately
+      clickTimestamps.current = [];
+      setShowGame(true);
+    }
+  }, [canTriggerGame]);
 
   const fields: [string, string][] = [
     ["Name",         profile.agent_name   ?? "—"],
@@ -1024,36 +1056,67 @@ const ProfilePanel = memo(function ProfilePanel({
   ];
 
   return (
-    <div className="da-profile-panel">
-      <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
-        <div style={{
-          width: 52, height: 52, borderRadius: 14,
-          background: `color-mix(in srgb, ${roleColor} 15%, transparent)`,
-          border: `2px solid color-mix(in srgb, ${roleColor} 30%, transparent)`,
-          display: "grid", placeItems: "center",
-          fontSize: 18, fontWeight: 700, color: roleColor,
-          flexShrink: 0, letterSpacing: "-0.02em",
-        }}>
-          {initials}
-        </div>
-        <div>
-          <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--fg-muted)", marginBottom: 4 }}>
-            Profile
+    <>
+      {/* Secret game overlay — rendered outside the panel so it covers
+          the full viewport regardless of scroll position */}
+      {showGame && <SecretGame onClose={() => setShowGame(false)} />}
+
+      <div className="da-profile-panel">
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 28 }}>
+          {/* Avatar — clickable for admin/qa users to unlock the secret game */}
+          <div
+            onClick={handleAvatarClick}
+            role={canTriggerGame ? "button" : undefined}
+            aria-label={canTriggerGame ? "Profile avatar" : undefined}
+            tabIndex={canTriggerGame ? 0 : undefined}
+            onKeyDown={canTriggerGame
+              ? (e) => { if (e.key === "Enter" || e.key === " ") handleAvatarClick(); }
+              : undefined
+            }
+            style={{
+              width: 52, height: 52, borderRadius: 14,
+              background: `color-mix(in srgb, ${roleColor} 15%, transparent)`,
+              border: `2px solid color-mix(in srgb, ${roleColor} 30%, transparent)`,
+              display: "grid", placeItems: "center",
+              fontSize: 18, fontWeight: 700, color: roleColor,
+              flexShrink: 0, letterSpacing: "-0.02em",
+              // Pointer cursor signals the avatar is interactive for eligible roles
+              cursor: canTriggerGame ? "pointer" : "default",
+              userSelect: "none",
+              transition: "transform 0.1s, box-shadow 0.1s",
+            }}
+            onMouseEnter={(e) => {
+              if (!canTriggerGame) return;
+              (e.currentTarget as HTMLDivElement).style.transform = "scale(1.06)";
+              (e.currentTarget as HTMLDivElement).style.boxShadow =
+                `0 0 0 3px color-mix(in srgb, ${roleColor} 25%, transparent)`;
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLDivElement).style.transform = "scale(1)";
+              (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+            }}
+          >
+            {initials}
           </div>
-          <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--fg-default)", letterSpacing: "-0.02em" }}>
-            {title}
-          </h2>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--fg-muted)", marginBottom: 4 }}>
+              Profile
+            </div>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "var(--fg-default)", letterSpacing: "-0.02em" }}>
+              {title}
+            </h2>
+          </div>
+        </div>
+        <div className="da-profile-grid">
+          {fields.map(([label, value]) => (
+            <div key={label} className="da-profile-field">
+              <div className="da-profile-field-label">{label}</div>
+              <div className="da-profile-field-value">{value}</div>
+            </div>
+          ))}
         </div>
       </div>
-      <div className="da-profile-grid">
-        {fields.map(([label, value]) => (
-          <div key={label} className="da-profile-field">
-            <div className="da-profile-field-label">{label}</div>
-            <div className="da-profile-field-value">{value}</div>
-          </div>
-        ))}
-      </div>
-    </div>
+    </>
   );
 });
 
