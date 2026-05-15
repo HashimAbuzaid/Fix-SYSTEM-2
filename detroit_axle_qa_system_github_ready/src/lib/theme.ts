@@ -487,7 +487,7 @@ export function applyThemeCssVariables(mode: ThemeMode): void {
 
 // ── createStyles ─────────────────────────────────────────────
 
-export function createStyles(theme: ThemePalette, mode: ThemeMode) {
+export function createStyles(theme: ThemePalette, _mode: ThemeMode) {
   const secondaryButtonBase: CSSProperties = {
     padding: '8px 14px',
     borderRadius: '8px',

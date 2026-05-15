@@ -16,14 +16,12 @@ import {
   useCallback,
   type CSSProperties,
   type FC,
-  type ReactNode,
 } from "react";
-import { useNavigate } from "react-router-dom";
 import type { NavItem } from "../../config/navItems";
 import type { UserProfile } from "../../context/AuthContext";
 import type { RoutePath } from "../../config/routes";
-import { GROUP_ACCENT, ROUTES } from "../../config/routes";
-import { ROLE_COLORS, getUserInitials } from "../../config/navItems";
+import { GROUP_ACCENT } from "../../config/routes";
+import { ROLE_COLORS } from "../../config/navItems";
 
 /* ─── Types ────────────────────────────────────────────────── */
 
