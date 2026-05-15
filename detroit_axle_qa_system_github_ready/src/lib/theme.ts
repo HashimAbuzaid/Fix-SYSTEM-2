@@ -7,15 +7,12 @@ export type ThemePalette = {
   shellColor: string;
   bodyBackground: string;
   bodyColor: string;
-  glowTop: string;
-  glowBottom: string;
   headerBackground: string;
   headerBorder: string;
   headerShadow: string;
   brandEyebrow: string;
   brandTitle: string;
   brandAccent: string;
-  brandAccentShadow: string;
   metaBackground: string;
   metaBorder: string;
   metaText: string;
@@ -78,7 +75,7 @@ export type ThemePalette = {
   profileStatValue: string;
 };
 
-/* ── Theme detection ── */
+// ── Theme detection ──────────────────────────────────────────
 
 export function isThemeMode(value: string): value is ThemeMode {
   return value === 'dark' || value === 'light';
@@ -87,321 +84,394 @@ export function isThemeMode(value: string): value is ThemeMode {
 export function readStoredTheme(): ThemeMode {
   if (typeof window !== 'undefined') {
     try {
-      const stored = window.localStorage.getItem('detroit-axle-theme-mode');
+      const stored = window.localStorage.getItem('da-theme-mode');
       if (stored && isThemeMode(stored)) return stored;
-    } catch {
-      /* ignore */
-    }
-
-    if (window.matchMedia('(prefers-color-scheme: light)').matches) {
-      return 'light';
-    }
+    } catch { /* ignore */ }
+    if (window.matchMedia('(prefers-color-scheme: light)').matches) return 'light';
   }
   return 'dark';
 }
 
-/* ── Palettes ── */
+// ── Palettes ─────────────────────────────────────────────────
+//
+// Claude-aesthetic: calm neutrals, warm blacks/whites,
+// teal (#2A9D8F) as the single accent.
+// No gradients on backgrounds; depth via layered borders
+// and very subtle box-shadows.
 
 export function getThemePalette(mode: ThemeMode): ThemePalette {
   if (mode === 'light') {
     return {
-      shellBackground:
-        'radial-gradient(ellipse 80% 40% at 10% -10%, rgba(37,99,235,0.12), transparent 60%), ' +
-        'radial-gradient(ellipse 60% 30% at 90% 110%, rgba(99,102,241,0.08), transparent 50%), ' +
-        'linear-gradient(180deg, #f4f8ff 0%, #eef4ff 100%)',
-      shellColor: '#0f172a',
-      bodyBackground: '#edf4ff',
-      bodyColor: '#0f172a',
-      glowTop: 'radial-gradient(circle, rgba(37,99,235,0.12) 0%, transparent 68%)',
-      glowBottom: 'radial-gradient(circle, rgba(14,165,233,0.10) 0%, transparent 70%)',
-      headerBackground: 'rgba(255,255,255,0.88)',
-      headerBorder: '1px solid rgba(148,163,184,0.20)',
-      headerShadow: '0 4px 24px rgba(15,23,42,0.08)',
-      brandEyebrow: '#2563eb',
-      brandTitle: '#0f172a',
-      brandAccent: 'linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)',
-      brandAccentShadow: '0 0 24px rgba(37,99,235,0.22)',
-      metaBackground: 'rgba(255,255,255,0.80)',
-      metaBorder: '1px solid rgba(148,163,184,0.20)',
-      metaText: '#334155',
-      navButtonBackground: 'rgba(255,255,255,0.82)',
-      navButtonBorder: '1px solid rgba(148,163,184,0.18)',
-      navButtonText: '#475569',
-      navButtonActiveBackground: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
-      navButtonActiveBorder: '1px solid rgba(96,165,250,0.40)',
+      // Shell
+      shellBackground: '#F7F7F5',
+      shellColor: '#1A1A1A',
+      bodyBackground: '#F7F7F5',
+      bodyColor: '#1A1A1A',
+
+      // Header
+      headerBackground: 'rgba(255,255,255,0.90)',
+      headerBorder: '1px solid rgba(0,0,0,0.07)',
+      headerShadow: '0 1px 0 rgba(0,0,0,0.06)',
+
+      // Brand
+      brandEyebrow: '#2A9D8F',
+      brandTitle: '#1A1A1A',
+      brandAccent: '#2A9D8F',
+
+      // Meta / pill surfaces
+      metaBackground: 'rgba(255,255,255,0.88)',
+      metaBorder: '1px solid rgba(0,0,0,0.08)',
+      metaText: '#555555',
+
+      // Nav
+      navButtonBackground: 'rgba(255,255,255,0.85)',
+      navButtonBorder: '1px solid rgba(0,0,0,0.08)',
+      navButtonText: '#555555',
+      navButtonActiveBackground: '#2A9D8F',
+      navButtonActiveBorder: '1px solid rgba(42,157,143,0.35)',
       navButtonActiveText: '#ffffff',
-      navButtonActiveShadow: '0 8px 20px rgba(37,99,235,0.24)',
-      panelBackground: 'rgba(255,255,255,0.80)',
-      panelBorder: '1px solid rgba(148,163,184,0.16)',
-      panelShadow: '0 20px 48px rgba(15,23,42,0.10)',
-      profileCardBackground: 'rgba(248,251,255,0.92)',
-      profileCardBorder: '1px solid rgba(148,163,184,0.18)',
-      profileCardLabel: '#3b82f6',
-      profileCardValue: '#0f172a',
-      buttonPrimaryBackground: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-      buttonPrimaryBorder: '1px solid rgba(37,99,235,0.30)',
+      navButtonActiveShadow: '0 4px 14px rgba(42,157,143,0.22)',
+
+      // Panels
+      panelBackground: 'rgba(255,255,255,0.85)',
+      panelBorder: '1px solid rgba(0,0,0,0.07)',
+      panelShadow: '0 4px 20px rgba(0,0,0,0.07)',
+
+      // Profile card
+      profileCardBackground: '#FFFFFF',
+      profileCardBorder: '1px solid rgba(0,0,0,0.08)',
+      profileCardLabel: '#2A9D8F',
+      profileCardValue: '#1A1A1A',
+
+      // Primary button
+      buttonPrimaryBackground: '#2A9D8F',
+      buttonPrimaryBorder: '1px solid rgba(42,157,143,0.30)',
       buttonPrimaryText: '#ffffff',
-      buttonPrimaryShadow: '0 8px 20px rgba(37,99,235,0.28)',
+      buttonPrimaryShadow: '0 4px 12px rgba(42,157,143,0.22)',
+
+      // Secondary button
       buttonSecondaryBackground: 'rgba(255,255,255,0.90)',
-      buttonSecondaryBorder: '1px solid rgba(148,163,184,0.22)',
-      buttonSecondaryText: '#334155',
-      loadingBackground:
-        'radial-gradient(ellipse 70% 40% at 10% -5%, rgba(37,99,235,0.12), transparent 55%), ' +
-        'linear-gradient(180deg, #f4f8ff 0%, #edf4ff 100%)',
-      loadingCardBackground: 'rgba(255,255,255,0.92)',
-      loadingCardBorder: '1px solid rgba(148,163,184,0.18)',
-      loadingDotBackground: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
-      loadingDotShadow: '0 0 14px rgba(37,99,235,0.35)',
-      loadingText: '#0f172a',
-      loadingSubtext: '#64748b',
-      errorCardBackground: 'rgba(255,255,255,0.94)',
-      errorCardBorder: '1px solid rgba(248,113,113,0.24)',
-      errorText: '#0f172a',
-      contentText: '#334155',
-      compactHeaderBg: 'rgba(255,255,255,0.88)',
-      compactHeaderBorder: '1px solid rgba(148,163,184,0.18)',
-      compactHeaderShadow: '0 2px 20px rgba(15,23,42,0.07)',
-      headerBrandNameColor: '#0f172a',
-      headerBrandSubColor: '#64748b',
-      headerPageTitleColor: '#0f172a',
-      headerCrumbColor: '#94a3b8',
-      headerUserAvatarBg: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+      buttonSecondaryBorder: '1px solid rgba(0,0,0,0.10)',
+      buttonSecondaryText: '#3A3A3A',
+
+      // Loading
+      loadingBackground: '#F7F7F5',
+      loadingCardBackground: '#FFFFFF',
+      loadingCardBorder: '1px solid rgba(0,0,0,0.08)',
+      loadingDotBackground: '#2A9D8F',
+      loadingDotShadow: '0 0 10px rgba(42,157,143,0.30)',
+      loadingText: '#1A1A1A',
+      loadingSubtext: '#888888',
+
+      // Error
+      errorCardBackground: '#FFFFFF',
+      errorCardBorder: '1px solid rgba(229,115,115,0.22)',
+      errorText: '#1A1A1A',
+
+      // Content
+      contentText: '#3A3A3A',
+
+      // Compact header
+      compactHeaderBg: 'rgba(255,255,255,0.90)',
+      compactHeaderBorder: '1px solid rgba(0,0,0,0.07)',
+      compactHeaderShadow: '0 1px 0 rgba(0,0,0,0.06)',
+
+      // Header internals
+      headerBrandNameColor: '#1A1A1A',
+      headerBrandSubColor: '#888888',
+      headerPageTitleColor: '#1A1A1A',
+      headerCrumbColor: '#ADADAD',
+      headerUserAvatarBg: '#2A9D8F',
       headerUserAvatarText: '#ffffff',
-      headerUserNameColor: '#0f172a',
-      headerUserRoleColor: '#64748b',
-      headerIconBtnBg: 'rgba(248,250,252,0.90)',
-      headerIconBtnBorder: '1px solid rgba(148,163,184,0.18)',
-      headerIconBtnColor: '#475569',
-      headerIconBtnHoverBg: 'rgba(239,246,255,0.95)',
-      headerSignOutBg: 'rgba(254,242,242,0.90)',
-      headerSignOutBorder: '1px solid rgba(252,165,165,0.26)',
-      headerSignOutColor: '#b91c1c',
-      navGroupLabelColor: '#94a3b8',
-      navDividerColor: 'rgba(148,163,184,0.14)',
-      avatarRingColor: 'rgba(37,99,235,0.28)',
-      profileStatBg: 'rgba(239,246,255,0.90)',
-      profileStatBorder: '1px solid rgba(37,99,235,0.14)',
-      profileStatLabel: '#2563eb',
-      profileStatValue: '#0f172a',
+      headerUserNameColor: '#1A1A1A',
+      headerUserRoleColor: '#888888',
+      headerIconBtnBg: 'rgba(0,0,0,0.03)',
+      headerIconBtnBorder: '1px solid rgba(0,0,0,0.08)',
+      headerIconBtnColor: '#6B6B6B',
+      headerIconBtnHoverBg: 'rgba(42,157,143,0.08)',
+      headerSignOutBg: 'rgba(229,115,115,0.06)',
+      headerSignOutBorder: '1px solid rgba(229,115,115,0.18)',
+      headerSignOutColor: '#C0392B',
+
+      // Sidebar nav
+      navGroupLabelColor: '#ADADAD',
+      navDividerColor: 'rgba(0,0,0,0.06)',
+
+      // Avatar ring
+      avatarRingColor: 'rgba(42,157,143,0.25)',
+
+      // Profile stats
+      profileStatBg: 'rgba(42,157,143,0.06)',
+      profileStatBorder: '1px solid rgba(42,157,143,0.14)',
+      profileStatLabel: '#2A9D8F',
+      profileStatValue: '#1A1A1A',
     };
   }
 
+  // ── Dark palette ──
   return {
-    shellBackground:
-      'radial-gradient(ellipse 80% 40% at 10% -10%, rgba(37,99,235,0.16), transparent 60%), ' +
-      'radial-gradient(ellipse 60% 30% at 90% 110%, rgba(99,102,241,0.12), transparent 50%), ' +
-      'linear-gradient(180deg, #050d1a 0%, #080f1e 50%, #060c18 100%)',
-    shellColor: '#e5eefb',
-    bodyBackground: '#050d1a',
-    bodyColor: '#e5eefb',
-    glowTop: 'radial-gradient(circle, rgba(37,99,235,0.18) 0%, transparent 68%)',
-    glowBottom: 'radial-gradient(circle, rgba(14,165,233,0.14) 0%, transparent 70%)',
-    headerBackground: 'rgba(8, 16, 32, 0.82)',
-    headerBorder: '1px solid rgba(148,163,184,0.12)',
-    headerShadow: '0 4px 24px rgba(0,0,0,0.36)',
-    brandEyebrow: '#60a5fa',
-    brandTitle: '#f8fbff',
-    brandAccent: 'linear-gradient(180deg, #60a5fa 0%, #2563eb 100%)',
-    brandAccentShadow: '0 0 28px rgba(37,99,235,0.50)',
-    metaBackground: 'rgba(8,16,34,0.68)',
-    metaBorder: '1px solid rgba(148,163,184,0.12)',
-    metaText: '#94a3b8',
-    navButtonBackground: 'rgba(8,16,34,0.68)',
-    navButtonBorder: '1px solid rgba(148,163,184,0.12)',
-    navButtonText: '#94a3b8',
-    navButtonActiveBackground: 'linear-gradient(135deg, rgba(29,78,216,0.95) 0%, rgba(59,130,246,0.90) 100%)',
-    navButtonActiveBorder: '1px solid rgba(96,165,250,0.36)',
+    shellBackground: '#1A1A1A',
+    shellColor: '#ECECEC',
+    bodyBackground: '#1A1A1A',
+    bodyColor: '#ECECEC',
+
+    headerBackground: 'rgba(26,26,26,0.92)',
+    headerBorder: '1px solid rgba(255,255,255,0.07)',
+    headerShadow: '0 1px 0 rgba(0,0,0,0.40)',
+
+    brandEyebrow: '#3BBCAD',
+    brandTitle: '#ECECEC',
+    brandAccent: '#2A9D8F',
+
+    metaBackground: 'rgba(255,255,255,0.05)',
+    metaBorder: '1px solid rgba(255,255,255,0.08)',
+    metaText: '#888888',
+
+    navButtonBackground: 'rgba(255,255,255,0.05)',
+    navButtonBorder: '1px solid rgba(255,255,255,0.08)',
+    navButtonText: '#888888',
+    navButtonActiveBackground: '#2A9D8F',
+    navButtonActiveBorder: '1px solid rgba(42,157,143,0.40)',
     navButtonActiveText: '#ffffff',
-    navButtonActiveShadow: '0 8px 24px rgba(37,99,235,0.32)',
-    panelBackground: 'rgba(8, 16, 32, 0.72)',
-    panelBorder: '1px solid rgba(148,163,184,0.10)',
-    panelShadow: '0 24px 64px rgba(0,0,0,0.50)',
-    profileCardBackground: 'rgba(8,16,34,0.68)',
-    profileCardBorder: '1px solid rgba(148,163,184,0.10)',
-    profileCardLabel: '#60a5fa',
-    profileCardValue: '#f8fafc',
-    buttonPrimaryBackground: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
-    buttonPrimaryBorder: '1px solid rgba(96,165,250,0.32)',
+    navButtonActiveShadow: '0 4px 14px rgba(42,157,143,0.28)',
+
+    panelBackground: 'rgba(33,33,33,0.85)',
+    panelBorder: '1px solid rgba(255,255,255,0.08)',
+    panelShadow: '0 4px 24px rgba(0,0,0,0.45)',
+
+    profileCardBackground: 'rgba(42,42,42,0.80)',
+    profileCardBorder: '1px solid rgba(255,255,255,0.08)',
+    profileCardLabel: '#3BBCAD',
+    profileCardValue: '#ECECEC',
+
+    buttonPrimaryBackground: '#2A9D8F',
+    buttonPrimaryBorder: '1px solid rgba(42,157,143,0.35)',
     buttonPrimaryText: '#ffffff',
-    buttonPrimaryShadow: '0 8px 24px rgba(37,99,235,0.36)',
-    buttonSecondaryBackground: 'rgba(8,16,34,0.72)',
-    buttonSecondaryBorder: '1px solid rgba(148,163,184,0.16)',
-    buttonSecondaryText: '#e5eefb',
-    loadingBackground:
-      'radial-gradient(ellipse 70% 40% at 10% -5%, rgba(37,99,235,0.20), transparent 55%), ' +
-      'linear-gradient(180deg, #050d1a 0%, #080f1e 100%)',
-    loadingCardBackground: 'rgba(8,16,34,0.80)',
-    loadingCardBorder: '1px solid rgba(148,163,184,0.12)',
-    loadingDotBackground: 'linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)',
-    loadingDotShadow: '0 0 14px rgba(37,99,235,0.50)',
-    loadingText: '#f8fbff',
-    loadingSubtext: '#64748b',
-    errorCardBackground: 'rgba(8,16,34,0.82)',
-    errorCardBorder: '1px solid rgba(248,113,113,0.20)',
-    errorText: '#f8fafc',
-    contentText: '#e5eefb',
-    compactHeaderBg: 'rgba(6, 12, 26, 0.86)',
-    compactHeaderBorder: '1px solid rgba(148,163,184,0.10)',
-    compactHeaderShadow: '0 2px 24px rgba(0,0,0,0.40)',
-    headerBrandNameColor: '#f8fbff',
-    headerBrandSubColor: '#64748b',
-    headerPageTitleColor: '#e5eefb',
-    headerCrumbColor: '#475569',
-    headerUserAvatarBg: 'linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%)',
+    buttonPrimaryShadow: '0 4px 14px rgba(42,157,143,0.28)',
+
+    buttonSecondaryBackground: 'rgba(255,255,255,0.06)',
+    buttonSecondaryBorder: '1px solid rgba(255,255,255,0.10)',
+    buttonSecondaryText: '#C8C8C8',
+
+    loadingBackground: '#1A1A1A',
+    loadingCardBackground: 'rgba(33,33,33,0.90)',
+    loadingCardBorder: '1px solid rgba(255,255,255,0.08)',
+    loadingDotBackground: '#2A9D8F',
+    loadingDotShadow: '0 0 12px rgba(42,157,143,0.40)',
+    loadingText: '#ECECEC',
+    loadingSubtext: '#888888',
+
+    errorCardBackground: 'rgba(33,33,33,0.90)',
+    errorCardBorder: '1px solid rgba(229,115,115,0.20)',
+    errorText: '#ECECEC',
+
+    contentText: '#C8C8C8',
+
+    compactHeaderBg: 'rgba(26,26,26,0.92)',
+    compactHeaderBorder: '1px solid rgba(255,255,255,0.07)',
+    compactHeaderShadow: '0 1px 0 rgba(0,0,0,0.40)',
+
+    headerBrandNameColor: '#ECECEC',
+    headerBrandSubColor: '#888888',
+    headerPageTitleColor: '#ECECEC',
+    headerCrumbColor: '#555555',
+    headerUserAvatarBg: '#2A9D8F',
     headerUserAvatarText: '#ffffff',
-    headerUserNameColor: '#e5eefb',
-    headerUserRoleColor: '#64748b',
-    headerIconBtnBg: 'rgba(15,23,42,0.70)',
-    headerIconBtnBorder: '1px solid rgba(148,163,184,0.14)',
-    headerIconBtnColor: '#94a3b8',
-    headerIconBtnHoverBg: 'rgba(29,78,216,0.20)',
-    headerSignOutBg: 'rgba(127,29,29,0.22)',
-    headerSignOutBorder: '1px solid rgba(248,113,113,0.20)',
-    headerSignOutColor: '#fca5a5',
-    navGroupLabelColor: '#334155',
-    navDividerColor: 'rgba(148,163,184,0.08)',
-    avatarRingColor: 'rgba(59,130,246,0.36)',
-    profileStatBg: 'rgba(29,78,216,0.14)',
-    profileStatBorder: '1px solid rgba(96,165,250,0.18)',
-    profileStatLabel: '#60a5fa',
-    profileStatValue: '#f8fafc',
+    headerUserNameColor: '#ECECEC',
+    headerUserRoleColor: '#888888',
+    headerIconBtnBg: 'rgba(255,255,255,0.04)',
+    headerIconBtnBorder: '1px solid rgba(255,255,255,0.08)',
+    headerIconBtnColor: '#888888',
+    headerIconBtnHoverBg: 'rgba(42,157,143,0.12)',
+    headerSignOutBg: 'rgba(229,115,115,0.08)',
+    headerSignOutBorder: '1px solid rgba(229,115,115,0.18)',
+    headerSignOutColor: '#E57373',
+
+    navGroupLabelColor: '#555555',
+    navDividerColor: 'rgba(255,255,255,0.06)',
+
+    avatarRingColor: 'rgba(42,157,143,0.30)',
+
+    profileStatBg: 'rgba(42,157,143,0.10)',
+    profileStatBorder: '1px solid rgba(42,157,143,0.20)',
+    profileStatLabel: '#3BBCAD',
+    profileStatValue: '#ECECEC',
   };
 }
 
-/* ── CSS Variables ── */
+// ── CSS Variables ────────────────────────────────────────────
+//
+// Applied to <html> so every CSS rule inheriting from :root
+// picks up the theme without class toggling.
 
 const LIGHT_CSS_VARS = {
-  '--da-page-text': '#334155',
-  '--da-title': '#0f172a',
-  '--da-muted-text': '#475569',
-  '--da-subtle-text': '#64748b',
-  '--da-eyebrow': '#3b82f6',
-  '--da-section-eyebrow': '#2563eb',
-  '--da-accent-text': '#2563eb',
-  '--da-option-bg': '#ffffff',
-  '--da-meta-bg': 'rgba(255,255,255,0.92)',
-  '--da-meta-border': '1px solid rgba(148,163,184,0.22)',
-  '--da-meta-text': '#475569',
-  '--da-field-bg': 'rgba(255,255,255,0.96)',
-  '--da-field-border': '1px solid rgba(148,163,184,0.22)',
-  '--da-field-text': '#0f172a',
-  '--da-secondary-bg': 'rgba(255,255,255,0.96)',
-  '--da-secondary-border': '1px solid rgba(148,163,184,0.24)',
-  '--da-secondary-text': '#334155',
-  '--da-surface-bg': 'rgba(255,255,255,0.94)',
-  '--da-card-bg': 'rgba(248,250,252,0.94)',
-  '--da-menu-bg': 'rgba(255,255,255,0.98)',
-  '--da-panel-bg': 'linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(244,247,255,0.92) 100%)',
-  '--da-panel-border': '1px solid rgba(148,163,184,0.18)',
-  '--da-panel-shadow': '0 18px 42px rgba(15,23,42,0.10)',
-  '--da-card-label': '#64748b',
-  '--da-card-value': '#0f172a',
-  '--da-card-subtitle': '#94a3b8',
-  '--da-row-bg': 'rgba(248,250,252,0.92)',
-  '--da-row-border': '1px solid rgba(148,163,184,0.18)',
-  '--da-row-title': '#0f172a',
-  '--da-row-subtitle': '#64748b',
-  '--da-rank-badge-bg': 'rgba(37,99,235,0.12)',
-  '--da-rank-badge-text': '#2563eb',
-  '--da-pill-bg': 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
-  '--da-pill-text': '#1d4ed8',
-  '--da-team-meta': '#475569',
-  '--da-insight-title': '#2563eb',
-  '--da-insight-body': '#475569',
-  '--da-empty-bg': 'rgba(248,250,252,0.88)',
-  '--da-empty-border': '1px dashed rgba(148,163,184,0.28)',
-  '--da-empty-text': '#64748b',
-  '--da-status-pill-bg': 'rgba(255,255,255,0.94)',
-  '--da-status-pill-border': '1px solid rgba(148,163,184,0.22)',
-  '--da-status-pill-text': '#475569',
-  '--da-active-option-bg': 'rgba(191,219,254,0.92)',
-  '--da-success-bg': 'rgba(240,253,244,0.98)',
-  '--da-success-border': '1px solid rgba(74,222,128,0.28)',
-  '--da-success-text': '#166534',
-  '--da-warning-bg': 'rgba(255,247,237,0.98)',
-  '--da-warning-border': '1px solid rgba(251,191,36,0.28)',
-  '--da-warning-text': '#9a3412',
-  '--da-error-bg': 'rgba(254,242,242,0.98)',
-  '--da-error-border': '1px solid rgba(248,113,113,0.24)',
-  '--da-error-text': '#b91c1c',
-  '--da-widget-bg': 'linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(244,247,255,0.94) 100%)',
-  '--da-widget-border': '1px solid rgba(148,163,184,0.2)',
-  '--da-widget-title': '#0f172a',
-  '--da-widget-subtitle': '#64748b',
-  '--screen-field-bg': 'rgba(255,255,255,0.96)',
-  '--screen-field-text': '#0f172a',
-  '--screen-border': 'rgba(148,163,184,0.22)',
-  '--screen-heading': '#0f172a',
-  '--screen-muted': '#64748b',
-  '--screen-select-option-bg': '#ffffff',
-  '--screen-select-option-text': '#0f172a',
+  '--da-page-text':    '#3A3A3A',
+  '--da-title':        '#1A1A1A',
+  '--da-muted-text':   '#555555',
+  '--da-subtle-text':  '#888888',
+  '--da-eyebrow':      '#2A9D8F',
+  '--da-section-eyebrow': '#2A9D8F',
+  '--da-accent-text':  '#2A9D8F',
+
+  '--da-option-bg':     '#FFFFFF',
+  '--da-meta-bg':       'rgba(255,255,255,0.90)',
+  '--da-meta-border':   '1px solid rgba(0,0,0,0.08)',
+  '--da-meta-text':     '#555555',
+
+  '--da-field-bg':      '#FFFFFF',
+  '--da-field-border':  '1px solid rgba(0,0,0,0.10)',
+  '--da-field-text':    '#1A1A1A',
+
+  '--da-secondary-bg':     '#FFFFFF',
+  '--da-secondary-border': '1px solid rgba(0,0,0,0.10)',
+  '--da-secondary-text':   '#3A3A3A',
+
+  '--da-surface-bg':  'rgba(255,255,255,0.90)',
+  '--da-card-bg':     'rgba(248,248,246,0.92)',
+  '--da-menu-bg':     'rgba(255,255,255,0.98)',
+
+  '--da-panel-bg':     'rgba(255,255,255,0.88)',
+  '--da-panel-border': '1px solid rgba(0,0,0,0.07)',
+  '--da-panel-shadow': '0 4px 20px rgba(0,0,0,0.07)',
+
+  '--da-card-label':    '#888888',
+  '--da-card-value':    '#1A1A1A',
+  '--da-card-subtitle': '#ADADAD',
+
+  '--da-row-bg':       'rgba(248,248,246,0.90)',
+  '--da-row-border':   '1px solid rgba(0,0,0,0.07)',
+  '--da-row-title':    '#1A1A1A',
+  '--da-row-subtitle': '#888888',
+
+  '--da-rank-badge-bg':   'rgba(42,157,143,0.10)',
+  '--da-rank-badge-text': '#2A9D8F',
+
+  '--da-pill-bg':   'rgba(42,157,143,0.10)',
+  '--da-pill-text': '#2A9D8F',
+
+  '--da-team-meta':    '#555555',
+  '--da-insight-title':'#2A9D8F',
+  '--da-insight-body': '#555555',
+
+  '--da-empty-bg':     'rgba(248,248,246,0.88)',
+  '--da-empty-border': '1px dashed rgba(0,0,0,0.12)',
+  '--da-empty-text':   '#888888',
+
+  '--da-status-pill-bg':     'rgba(255,255,255,0.90)',
+  '--da-status-pill-border': '1px solid rgba(0,0,0,0.10)',
+  '--da-status-pill-text':   '#555555',
+
+  '--da-active-option-bg': 'rgba(42,157,143,0.10)',
+
+  '--da-success-bg':     'rgba(52,169,143,0.08)',
+  '--da-success-border': '1px solid rgba(52,169,143,0.22)',
+  '--da-success-text':   '#167a67',
+
+  '--da-warning-bg':     'rgba(233,168,76,0.08)',
+  '--da-warning-border': '1px solid rgba(233,168,76,0.22)',
+  '--da-warning-text':   '#9a6600',
+
+  '--da-error-bg':     'rgba(229,115,115,0.07)',
+  '--da-error-border': '1px solid rgba(229,115,115,0.20)',
+  '--da-error-text':   '#C0392B',
+
+  '--da-widget-bg':       'rgba(255,255,255,0.92)',
+  '--da-widget-border':   '1px solid rgba(0,0,0,0.08)',
+  '--da-widget-title':    '#1A1A1A',
+  '--da-widget-subtitle': '#888888',
+
+  '--screen-field-bg':          '#FFFFFF',
+  '--screen-field-text':        '#1A1A1A',
+  '--screen-border':            'rgba(0,0,0,0.10)',
+  '--screen-heading':           '#1A1A1A',
+  '--screen-muted':             '#888888',
+  '--screen-select-option-bg':  '#FFFFFF',
+  '--screen-select-option-text':'#1A1A1A',
 } as const;
 
 const DARK_CSS_VARS = {
-  '--da-page-text': '#e5eefb',
-  '--da-title': '#f8fafc',
-  '--da-muted-text': '#cbd5e1',
-  '--da-subtle-text': '#94a3b8',
-  '--da-eyebrow': '#60a5fa',
-  '--da-section-eyebrow': '#93c5fd',
-  '--da-accent-text': '#93c5fd',
-  '--da-option-bg': '#0d1a30',
-  '--da-meta-bg': 'rgba(8,16,34,0.68)',
-  '--da-meta-border': '1px solid rgba(148,163,184,0.12)',
-  '--da-meta-text': '#94a3b8',
-  '--da-field-bg': 'rgba(8,16,34,0.80)',
-  '--da-field-border': '1px solid rgba(148,163,184,0.14)',
-  '--da-field-text': '#e5eefb',
-  '--da-secondary-bg': 'rgba(8,16,34,0.72)',
-  '--da-secondary-border': '1px solid rgba(148,163,184,0.14)',
-  '--da-secondary-text': '#e5eefb',
-  '--da-surface-bg': 'rgba(8,16,34,0.68)',
-  '--da-card-bg': 'rgba(8,16,34,0.56)',
-  '--da-menu-bg': 'rgba(6,12,26,0.98)',
-  '--da-panel-bg': 'linear-gradient(180deg, rgba(8,16,34,0.88) 0%, rgba(8,16,34,0.72) 100%)',
-  '--da-panel-border': '1px solid rgba(148,163,184,0.10)',
-  '--da-panel-shadow': '0 20px 48px rgba(0,0,0,0.46)',
-  '--da-card-label': '#64748b',
-  '--da-card-value': '#f8fafc',
-  '--da-card-subtitle': '#475569',
-  '--da-row-bg': 'rgba(8,16,34,0.56)',
-  '--da-row-border': '1px solid rgba(148,163,184,0.10)',
-  '--da-row-title': '#f8fafc',
-  '--da-row-subtitle': '#64748b',
-  '--da-rank-badge-bg': 'rgba(29,78,216,0.22)',
-  '--da-rank-badge-text': '#93c5fd',
-  '--da-pill-bg': 'linear-gradient(135deg, #0f4c81 0%, #2563eb 100%)',
-  '--da-pill-text': '#ffffff',
-  '--da-team-meta': '#94a3b8',
-  '--da-insight-title': '#60a5fa',
-  '--da-insight-body': '#94a3b8',
-  '--da-empty-bg': 'rgba(8,16,34,0.56)',
-  '--da-empty-border': '1px dashed rgba(148,163,184,0.16)',
-  '--da-empty-text': '#64748b',
-  '--da-status-pill-bg': 'rgba(8,16,34,0.68)',
-  '--da-status-pill-border': '1px solid rgba(148,163,184,0.12)',
-  '--da-status-pill-text': '#94a3b8',
-  '--da-active-option-bg': 'rgba(29,78,216,0.28)',
-  '--da-success-bg': 'rgba(22,101,52,0.18)',
-  '--da-success-border': '1px solid rgba(74,222,128,0.20)',
-  '--da-success-text': '#bbf7d0',
-  '--da-warning-bg': 'rgba(120,53,15,0.22)',
-  '--da-warning-border': '1px solid rgba(251,191,36,0.22)',
-  '--da-warning-text': '#fde68a',
-  '--da-error-bg': 'rgba(127,29,29,0.24)',
-  '--da-error-border': '1px solid rgba(248,113,113,0.20)',
-  '--da-error-text': '#fecaca',
-  '--da-widget-bg': 'linear-gradient(180deg, rgba(8,16,34,0.94) 0%, rgba(8,16,34,0.82) 100%)',
-  '--da-widget-border': '1px solid rgba(96,165,250,0.18)',
-  '--da-widget-title': '#f8fafc',
-  '--da-widget-subtitle': '#64748b',
-  '--screen-field-bg': 'rgba(8,16,34,0.80)',
-  '--screen-field-text': '#e5eefb',
-  '--screen-border': 'rgba(148,163,184,0.14)',
-  '--screen-heading': '#f8fafc',
-  '--screen-muted': '#94a3b8',
-  '--screen-select-option-bg': '#0d1a30',
-  '--screen-select-option-text': '#e5eefb',
+  '--da-page-text':    '#C8C8C8',
+  '--da-title':        '#ECECEC',
+  '--da-muted-text':   '#ADADAD',
+  '--da-subtle-text':  '#888888',
+  '--da-eyebrow':      '#3BBCAD',
+  '--da-section-eyebrow': '#3BBCAD',
+  '--da-accent-text':  '#3BBCAD',
+
+  '--da-option-bg':     '#212121',
+  '--da-meta-bg':       'rgba(255,255,255,0.05)',
+  '--da-meta-border':   '1px solid rgba(255,255,255,0.08)',
+  '--da-meta-text':     '#888888',
+
+  '--da-field-bg':      'rgba(255,255,255,0.06)',
+  '--da-field-border':  '1px solid rgba(255,255,255,0.09)',
+  '--da-field-text':    '#ECECEC',
+
+  '--da-secondary-bg':     'rgba(255,255,255,0.05)',
+  '--da-secondary-border': '1px solid rgba(255,255,255,0.09)',
+  '--da-secondary-text':   '#C8C8C8',
+
+  '--da-surface-bg':  'rgba(255,255,255,0.05)',
+  '--da-card-bg':     'rgba(255,255,255,0.04)',
+  '--da-menu-bg':     'rgba(26,26,26,0.98)',
+
+  '--da-panel-bg':     'rgba(33,33,33,0.85)',
+  '--da-panel-border': '1px solid rgba(255,255,255,0.08)',
+  '--da-panel-shadow': '0 4px 24px rgba(0,0,0,0.45)',
+
+  '--da-card-label':    '#555555',
+  '--da-card-value':    '#ECECEC',
+  '--da-card-subtitle': '#555555',
+
+  '--da-row-bg':       'rgba(255,255,255,0.04)',
+  '--da-row-border':   '1px solid rgba(255,255,255,0.07)',
+  '--da-row-title':    '#ECECEC',
+  '--da-row-subtitle': '#888888',
+
+  '--da-rank-badge-bg':   'rgba(42,157,143,0.15)',
+  '--da-rank-badge-text': '#3BBCAD',
+
+  '--da-pill-bg':   'rgba(42,157,143,0.14)',
+  '--da-pill-text': '#3BBCAD',
+
+  '--da-team-meta':    '#888888',
+  '--da-insight-title':'#3BBCAD',
+  '--da-insight-body': '#888888',
+
+  '--da-empty-bg':     'rgba(255,255,255,0.04)',
+  '--da-empty-border': '1px dashed rgba(255,255,255,0.10)',
+  '--da-empty-text':   '#555555',
+
+  '--da-status-pill-bg':     'rgba(255,255,255,0.05)',
+  '--da-status-pill-border': '1px solid rgba(255,255,255,0.09)',
+  '--da-status-pill-text':   '#888888',
+
+  '--da-active-option-bg': 'rgba(42,157,143,0.15)',
+
+  '--da-success-bg':     'rgba(52,169,143,0.12)',
+  '--da-success-border': '1px solid rgba(52,169,143,0.22)',
+  '--da-success-text':   '#7EDECF',
+
+  '--da-warning-bg':     'rgba(233,168,76,0.12)',
+  '--da-warning-border': '1px solid rgba(233,168,76,0.22)',
+  '--da-warning-text':   '#F5C97B',
+
+  '--da-error-bg':     'rgba(229,115,115,0.10)',
+  '--da-error-border': '1px solid rgba(229,115,115,0.18)',
+  '--da-error-text':   '#E57373',
+
+  '--da-widget-bg':       'rgba(33,33,33,0.90)',
+  '--da-widget-border':   '1px solid rgba(42,157,143,0.18)',
+  '--da-widget-title':    '#ECECEC',
+  '--da-widget-subtitle': '#888888',
+
+  '--screen-field-bg':          'rgba(255,255,255,0.06)',
+  '--screen-field-text':        '#ECECEC',
+  '--screen-border':            'rgba(255,255,255,0.09)',
+  '--screen-heading':           '#ECECEC',
+  '--screen-muted':             '#888888',
+  '--screen-select-option-bg':  '#212121',
+  '--screen-select-option-text':'#ECECEC',
 } as const;
 
 export type CssVarName = keyof typeof LIGHT_CSS_VARS;
@@ -415,38 +485,38 @@ export function applyThemeCssVariables(mode: ThemeMode): void {
   });
 }
 
-/* ── createStyles ── */
+// ── createStyles ─────────────────────────────────────────────
 
 export function createStyles(theme: ThemePalette, mode: ThemeMode) {
-  const isLight = mode === 'light';
-
   const secondaryButtonBase: CSSProperties = {
-    padding: '9px 16px',
-    borderRadius: '10px',
+    padding: '8px 14px',
+    borderRadius: '8px',
     border: theme.buttonSecondaryBorder,
     background: theme.buttonSecondaryBackground,
     color: theme.buttonSecondaryText,
     fontWeight: 600,
     fontSize: '13px',
+    fontFamily: "'Inter', system-ui, sans-serif",
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     flexShrink: 0,
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease',
+    transition: 'background 0.12s ease, border-color 0.12s ease, color 0.12s ease',
   };
 
   const primaryButtonBase: CSSProperties = {
-    padding: '9px 16px',
-    borderRadius: '10px',
+    padding: '8px 14px',
+    borderRadius: '8px',
     border: theme.buttonPrimaryBorder,
     background: theme.buttonPrimaryBackground,
     color: theme.buttonPrimaryText,
     fontWeight: 600,
     fontSize: '13px',
+    fontFamily: "'Inter', system-ui, sans-serif",
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     flexShrink: 0,
     boxShadow: theme.buttonPrimaryShadow,
-    transition: 'transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease',
+    transition: 'filter 0.12s ease, box-shadow 0.12s ease',
   };
 
   return {
@@ -457,78 +527,57 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       position: 'relative',
     } as CSSProperties,
 
-    backgroundGlowTop: {
-      position: 'fixed',
-      top: '-80px',
-      right: '-80px',
-      width: '400px',
-      height: '400px',
-      background: theme.glowTop,
-      pointerEvents: 'none',
-      zIndex: 0,
-    } as CSSProperties,
-
-    backgroundGlowBottom: {
-      position: 'fixed',
-      bottom: '-180px',
-      left: '-100px',
-      width: '420px',
-      height: '420px',
-      background: theme.glowBottom,
-      pointerEvents: 'none',
-      zIndex: 0,
-    } as CSSProperties,
+    // No decorative glows — Claude aesthetic is clean
+    backgroundGlowTop:    { display: 'none' } as CSSProperties,
+    backgroundGlowBottom: { display: 'none' } as CSSProperties,
 
     headerShell: {
       position: 'sticky',
       top: 0,
       zIndex: 50,
-      height: '64px',
+      height: '52px',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '16px',
+      gap: '12px',
       padding: '0 20px',
       background: theme.compactHeaderBg,
       borderBottom: theme.compactHeaderBorder,
       boxShadow: theme.compactHeaderShadow,
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+      backdropFilter: 'blur(16px)',
+      WebkitBackdropFilter: 'blur(16px)',
     } as CSSProperties,
 
     headerLeft: {
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
+      gap: '8px',
       minWidth: 0,
       flexShrink: 0,
     } as CSSProperties,
 
     headerLogoMark: {
-      width: '36px',
-      height: '36px',
-      borderRadius: '10px',
-      background: isLight
-        ? 'linear-gradient(135deg, rgba(255,255,255,0.95) 0%, rgba(239,246,255,0.90) 100%)'
-        : 'linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.04) 100%)',
-      border: theme.metaBorder,
+      width: '32px',
+      height: '32px',
+      borderRadius: '8px',
+      background: 'rgba(42,157,143,0.10)',
+      border: '1px solid rgba(42,157,143,0.20)',
       display: 'grid',
       placeItems: 'center',
-      padding: '4px',
       flexShrink: 0,
     } as CSSProperties,
 
     headerBrandName: {
-      fontSize: '15px',
-      fontWeight: 700,
+      fontSize: '13px',
+      fontWeight: 600,
       color: theme.headerBrandNameColor,
-      letterSpacing: '-0.01em',
+      letterSpacing: '-0.012em',
       lineHeight: 1.2,
-      fontFamily: "'Syne', sans-serif",
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     headerBrandSub: {
-      fontSize: '11px',
+      fontSize: '10px',
       fontWeight: 500,
       color: theme.headerBrandSubColor,
       letterSpacing: '0.04em',
@@ -548,10 +597,11 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       fontSize: '13px',
       color: theme.headerCrumbColor,
       fontWeight: 500,
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     headerCrumbSep: {
-      fontSize: '13px',
+      fontSize: '12px',
       color: theme.headerCrumbColor,
       opacity: 0.5,
     } as CSSProperties,
@@ -565,46 +615,47 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
       textOverflow: 'ellipsis',
       whiteSpace: 'nowrap',
       maxWidth: '200px',
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     headerActions: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
+      gap: '4px',
       flexShrink: 0,
     } as CSSProperties,
 
     headerUserBadge: {
       display: 'flex',
       alignItems: 'center',
-      gap: '8px',
-      padding: '5px 10px 5px 5px',
-      borderRadius: '999px',
+      gap: '7px',
+      padding: '4px 8px 4px 4px',
+      borderRadius: '8px',
       border: theme.metaBorder,
       background: theme.metaBackground,
       cursor: 'default',
     } as CSSProperties,
 
     headerUserAvatar: {
-      width: '28px',
-      height: '28px',
-      borderRadius: '50%',
+      width: '24px',
+      height: '24px',
+      borderRadius: '6px',
       background: theme.headerUserAvatarBg,
       color: theme.headerUserAvatarText,
       display: 'grid',
       placeItems: 'center',
-      fontSize: '11px',
-      fontWeight: 800,
+      fontSize: '10px',
+      fontWeight: 700,
       letterSpacing: '0.02em',
       flexShrink: 0,
-      boxShadow: `0 0 0 2px ${theme.avatarRingColor}`,
     } as CSSProperties,
 
     headerUserName: {
-      fontSize: '13px',
+      fontSize: '12px',
       fontWeight: 600,
       color: theme.headerUserNameColor,
       lineHeight: 1.2,
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     headerUserRole: {
@@ -617,8 +668,8 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
 
     headerThemeBtn: {
       ...secondaryButtonBase,
-      padding: '7px 12px',
-      borderRadius: '8px',
+      padding: '6px 10px',
+      borderRadius: '7px',
       background: theme.headerIconBtnBg,
       border: theme.headerIconBtnBorder,
       color: theme.headerIconBtnColor,
@@ -627,29 +678,28 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
 
     headerLogoutBtn: {
       ...secondaryButtonBase,
-      padding: '7px 12px',
-      borderRadius: '8px',
+      padding: '6px 10px',
+      borderRadius: '7px',
       background: theme.headerSignOutBg,
       border: theme.headerSignOutBorder,
       color: theme.headerSignOutColor,
       fontSize: '12px',
-      fontWeight: 700,
     } as CSSProperties,
 
-    metaStrip: { display: 'flex', gap: '8px', flexWrap: 'wrap' as const } as CSSProperties,
+    metaStrip: { display: 'flex', gap: '6px', flexWrap: 'wrap' as const } as CSSProperties,
     metaPill: {
-      padding: '6px 12px',
+      padding: '5px 10px',
       borderRadius: '999px',
       border: theme.metaBorder,
       backgroundColor: theme.metaBackground,
       color: theme.metaText,
       fontSize: '12px',
-      fontWeight: 600,
-      backdropFilter: 'blur(14px)',
+      fontWeight: 500,
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
-    themeButton: { ...secondaryButtonBase } as CSSProperties,
-    logoutButton: { ...primaryButtonBase } as CSSProperties,
+    themeButton:  { ...secondaryButtonBase } as CSSProperties,
+    logoutButton: { ...primaryButtonBase  } as CSSProperties,
 
     contentShell: {
       position: 'relative',
@@ -658,46 +708,47 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
     } as CSSProperties,
 
     contentInner: {
-      minHeight: 'calc(100vh - 180px)',
+      minHeight: 'calc(100vh - 160px)',
       width: '100%',
-      padding: '28px',
-      borderRadius: '20px',
+      padding: '24px',
+      borderRadius: '14px',
       border: theme.panelBorder,
       background: theme.panelBackground,
       boxShadow: theme.panelShadow,
-      backdropFilter: 'blur(16px)',
-      WebkitBackdropFilter: 'blur(16px)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
       color: theme.contentText,
     } as CSSProperties,
 
     workspaceShell: {
       display: 'grid',
-      gridTemplateColumns: '300px minmax(0, 1fr)',
-      gap: '20px',
+      gridTemplateColumns: '280px minmax(0, 1fr)',
+      gap: '16px',
       alignItems: 'start',
     } as CSSProperties,
 
     sidebarPanel: {
       position: 'sticky',
-      top: '80px',
-      borderRadius: '20px',
+      top: '68px',
+      borderRadius: '14px',
       border: theme.panelBorder,
       background: theme.panelBackground,
       boxShadow: theme.panelShadow,
-      backdropFilter: 'blur(18px)',
-      WebkitBackdropFilter: 'blur(18px)',
-      padding: '16px',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
+      padding: '14px',
       display: 'grid',
-      gap: '8px',
+      gap: '6px',
     } as CSSProperties,
 
     sidebarTitle: {
       color: theme.brandEyebrow,
       fontSize: '10px',
-      fontWeight: 800,
+      fontWeight: 700,
       textTransform: 'uppercase' as const,
-      letterSpacing: '0.18em',
+      letterSpacing: '0.12em',
       marginBottom: '2px',
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     sidebarText: {
@@ -709,11 +760,12 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
 
     navGroupLabel: {
       fontSize: '10px',
-      fontWeight: 800,
-      letterSpacing: '0.14em',
+      fontWeight: 700,
+      letterSpacing: '0.10em',
       textTransform: 'uppercase' as const,
       color: theme.navGroupLabelColor,
-      padding: '6px 12px 2px',
+      padding: '6px 10px 2px',
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     navDivider: {
@@ -725,31 +777,30 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
     navShell: {
       position: 'relative',
       zIndex: 1,
-      marginTop: '0',
-      marginBottom: '16px',
+      marginBottom: '14px',
     } as CSSProperties,
 
     navScroller: {
       display: 'flex',
-      gap: '8px',
+      gap: '6px',
       overflowX: 'auto',
-      padding: '4px 2px 8px 2px',
+      padding: '4px 2px 6px 2px',
       scrollbarWidth: 'none' as const,
       msOverflowStyle: 'none' as const,
     } as CSSProperties,
 
     navButton: {
-      padding: '10px 14px',
-      borderRadius: '10px',
+      padding: '8px 12px',
+      borderRadius: '8px',
       border: theme.navButtonBorder,
       background: theme.navButtonBackground,
       color: theme.navButtonText,
       cursor: 'pointer',
       fontWeight: 600,
       fontSize: '13px',
+      fontFamily: "'Inter', system-ui, sans-serif",
       whiteSpace: 'nowrap' as const,
-      transition: 'all 0.18s ease',
-      backdropFilter: 'blur(14px)',
+      transition: 'all 0.14s ease',
     } as CSSProperties,
 
     activeNavButton: {
@@ -760,98 +811,100 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
     } as CSSProperties,
 
     profilePanel: {
-      borderRadius: '20px',
+      borderRadius: '14px',
       border: theme.panelBorder,
       background: theme.panelBackground,
-      padding: '28px',
+      padding: '24px',
     } as CSSProperties,
 
     sectionEyebrow: {
       color: theme.brandEyebrow,
       fontSize: '11px',
-      fontWeight: 800,
-      letterSpacing: '0.18em',
+      fontWeight: 700,
+      letterSpacing: '0.14em',
       textTransform: 'uppercase' as const,
-      marginBottom: '10px',
+      marginBottom: '8px',
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     profileGrid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-      gap: '12px',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))',
+      gap: '10px',
     } as CSSProperties,
 
     profileInfoCard: {
-      borderRadius: '16px',
-      padding: '18px 20px',
+      borderRadius: '10px',
+      padding: '14px 16px',
       border: theme.profileStatBorder,
       background: theme.profileStatBg,
-      transition: 'transform 0.16s ease',
     } as CSSProperties,
 
     profileInfoLabel: {
-      fontSize: '11px',
+      fontSize: '10px',
       textTransform: 'uppercase' as const,
-      letterSpacing: '0.14em',
+      letterSpacing: '0.10em',
       color: theme.profileStatLabel,
-      marginBottom: '8px',
+      marginBottom: '6px',
       fontWeight: 700,
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     profileInfoValue: {
-      fontSize: '15px',
-      fontWeight: 700,
+      fontSize: '14px',
+      fontWeight: 600,
       color: theme.profileStatValue,
       wordBreak: 'break-word' as const,
       fontFamily: "'JetBrains Mono', monospace",
     } as CSSProperties,
 
-    brandWrap: { display: 'flex', gap: '14px', alignItems: 'center', minWidth: 0 } as CSSProperties,
+    brandWrap: { display: 'flex', gap: '12px', alignItems: 'center', minWidth: 0 } as CSSProperties,
 
     brandLogoWrap: {
-      width: '54px',
-      height: '54px',
-      borderRadius: '16px',
+      width: '44px',
+      height: '44px',
+      borderRadius: '12px',
       border: theme.metaBorder,
       background: theme.metaBackground,
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '8px',
+      padding: '6px',
       flexShrink: 0,
     } as CSSProperties,
 
     brandLogo: {
-      width: '36px',
-      height: '36px',
+      width: '30px',
+      height: '30px',
       objectFit: 'contain' as const,
     } as CSSProperties,
 
     brandAccent: {
-      width: '4px',
-      height: '54px',
+      width: '3px',
+      height: '44px',
       borderRadius: '999px',
       background: theme.brandAccent,
-      boxShadow: theme.brandAccentShadow,
       flexShrink: 0,
     } as CSSProperties,
 
     brandEyebrow: {
       color: theme.brandEyebrow,
-      fontSize: '11px',
+      fontSize: '10px',
       fontWeight: 700,
       textTransform: 'uppercase' as const,
-      letterSpacing: '0.16em',
-      marginBottom: '6px',
+      letterSpacing: '0.14em',
+      marginBottom: '4px',
+      fontFamily: "'Inter', system-ui, sans-serif",
     } as CSSProperties,
 
     brandTitle: {
       margin: 0,
-      fontSize: '32px',
+      fontSize: '26px',
       lineHeight: 1.05,
-      fontWeight: 800,
+      fontWeight: 700,
       color: theme.brandTitle,
-      fontFamily: "'Syne', sans-serif",
+      fontFamily: "'Inter', system-ui, sans-serif",
+      letterSpacing: '-0.02em',
     } as CSSProperties,
 
     loadingShell: {
@@ -866,45 +919,43 @@ export function createStyles(theme: ThemePalette, mode: ThemeMode) {
 
     loadingCard: {
       width: '100%',
-      maxWidth: '440px',
-      borderRadius: '24px',
+      maxWidth: '400px',
+      borderRadius: '16px',
       border: theme.loadingCardBorder,
       background: theme.loadingCardBackground,
-      padding: '40px 36px',
+      padding: '32px 28px',
       textAlign: 'center',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
-      animation: 'da-fade-in-up 0.5s cubic-bezier(0.22,1,0.36,1) both',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
     } as CSSProperties,
 
     loadingBrandMark: {
-      width: '72px',
-      height: '72px',
-      margin: '0 auto 20px auto',
+      width: '56px',
+      height: '56px',
+      margin: '0 auto 16px auto',
       objectFit: 'contain' as const,
-      animation: 'da-logo-glow 2.4s ease-in-out infinite',
     } as CSSProperties,
 
     loadingDot: {
-      width: '9px',
-      height: '9px',
+      width: '8px',
+      height: '8px',
       borderRadius: '50%',
       background: theme.loadingDotBackground,
       boxShadow: theme.loadingDotShadow,
       display: 'inline-block',
     } as CSSProperties,
 
-    loadingSubtext: { margin: '0 0 20px 0', color: theme.loadingSubtext, fontSize: '14px' } as CSSProperties,
+    loadingSubtext: { margin: '0 0 16px 0', color: theme.loadingSubtext, fontSize: '13px' } as CSSProperties,
 
     errorCard: {
       width: '100%',
-      maxWidth: '560px',
-      borderRadius: '24px',
+      maxWidth: '500px',
+      borderRadius: '16px',
       border: theme.errorCardBorder,
       background: theme.errorCardBackground,
-      padding: '36px',
-      backdropFilter: 'blur(20px)',
-      WebkitBackdropFilter: 'blur(20px)',
+      padding: '32px',
+      backdropFilter: 'blur(14px)',
+      WebkitBackdropFilter: 'blur(14px)',
       color: theme.errorText,
     } as CSSProperties,
 

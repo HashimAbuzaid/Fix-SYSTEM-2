@@ -451,10 +451,10 @@ function useBreadcrumbs(
 // ═══════════════════════════════════════════════════════════════════════════
 
 const LEVEL_COLORS: Record<NotifLevel, string> = {
-  info:    "var(--accent-blue)",
-  success: "var(--accent-green)",
-  warning: "var(--accent-amber)",
-  error:   "var(--accent-rose)",
+  info:    "var(--accent)",
+  success: "var(--text-success)",
+  warning: "var(--text-warning)",
+  error:   "var(--text-danger)",
 };
 
 const LEVEL_ICONS: Record<NotifLevel, string> = {
@@ -495,7 +495,7 @@ const ToastStack = memo(function ToastStack() {
             className="da-toast"
             style={{
               pointerEvents: "all",
-              background: "var(--surface-raised)",
+              background: "var(--bg-elevated)",
               border: `1px solid color-mix(in srgb, ${color} 30%, transparent)`,
               borderLeft: `3px solid ${color}`,
               borderRadius: 10,
@@ -569,93 +569,44 @@ const NotificationBell = memo(function NotificationBell() {
     <div ref={ref} style={{ position: "relative" }}>
       <button
         type="button"
+        className={`da-icon-btn${open ? " active" : ""}`}
         onClick={() => { setOpen((o) => !o); if (unread) markAllRead(); }}
         aria-label={`Notifications${unread ? ` (${unread} unread)` : ""}`}
-        style={{
-          position: "relative",
-          width: 36, height: 36,
-          borderRadius: 8,
-          background: "transparent",
-          border: "1px solid var(--border-subtle)",
-          cursor: "pointer",
-          display: "grid",
-          placeItems: "center",
-          color: "var(--fg-muted)",
-          transition: "background 0.15s, color 0.15s",
-        }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "var(--surface-hover)";
-          (e.currentTarget as HTMLButtonElement).style.color = "var(--fg-default)";
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.background = "transparent";
-          (e.currentTarget as HTMLButtonElement).style.color = "var(--fg-muted)";
-        }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 && (
-          <span style={{
-            position: "absolute", top: -3, right: -3,
-            background: "var(--accent-rose)",
-            color: "#fff", borderRadius: "999px",
-            fontSize: 9, fontWeight: 700,
-            minWidth: 16, height: 16,
-            display: "grid", placeItems: "center",
-            padding: "0 4px",
-            lineHeight: 1,
-            border: "2px solid var(--surface-page)",
-          }}>
-            {unread > 9 ? "9+" : unread}
-          </span>
+          <span className="da-icon-btn-badge" />
         )}
       </button>
 
       {open && (
-        <div style={{
-          position: "absolute", top: "calc(100% + 8px)", right: 0,
-          width: 320,
-          background: "var(--surface-raised)",
-          border: "1px solid var(--border-default)",
-          borderRadius: 12,
-          boxShadow: "0 16px 48px rgba(0,0,0,0.28)",
-          zIndex: 1000,
-          animation: "da-toast-in 0.2s cubic-bezier(0.34,1.56,0.64,1) both",
-          overflow: "hidden",
-        }}>
-          <div style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between",
-            padding: "12px 16px",
-            borderBottom: "1px solid var(--border-subtle)",
-          }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--fg-default)" }}>
-              Notifications
-            </span>
+        <div className="da-notif-dropdown">
+          <div className="da-notif-header">
+            <span className="da-notif-title">Notifications</span>
             {notifs.length > 0 && (
               <button
                 type="button"
                 onClick={clearAll}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: 11, color: "var(--fg-muted)", padding: "2px 6px", borderRadius: 4 }}
+                className="da-notif-mark-all"
               >
                 Clear all
               </button>
             )}
           </div>
-          <div style={{ maxHeight: 360, overflowY: "auto" }}>
+          <div className="da-notif-list">
             {notifs.length === 0 ? (
-              <div style={{ padding: "24px 16px", textAlign: "center", color: "var(--fg-muted)", fontSize: 13 }}>
-                No notifications
-              </div>
+              <div className="da-notif-empty">No notifications</div>
             ) : notifs.map((n) => (
               <div
                 key={n.id}
                 style={{
                   padding: "10px 16px",
-                  borderBottom: "1px solid var(--border-subtle)",
+                  borderBottom: "1px solid var(--border)",
                   display: "flex", gap: 10, alignItems: "flex-start",
-                  background: n.read ? "transparent" : "color-mix(in srgb, var(--accent-blue) 4%, transparent)",
+                  background: n.read ? "transparent" : "color-mix(in srgb, var(--accent) 4%, transparent)",
                 }}
               >
                 <span style={{ color: LEVEL_COLORS[n.level], fontSize: 13, fontWeight: 700, flexShrink: 0, lineHeight: 1.6 }}>
@@ -756,7 +707,7 @@ const RouteSkeleton = memo(function RouteSkeleton() {
           style={{
             width: `${w}%`, height: i === 0 ? 24 : 14,
             borderRadius: 6,
-            background: "var(--surface-hover)",
+            background: "var(--bg-subtle-hover)",
             animation: `da-shimmer 1.6s ${i * 0.12}s ease-in-out infinite`,
           }}
         />
@@ -915,7 +866,7 @@ const AccountDisabledScreen = memo(function AccountDisabledScreen({
         display: "grid",
         placeItems: "center",
         padding: 24,
-        background: "var(--surface-page)",
+        background: "var(--bg-base)",
       }}
     >
       <div
@@ -926,8 +877,8 @@ const AccountDisabledScreen = memo(function AccountDisabledScreen({
           textAlign: "center",
           padding: "40px 32px",
           borderRadius: 16,
-          background: "var(--surface-raised)",
-          border: "1px solid color-mix(in srgb, var(--accent-rose) 30%, transparent)",
+          background: "var(--bg-elevated)",
+          border: "1px solid color-mix(in srgb, var(--text-danger) 30%, transparent)",
           boxShadow: "0 24px 64px rgba(0,0,0,0.22)",
         }}
       >
@@ -938,8 +889,8 @@ const AccountDisabledScreen = memo(function AccountDisabledScreen({
             width: 64,
             height: 64,
             borderRadius: "50%",
-            background: "color-mix(in srgb, var(--accent-rose) 12%, transparent)",
-            border: "2px solid color-mix(in srgb, var(--accent-rose) 30%, transparent)",
+            background: "color-mix(in srgb, var(--text-danger) 12%, transparent)",
+            border: "2px solid color-mix(in srgb, var(--text-danger) 30%, transparent)",
             display: "grid",
             placeItems: "center",
             margin: "0 auto 20px",
@@ -956,7 +907,7 @@ const AccountDisabledScreen = memo(function AccountDisabledScreen({
             fontWeight: 600,
             letterSpacing: "0.1em",
             textTransform: "uppercase",
-            color: "var(--accent-rose)",
+            color: "var(--text-danger)",
             marginBottom: 10,
           }}
         >
@@ -1473,7 +1424,7 @@ function AppShell() {
     <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: 24 }}>
       <div className="da-error-card">
         <div style={{ fontSize: 36, marginBottom: 14 }}>⚠️</div>
-        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--accent-rose)", marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-danger)", marginBottom: 10 }}>
           Profile error
         </div>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: "var(--fg-default)", marginBottom: 10 }}>
@@ -1607,7 +1558,7 @@ function AppShell() {
                 {isCompact && !isMobileBottom && (
                   <nav className="da-compact-nav" aria-label="Tablet navigation">
                     {navItems.map((item) => {
-                      const accent   = GROUP_ACCENT[item.group] ?? "var(--accent-blue)";
+                      const accent   = GROUP_ACCENT[item.group] ?? "var(--accent)";
                       const isActive = location.pathname === item.path;
                       return (
                         <button
@@ -1627,7 +1578,7 @@ function AppShell() {
                       type="button"
                       className="da-compact-nav-item"
                       onClick={handleOpenHelp}
-                      style={{ "--item-accent": "var(--accent-blue)" } as CSSProperties}
+                      style={{ "--item-accent": "var(--accent)" } as CSSProperties}
                     >
                       <NavIcon label="Help" size={13} /> Help
                     </button>
@@ -1661,18 +1612,6 @@ function AppShell() {
           </main>
         </div>
       </div>
-
-      {/* Inline CSS additions for new features */}
-      <style>{`
-        @keyframes da-toast-in {
-          from { opacity: 0; transform: translateY(12px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes da-shimmer {
-          0%, 100% { opacity: 0.4; }
-          50%       { opacity: 0.8; }
-        }
-      `}</style>
     </AuthContext.Provider>
   );
 }
