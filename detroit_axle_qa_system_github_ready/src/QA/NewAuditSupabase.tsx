@@ -162,13 +162,13 @@ const CASE_TYPES = [
 const TEAMS: Exclude<TeamType, ''>[] = ['Calls', 'Tickets', 'Sales'];
 
 const TEAM_ACCENTS: Record<string, string> = {
-  Calls: '#3b82f6',
-  Tickets: '#8b5cf6',
-  Sales: '#10b981',
+  Calls: '#2A9D8F',
+  Tickets: '#7C6FF7',
+  Sales: '#34A98F',
 };
 
 /* ═════════════════════════════════════════════════════════════
-   Pure helpers (module scope = zero re-allocation)
+   Pure helpers
    ═════════════════════════════════════════════════════════════ */
 
 function countsTowardScore(metric: Metric) {
@@ -204,8 +204,10 @@ function canAutoFail(metricName: string) {
 function getMetricOptions(metric: Metric) {
   if (metric.options?.length) return metric.options;
   if (isLockedToNA(metric.name)) return ['N/A'];
+
   const options = ['N/A', 'Pass', 'Borderline', 'Fail'];
   if (canAutoFail(metric.name)) options.push('Auto-Fail');
+
   return options;
 }
 
@@ -257,14 +259,17 @@ function getAdjustedScoreData(
 ) {
   const metrics = getMetricsForTeam(team);
   const scoredMetrics = metrics.filter((item) => countsTowardScore(item));
+
   const activeMetrics = scoredMetrics.filter((item) => {
     const itemResult = getMetricStoredValue(item, scores);
     return itemResult !== 'N/A' && itemResult !== '';
   });
+
   const activeTotalWeight = activeMetrics.reduce(
     (sum, item) => sum + item.pass,
     0
   );
+
   const fullTotalWeight = scoredMetrics.reduce(
     (sum, item) => sum + item.pass,
     0
@@ -273,6 +278,7 @@ function getAdjustedScoreData(
   const scoreDetails = metrics.map((metric) => {
     const result = getMetricStoredValue(metric, scores);
     const scored = countsTowardScore(metric);
+
     const adjustedWeight =
       !scored ||
       result === 'N/A' ||
@@ -280,13 +286,17 @@ function getAdjustedScoreData(
       activeTotalWeight === 0
         ? 0
         : (metric.pass / activeTotalWeight) * fullTotalWeight;
+
     let earned = 0;
+
     if (scored && result === 'Pass') earned = adjustedWeight;
-    else if (scored && result === 'Borderline')
+    else if (scored && result === 'Borderline') {
       earned =
         metric.pass > 0
           ? adjustedWeight * (metric.borderline / metric.pass)
           : 0;
+    }
+
     return {
       metric: metric.name,
       result,
@@ -308,6 +318,7 @@ function getAdjustedScoreData(
       canAutoFail(item.metric) &&
       item.result === 'Auto-Fail'
   );
+
   const qualityScore = hasAutoFail
     ? '0.00'
     : scoreDetails
@@ -322,83 +333,25 @@ function openNativeDatePicker(target: HTMLInputElement) {
   try {
     (target as HTMLInputElement & { showPicker?: () => void }).showPicker?.();
   } catch {
-    /* ignore unsupported browsers */
+    /* unsupported browser */
   }
 }
 
 function getResultColor(result: string): string {
-  if (result === 'Pass') return '#10b981';
-  if (result === 'Borderline') return '#f59e0b';
-  if (result === 'Fail') return '#ef4444';
-  if (result === 'Auto-Fail') return '#dc2626';
-  if (result === 'N/A') return '#64748b';
-  if (result === 'Yes') return '#10b981';
-  if (result === 'No') return '#ef4444';
-  return '#64748b';
+  if (result === 'Pass') return '#34D399';
+  if (result === 'Borderline') return '#E9A84C';
+  if (result === 'Fail') return '#E57373';
+  if (result === 'Auto-Fail') return '#E57373';
+  if (result === 'N/A') return 'var(--fg-muted)';
+  if (result === 'Yes') return '#34D399';
+  if (result === 'No') return '#E57373';
+  return 'var(--fg-muted)';
 }
 
-/* ═════════════════════════════════════════════════════════════
-   Theme
-   ═════════════════════════════════════════════════════════════ */
-
-function useThemeRefresh() {
-  const [key, setKey] = useState(0);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || typeof document === 'undefined') return;
-
-    const refresh = () => setKey((v) => v + 1);
-    const observer = new MutationObserver(refresh);
-    const config = { attributes: true, attributeFilter: ['data-theme', 'data-theme-mode'] };
-
-    observer.observe(document.documentElement, config);
-    if (document.body) observer.observe(document.body, config);
-
-    window.addEventListener('storage', refresh);
-    window.addEventListener('detroit-axle-theme-change', refresh as EventListener);
-
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('storage', refresh);
-      window.removeEventListener('detroit-axle-theme-change', refresh as EventListener);
-    };
-  }, []);
-
-  return key;
-}
-
-function getThemeVars(): Record<string, string> {
-  const themeMode =
-    typeof document !== 'undefined'
-      ? (
-          document.body.dataset.theme ||
-          document.documentElement.dataset.theme ||
-          window.localStorage.getItem('detroit-axle-theme-mode') ||
-          ''
-        ).toLowerCase()
-      : '';
-  const isLight = themeMode === 'light' || themeMode === 'white';
-  return {
-    '--na-bg': isLight ? '#f8fafc' : '#080d1a',
-    '--na-surface': isLight ? '#ffffff' : '#0d1526',
-    '--na-surface-2': isLight ? '#f1f5f9' : '#111927',
-    '--na-surface-3': isLight ? '#e2e8f0' : '#162030',
-    '--na-border': isLight ? 'rgba(148,163,184,0.3)' : 'rgba(148,163,184,0.08)',
-    '--na-border-strong': isLight ? 'rgba(148,163,184,0.6)' : 'rgba(148,163,184,0.14)',
-    '--na-text': isLight ? '#0f172a' : '#e2eaf7',
-    '--na-text-2': isLight ? '#334155' : '#94a3b8',
-    '--na-text-3': isLight ? '#64748b' : '#475569',
-    '--na-accent': isLight ? '#2563eb' : '#3b82f6',
-    '--na-accent-dim': isLight ? 'rgba(37,99,235,0.12)' : 'rgba(59,130,246,0.10)',
-    '--na-accent-glow': isLight ? 'rgba(37,99,235,0.20)' : 'rgba(59,130,246,0.18)',
-    '--na-field-bg': isLight ? '#ffffff' : 'rgba(13,21,38,0.8)',
-    '--na-field-text': isLight ? '#0f172a' : '#e2eaf7',
-    '--na-option-bg': isLight ? '#ffffff' : '#0d1526',
-    '--na-option-text': isLight ? '#0f172a' : '#e2eaf7',
-    '--na-shadow-sm': isLight ? '0 1px 3px rgba(0,0,0,0.08)' : '0 1px 3px rgba(0,0,0,0.4)',
-    '--na-shadow-md': isLight ? '0 4px 16px rgba(0,0,0,0.08)' : '0 4px 16px rgba(0,0,0,0.4)',
-    '--na-shadow-lg': isLight ? '0 12px 40px rgba(0,0,0,0.10)' : '0 12px 40px rgba(0,0,0,0.5)',
-  };
+function getScoreColor(score: number): string {
+  if (score >= 90) return '#34D399';
+  if (score >= 75) return '#E9A84C';
+  return '#E57373';
 }
 
 /* ═════════════════════════════════════════════════════════════
@@ -416,7 +369,7 @@ const ScoreGauge = memo(function ScoreGauge({
   const r = (size - 8) / 2;
   const circ = 2 * Math.PI * r;
   const dashOffset = circ * (1 - pct / 100);
-  const color = pct >= 90 ? '#10b981' : pct >= 75 ? '#f59e0b' : '#ef4444';
+  const color = getScoreColor(pct);
 
   return (
     <svg
@@ -431,7 +384,7 @@ const ScoreGauge = memo(function ScoreGauge({
         cy={size / 2}
         r={r}
         fill="none"
-        stroke="rgba(148,163,184,0.12)"
+        stroke="var(--border)"
         strokeWidth="6"
       />
       <circle
@@ -446,7 +399,7 @@ const ScoreGauge = memo(function ScoreGauge({
         strokeLinecap="round"
         style={{
           transition:
-            'stroke-dashoffset 0.6s cubic-bezier(0.34,1.56,0.64,1), stroke 0.3s ease',
+            'stroke-dashoffset 0.6s var(--ease-out), stroke 0.3s ease',
         }}
       />
     </svg>
@@ -464,7 +417,6 @@ type ScorecardProps = {
   scoreNum: number;
   scoreColor: string;
 };
-
 const ScorecardPanel = memo(function ScorecardPanel({
   title,
   metrics,
@@ -477,9 +429,10 @@ const ScorecardPanel = memo(function ScorecardPanel({
   scoreColor,
 }: ScorecardProps) {
   return (
-    <div style={{ marginTop: '28px' }}>
-      <div style={styles.sectionLabel}>{title}</div>
-      <div style={{ display: 'grid', gap: '10px' }}>
+    <div style={{ marginTop: 28 }}>
+      <div className="da-input-label">{title}</div>
+
+      <div style={{ display: 'grid', gap: 10 }}>
         {metrics.map((metric) => {
           const metricOptions = getMetricOptions(metric);
           const metricValue = getMetricStoredValue(metric, draft.scores);
@@ -491,55 +444,71 @@ const ScorecardPanel = memo(function ScorecardPanel({
           return (
             <div
               key={metric.name}
+              className="da-card-stat"
               style={{
-                ...styles.metricCard,
-                ...(isMeaningful
-                  ? { borderLeft: `3px solid ${resultColor}` }
-                  : {}),
+                borderLeft: isMeaningful
+                  ? `3px solid ${resultColor}`
+                  : '3px solid transparent',
               }}
             >
               <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '12px',
+                  gap: 12,
                   flexWrap: 'wrap',
                 }}
               >
-                <div style={{ flex: 1, minWidth: '160px' }}>
-                  <div style={styles.metricName}>
+                <div style={{ flex: 1, minWidth: 160 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 500,
+                      color: 'var(--fg-default)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      flexWrap: 'wrap',
+                      fontFamily: 'var(--font-ui)',
+                    }}
+                  >
                     {metric.name}
+
                     {countsTowardScore(metric) && (
-                      <span style={styles.metricPts}>{metric.pass} pts</span>
+                      <span className="da-badge da-badge-default">
+                        {metric.pass} pts
+                      </span>
                     )}
                   </div>
+
                   {isLockedToNA(metric.name) && (
-                    <div style={styles.lockedBadge}>Locked · N/A</div>
+                    <div
+                      style={{
+                        marginTop: 4,
+                        fontSize: 11,
+                        color: 'var(--fg-muted)',
+                        fontFamily: 'var(--font-ui)',
+                      }}
+                    >
+                      Locked · N/A
+                    </div>
                   )}
                 </div>
-                <div style={{ minWidth: '180px' }}>
+
+                <div style={{ minWidth: 180 }}>
                   <select
                     value={metricValue}
                     onChange={(e) => onScoreChange(metric.name, e.target.value)}
                     disabled={isLockedToNA(metric.name)}
                     aria-label={`${metric.name} result`}
+                    className="da-select"
                     style={{
-                      ...styles.selectField,
-                      borderColor: isMeaningful
-                        ? `${resultColor}44`
-                        : undefined,
+                      borderColor: isMeaningful ? `${resultColor}66` : undefined,
                       color: isMeaningful ? resultColor : undefined,
                     }}
                   >
                     {metricOptions.map((option) => (
-                      <option
-                        key={option || '__empty__'}
-                        value={option}
-                        style={{
-                          backgroundColor: 'var(--na-option-bg)',
-                          color: 'var(--na-option-text)',
-                        }}
-                      >
+                      <option key={option || '__empty__'} value={option}>
                         {option || 'Select answer'}
                       </option>
                     ))}
@@ -548,8 +517,9 @@ const ScorecardPanel = memo(function ScorecardPanel({
               </div>
 
               {showMetricComment && (
-                <div style={{ marginTop: '10px' }}>
-                  <div style={styles.qaNoteLabelStyle}>QA note for agent</div>
+                <div style={{ marginTop: 10 }}>
+                  <div className="da-input-label">QA note for agent</div>
+
                   <textarea
                     value={draft.metricComments[metric.name] || ''}
                     onChange={(e) =>
@@ -557,7 +527,7 @@ const ScorecardPanel = memo(function ScorecardPanel({
                     }
                     rows={2}
                     placeholder="Brief explanation for this result…"
-                    style={styles.qaTextarea}
+                    className="da-textarea"
                     aria-label={`QA note for ${metric.name}`}
                   />
                 </div>
@@ -568,57 +538,64 @@ const ScorecardPanel = memo(function ScorecardPanel({
       </div>
 
       {hasAutoFail && (
-        <div style={styles.autoFailBanner}>
-          <span style={{ fontSize: '16px' }}>⚠</span>
+        <div
+          className="da-card"
+          role="alert"
+          style={{
+            marginTop: 16,
+            background: 'var(--surface-danger)',
+            borderColor: 'var(--border-danger)',
+            color: 'var(--text-danger)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontWeight: 500,
+            fontFamily: 'var(--font-ui)',
+          }}
+        >
+          <span aria-hidden="true">⚠</span>
           <span>Auto-Fail triggered — Final score: 0.00%</span>
         </div>
       )}
 
-      <div style={styles.scoreSummaryCard}>
-        <div
-          style={{ display: 'flex', alignItems: 'center', gap: '20px' }}
-        >
+      <div className="da-card-elevated" style={{ marginTop: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
           <div
             style={{
               position: 'relative',
-              width: '80px',
-              height: '80px',
+              width: 80,
+              height: 80,
               display: 'grid',
               placeItems: 'center',
+              flexShrink: 0,
             }}
           >
             <ScoreGauge score={scoreNum} size={80} />
+
             <div
               style={{
                 position: 'absolute',
-                fontSize: '13px',
-                fontWeight: 800,
+                fontSize: 13,
+                fontWeight: 600,
                 color: scoreColor,
+                fontFamily: 'var(--font-ui)',
               }}
             >
               {qualityScore}%
             </div>
           </div>
+
           <div>
+            <div className="da-input-label">Quality Score</div>
+
             <div
               style={{
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.12em',
-                textTransform: 'uppercase',
-                color: 'var(--na-text-2)',
-                marginBottom: '4px',
-              }}
-            >
-              Quality Score
-            </div>
-            <div
-              style={{
-                fontSize: '36px',
-                fontWeight: 900,
+                fontSize: 36,
+                fontWeight: 600,
                 color: scoreColor,
                 letterSpacing: '-0.03em',
                 lineHeight: 1,
+                fontFamily: 'var(--font-ui)',
               }}
             >
               {qualityScore}%
@@ -639,6 +616,7 @@ function NewAuditSupabase() {
     'detroit-axle-new-audit-draft',
     createEmptyDraft('')
   );
+
   const [saving, setSaving] = useState(false);
   const [loadingAgents, setLoadingAgents] = useState(true);
   const [agentProfiles, setAgentProfiles] = useState<AgentProfile[]>([]);
@@ -651,19 +629,18 @@ function NewAuditSupabase() {
   const [successMessage, setSuccessMessage] = useState('');
   const [isAgentPickerOpen, setIsAgentPickerOpen] = useState(false);
 
-  const themeRefreshKey = useThemeRefresh();
-  const themeVars = useMemo(() => getThemeVars(), [themeRefreshKey]);
   const agentPickerRef = useRef<HTMLDivElement | null>(null);
 
-  /* ── Data loading ── */
   const loadAgentProfiles = useCallback(
     async (options?: { force?: boolean }) => {
       setLoadingAgents(true);
       setAgentLoadError('');
+
       try {
         const data = await getCachedAgentProfiles(undefined, {
           force: options?.force,
         });
+
         setAgentProfiles(data);
       } catch (error) {
         setAgentLoadError(
@@ -678,10 +655,12 @@ function NewAuditSupabase() {
 
   const loadCurrentCreatorSummary = useCallback(async () => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
+
     if (authError || !authData.user) {
       setCreatorSummary(null);
       return;
     }
+
     const authUser = authData.user;
     const authMetadata = (authUser.user_metadata || {}) as AuthMetadata;
 
@@ -707,6 +686,7 @@ function NewAuditSupabase() {
     }
 
     const creatorProfile = profileData as CreatorProfile;
+
     setCreatorSummary({
       userId: creatorProfile.id,
       name: pickPreferredName([
@@ -725,10 +705,12 @@ function NewAuditSupabase() {
 
   const loadLastAuditSummary = useCallback(async () => {
     const { data: authData, error: authError } = await supabase.auth.getUser();
+
     if (authError || !authData.user) {
       setLastAudit(null);
       return;
     }
+
     const { data, error } = await supabase
       .from('audits')
       .select(
@@ -764,7 +746,6 @@ function NewAuditSupabase() {
     void loadLastAuditSummary();
   }, [loadAgentProfiles, loadCurrentCreatorSummary, loadLastAuditSummary]);
 
-  /* ── Outside click for agent picker ── */
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
       if (
@@ -774,11 +755,12 @@ function NewAuditSupabase() {
         setIsAgentPickerOpen(false);
       }
     }
+
     document.addEventListener('mousedown', handleOutsideClick);
+
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
-  /* ── Handlers ── */
   const handleRefreshAgents = useCallback(() => {
     clearAgentProfilesCache();
     void loadAgentProfiles({ force: true });
@@ -804,9 +786,12 @@ function NewAuditSupabase() {
 
   const visibleAgents = useMemo(() => {
     const search = draft.agentSearch.trim().toLowerCase();
+
     if (!search) return teamAgents;
+
     return teamAgents.filter((p) => {
       const label = getAgentLabel(p);
+
       return (
         p.agent_name.toLowerCase().includes(search) ||
         (p.agent_id || '').toLowerCase().includes(search) ||
@@ -849,12 +834,17 @@ function NewAuditSupabase() {
           scores: { ...prev.scores, [metricName]: 'N/A' },
           metricComments: { ...prev.metricComments, [metricName]: '' },
         }));
+
         return;
       }
+
       setDraft((prev) => {
         const nextMetricComments = { ...prev.metricComments };
-        if (!shouldShowMetricComment(value))
+
+        if (!shouldShowMetricComment(value)) {
           delete nextMetricComments[metricName];
+        }
+
         return {
           ...prev,
           scores: { ...prev.scores, [metricName]: value },
@@ -882,12 +872,12 @@ function NewAuditSupabase() {
         selectedAgentProfileId: profile.id,
         agentSearch: getAgentLabel(profile),
       }));
+
       setIsAgentPickerOpen(false);
     },
     [getAgentLabel, setDraft]
   );
-
-  const handleSave = useCallback(async () => {
+    const handleSave = useCallback(async () => {
     setErrorMessage('');
     setSuccessMessage('');
 
@@ -895,14 +885,17 @@ function NewAuditSupabase() {
       setErrorMessage('Please choose a team.');
       return;
     }
+
     if (!selectedAgent) {
       setErrorMessage('Please choose an agent.');
       return;
     }
+
     if (!draft.caseType || !draft.auditDate) {
       setErrorMessage('Please fill Case Type and Audit Date.');
       return;
     }
+
     if (
       (draft.team === 'Calls' || draft.team === 'Sales') &&
       !draft.orderNumber
@@ -910,6 +903,7 @@ function NewAuditSupabase() {
       setErrorMessage('Please fill Order Number for Calls and Sales.');
       return;
     }
+
     if (draft.team === 'Tickets' && !draft.ticketId) {
       setErrorMessage('Please fill Ticket ID for Tickets.');
       return;
@@ -919,6 +913,7 @@ function NewAuditSupabase() {
       draft.team,
       draft.scores
     );
+
     if (missingRequired.length > 0) {
       setErrorMessage(`Please answer: ${missingRequired.join(', ')}.`);
       return;
@@ -947,12 +942,15 @@ function NewAuditSupabase() {
     setSaving(true);
 
     const { data: authData, error: authError } = await supabase.auth.getUser();
+
     if (authError) {
       setSaving(false);
       setErrorMessage(authError.message);
       return;
     }
+
     const authUser = authData.user;
+
     if (!authUser) {
       setSaving(false);
       setErrorMessage('Could not identify the logged-in user.');
@@ -971,6 +969,7 @@ function NewAuditSupabase() {
       setErrorMessage(creatorProfileError.message);
       return;
     }
+
     if (!creatorProfileData) {
       setSaving(false);
       setErrorMessage('Could not load the logged-in profile.');
@@ -979,6 +978,7 @@ function NewAuditSupabase() {
 
     const creatorProfile = creatorProfileData as CreatorProfile;
     const authMetadata = (authUser.user_metadata || {}) as AuthMetadata;
+
     const createdByName = pickPreferredName([
       authMetadata.display_name,
       authMetadata.full_name,
@@ -1021,16 +1021,24 @@ function NewAuditSupabase() {
     }
 
     const savedTeam = draft.team;
+
     setIsAgentPickerOpen(false);
     setDraft(createEmptyDraft(savedTeam));
     setSuccessMessage('Audit saved successfully. Draft cleared.');
+
     void loadCurrentCreatorSummary();
     void loadLastAuditSummary();
-  }, [draft, selectedAgent, adjustedData, setDraft, loadCurrentCreatorSummary, loadLastAuditSummary]);
+  }, [
+    draft,
+    selectedAgent,
+    adjustedData,
+    setDraft,
+    loadCurrentCreatorSummary,
+    loadLastAuditSummary,
+  ]);
 
   const scoreNum = parseFloat(adjustedData.qualityScore);
-  const scoreColor =
-    scoreNum >= 90 ? '#10b981' : scoreNum >= 75 ? '#f59e0b' : '#ef4444';
+  const scoreColor = getScoreColor(scoreNum);
 
   const handleClearDraft = useCallback(() => {
     setIsAgentPickerOpen(false);
@@ -1039,441 +1047,462 @@ function NewAuditSupabase() {
     setSuccessMessage('Draft cleared.');
   }, [draft.team, setDraft]);
 
-  /* ═════════════════════════════════════════════════════════
-     Render
-     ═════════════════════════════════════════════════════════ */
-
   return (
-    <div
-      data-no-theme-invert="true"
-      style={{
-        color: 'var(--na-text)',
-        ...(themeVars as CSSProperties),
-        fontFamily: "'DM Sans', 'Outfit', system-ui, sans-serif",
-      }}
-    >
-      {/* Page header */}
+    <div>
       <div style={styles.pageHeader}>
         <div>
-          <div style={styles.eyebrow}>Audit Workspace</div>
+          <div className="da-input-label">Audit Workspace</div>
+
           <h2 style={styles.pageTitle}>New Audit</h2>
+
           <p style={styles.pageSub}>
             Create a Detroit Axle QA audit using the live agent directory.
           </p>
         </div>
+
         <button
           type="button"
           onClick={handleRefreshAgents}
-          style={styles.btnSecondary}
+          className="da-btn da-btn-secondary"
         >
           ↻ Refresh Agents
         </button>
       </div>
 
-      {/* Banners */}
       {errorMessage && (
-        <div style={styles.errorBanner} role="alert">
-          <span>✕</span> {errorMessage}
-        </div>
-      )}
-      {successMessage && (
-        <div style={styles.successBanner} role="status">
-          <span>✓</span> {successMessage}
+        <div
+          className="da-card"
+          role="alert"
+          style={{
+            marginBottom: 16,
+            background: 'var(--surface-danger)',
+            borderColor: 'var(--border-danger)',
+            color: 'var(--text-danger)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontWeight: 500,
+            fontFamily: 'var(--font-ui)',
+          }}
+        >
+          <span aria-hidden="true">✕</span>
+          {errorMessage}
         </div>
       )}
 
-      {/* Team selector */}
-      <div style={styles.card}>
-        <div style={styles.cardInner}>
-          <div style={styles.sectionLabel}>Select Team</div>
-          <div
-            style={{
-              display: 'flex',
-              gap: '10px',
-              flexWrap: 'wrap',
-            }}
-            role="radiogroup"
-            aria-label="Select team"
-          >
-            {TEAMS.map((t) => {
-              const active = draft.team === t;
-              return (
-                <button
-                  key={t}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  onClick={() => setTeamAndReset(t)}
+      {successMessage && (
+        <div
+          className="da-card"
+          role="status"
+          style={{
+            marginBottom: 16,
+            background: 'var(--surface-success)',
+            borderColor: 'var(--border-success)',
+            color: 'var(--text-success)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontWeight: 500,
+            fontFamily: 'var(--font-ui)',
+          }}
+        >
+          <span aria-hidden="true">✓</span>
+          {successMessage}
+        </div>
+      )}
+
+      <div className="da-card-elevated">
+        <div className="da-input-label">Select Team</div>
+
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            flexWrap: 'wrap',
+          }}
+          role="radiogroup"
+          aria-label="Select team"
+        >
+          {TEAMS.map((team) => {
+            const active = draft.team === team;
+            const accent = TEAM_ACCENTS[team] ?? 'var(--accent)';
+
+            return (
+              <button
+                key={team}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setTeamAndReset(team)}
+                className={`da-btn ${active ? 'da-btn-primary' : 'da-btn-secondary'}`}
+                style={
+                  active
+                    ? {
+                        background: accent,
+                        borderColor: accent,
+                      }
+                    : undefined
+                }
+              >
+                <span
+                  aria-hidden="true"
                   style={{
-                    ...styles.teamBtn,
-                    ...(active
-                      ? {
-                          background: TEAM_ACCENTS[t],
-                          color: '#fff',
-                          boxShadow: `0 4px 20px ${TEAM_ACCENTS[t]}44`,
-                          borderColor: `${TEAM_ACCENTS[t]}88`,
-                        }
-                      : {}),
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    background: active ? 'rgba(255,255,255,0.72)' : accent,
+                    flexShrink: 0,
+                  }}
+                />
+                {team}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {draft.team && (
+        <div className="da-card-elevated" style={{ marginTop: 12 }}>
+          <div style={styles.formGrid}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="da-input-label">Agent</label>
+
+              <div ref={agentPickerRef} style={{ position: 'relative' }}>
+                <button
+                  type="button"
+                  aria-expanded={isAgentPickerOpen}
+                  aria-haspopup="listbox"
+                  onClick={() => setIsAgentPickerOpen((p) => !p)}
+                  className="da-input"
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    height: 38,
+                    borderColor: selectedAgent
+                      ? 'var(--accent-border)'
+                      : undefined,
                   }}
                 >
                   <span
                     style={{
-                      width: '8px',
-                      height: '8px',
-                      borderRadius: '50%',
-                      background: active
-                        ? 'rgba(255,255,255,0.6)'
-                        : TEAM_ACCENTS[t],
-                      flexShrink: 0,
-                    }}
-                  />
-                  {t}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Main form */}
-      {draft.team && (
-        <div style={{ ...styles.card, marginTop: '12px' }}>
-          <div style={styles.cardInner}>
-            <div style={styles.formGrid}>
-              {/* Agent picker */}
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={styles.fieldLabel}>Agent</label>
-                <div ref={agentPickerRef} style={{ position: 'relative' }}>
-                  <button
-                    type="button"
-                    aria-expanded={isAgentPickerOpen}
-                    aria-haspopup="listbox"
-                    onClick={() => setIsAgentPickerOpen((p) => !p)}
-                    style={{
-                      ...styles.inputBase,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      cursor: 'pointer',
-                      textAlign: 'left',
-                      ...(selectedAgent
-                        ? {
-                            borderColor: `${
-                              TEAM_ACCENTS[draft.team] ?? '#3b82f6'
-                            }44`,
-                          }
-                        : {}),
+                      color: selectedAgent
+                        ? 'var(--fg-default)'
+                        : 'var(--fg-subtle)',
                     }}
                   >
-                    <span
-                      style={{
-                        color: selectedAgent
-                          ? 'var(--na-text)'
-                          : 'var(--na-text-3)',
-                      }}
-                    >
-                      {selectedAgent
-                        ? getAgentLabel(selectedAgent)
-                        : 'Select an agent…'}
-                    </span>
-                    <span
-                      style={{
-                        color: 'var(--na-text-3)',
-                        fontSize: '11px',
-                        transition: 'transform 0.2s',
-                        transform: isAgentPickerOpen
-                          ? 'rotate(180deg)'
-                          : 'none',
-                      }}
-                    >
-                      ▼
-                    </span>
-                  </button>
+                    {selectedAgent
+                      ? getAgentLabel(selectedAgent)
+                      : 'Select an agent…'}
+                  </span>
 
-                  {isAgentPickerOpen && (
+                  <span
+                    style={{
+                      color: 'var(--fg-muted)',
+                      fontSize: 11,
+                      transition: 'transform 0.2s',
+                      transform: isAgentPickerOpen ? 'rotate(180deg)' : 'none',
+                    }}
+                  >
+                    ▼
+                  </span>
+                </button>
+
+                {isAgentPickerOpen && (
+                  <div
+                    className="da-card-elevated"
+                    role="listbox"
+                    aria-label="Agent list"
+                    style={styles.pickerDropdown}
+                  >
+                    <div style={{ padding: '10px 10px 6px' }}>
+                      <input
+                        type="text"
+                        value={draft.agentSearch}
+                        onChange={(e) =>
+                          setDraftField('agentSearch', e.target.value)
+                        }
+                        placeholder="Search by name, ID, or display name…"
+                        className="da-input"
+                        autoFocus
+                      />
+                    </div>
+
                     <div
-                      style={styles.pickerDropdown}
-                      role="listbox"
-                      aria-label="Agent list"
+                      style={{
+                        maxHeight: 260,
+                        overflowY: 'auto',
+                        padding: '4px 8px 8px',
+                      }}
                     >
-                      <div style={{ padding: '10px 10px 6px' }}>
-                        <input
-                          type="text"
-                          value={draft.agentSearch}
-                          onChange={(e) =>
-                            setDraftField('agentSearch', e.target.value)
-                          }
-                          placeholder="Search by name, ID, or display name…"
-                          style={{ ...styles.inputBase, fontSize: '13px' }}
-                          autoFocus
-                        />
-                      </div>
-                      <div
-                        style={{
-                          maxHeight: '260px',
-                          overflowY: 'auto',
-                          padding: '4px 8px 8px',
-                        }}
-                      >
-                        {loadingAgents ? (
-                          <div style={styles.pickerEmpty}>Loading agents…</div>
-                        ) : agentLoadError ? (
-                          <div
-                            style={{ ...styles.pickerEmpty, color: '#ef4444' }}
+                      {loadingAgents ? (
+                        <div style={styles.pickerEmpty}>Loading agents…</div>
+                      ) : agentLoadError ? (
+                        <div
+                          style={{
+                            ...styles.pickerEmpty,
+                            color: 'var(--text-danger)',
+                          }}
+                        >
+                          Error: {agentLoadError}
+                        </div>
+                      ) : visibleAgents.length === 0 ? (
+                        <div style={styles.pickerEmpty}>No agents found</div>
+                      ) : (
+                        visibleAgents.map((profile) => (
+                          <button
+                            key={profile.id}
+                            type="button"
+                            role="option"
+                            aria-selected={
+                              draft.selectedAgentProfileId === profile.id
+                            }
+                            onClick={() => handleSelectAgent(profile)}
+                            className="da-btn da-btn-ghost"
+                            style={{
+                              width: '100%',
+                              justifyContent: 'flex-start',
+                              height: 'auto',
+                              padding: '10px 12px',
+                              marginBottom: 2,
+                              background:
+                                draft.selectedAgentProfileId === profile.id
+                                  ? 'var(--accent-dim)'
+                                  : undefined,
+                              borderColor:
+                                draft.selectedAgentProfileId === profile.id
+                                  ? 'var(--accent-border)'
+                                  : undefined,
+                            }}
                           >
-                            Error: {agentLoadError}
-                          </div>
-                        ) : visibleAgents.length === 0 ? (
-                          <div style={styles.pickerEmpty}>No agents found</div>
-                        ) : (
-                          visibleAgents.map((p) => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              role="option"
-                              aria-selected={
-                                draft.selectedAgentProfileId === p.id
-                              }
-                              onClick={() => handleSelectAgent(p)}
-                              style={{
-                                ...styles.pickerOption,
-                                ...(draft.selectedAgentProfileId === p.id
-                                  ? styles.pickerOptionActive
-                                  : {}),
-                              }}
-                            >
-                              <div
-                                style={{ fontWeight: 600, fontSize: '13px' }}
-                              >
-                                {p.agent_name}
-                              </div>
-                              <div
+                            <span>
+                              <span
                                 style={{
-                                  fontSize: '11px',
-                                  color: 'var(--na-text-3)',
+                                  display: 'block',
+                                  fontWeight: 500,
+                                  fontSize: 13,
+                                  color: 'var(--fg-default)',
                                 }}
                               >
-                                {p.display_name || p.agent_id}
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
+                                {profile.agent_name}
+                              </span>
+
+                              <span
+                                style={{
+                                  display: 'block',
+                                  fontSize: 11,
+                                  color: 'var(--fg-muted)',
+                                  marginTop: 2,
+                                }}
+                              >
+                                {profile.display_name || profile.agent_id}
+                              </span>
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+                        <div
+              style={{
+                gridColumn: '1 / -1',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: 12,
+              }}
+            >
+              {[
+                ['Agent Name', selectedAgent?.agent_name],
+                ['Display Name', selectedAgent?.display_name],
+                ['Agent ID', selectedAgent?.agent_id],
+                ['Created By', creatorSummary?.name],
+                ['Creator Role', creatorSummary?.role],
+              ].map(([label, value]) => (
+                <div key={label} className="da-card-stat">
+                  <div className="da-input-label" style={{ marginBottom: 4 }}>
+                    {label}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: 'var(--fg-default)',
+                      fontFamily: 'var(--font-ui)',
+                    }}
+                  >
+                    {value || '—'}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {lastAudit && (
+              <div
+                className="da-card"
+                style={{
+                  gridColumn: '1 / -1',
+                  background: 'var(--accent-dim)',
+                  borderColor: 'var(--accent-border)',
+                }}
+              >
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                    marginBottom: 14,
+                  }}
+                >
+                  <div>
+                    <div className="da-input-label">Last Audit Created</div>
+
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: 500,
+                        color: 'var(--fg-default)',
+                        fontFamily: 'var(--font-ui)',
+                      }}
+                    >
+                      {lastAudit.agentName}
+                    </div>
+                  </div>
+
+                  {lastAudit.qualityScore !== null && (
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: 600,
+                        color: getScoreColor(lastAudit.qualityScore),
+                        fontFamily: 'var(--font-ui)',
+                      }}
+                    >
+                      {Number(lastAudit.qualityScore).toFixed(2)}%
                     </div>
                   )}
                 </div>
-              </div>
 
-              {/* Info chips */}
-              <div
-                style={{
-                  gridColumn: '1 / -1',
-                  display: 'grid',
-                  gridTemplateColumns:
-                    'repeat(auto-fit, minmax(200px, 1fr))',
-                  gap: '12px',
-                }}
-              >
-                {[
-                  ['Agent Name', selectedAgent?.agent_name],
-                  ['Display Name', selectedAgent?.display_name],
-                  ['Agent ID', selectedAgent?.agent_id],
-                  ['Created By', creatorSummary?.name],
-                  ['Creator Role', creatorSummary?.role],
-                ].map(([label, value]) => (
-                  <div key={label} style={styles.infoChip}>
-                    <span style={styles.infoChipLabel}>{label}</span>
-                    <span style={styles.infoChipValue}>
-                      {value || '—'}
-                    </span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Last audit */}
-              {lastAudit && (
-                <div style={{ gridColumn: '1 / -1', ...styles.lastAuditCard }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: '12px',
-                      flexWrap: 'wrap',
-                      marginBottom: '14px',
-                    }}
-                  >
-                    <div>
-                      <div
-                        style={{
-                          fontSize: '10px',
-                          fontWeight: 700,
-                          letterSpacing: '0.14em',
-                          textTransform: 'uppercase',
-                          color: 'var(--na-accent)',
-                          marginBottom: '4px',
-                        }}
-                      >
-                        Last Audit Created
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {[
+                    ['Team', lastAudit.team],
+                    ['Case', lastAudit.caseType],
+                    ['Date', lastAudit.auditDate],
+                  ].map(([key, value]) => (
+                    <div key={key} className="da-card-stat">
+                      <div className="da-input-label" style={{ marginBottom: 4 }}>
+                        {key}
                       </div>
+
                       <div
                         style={{
-                          fontSize: '15px',
-                          fontWeight: 700,
-                          color: 'var(--na-text)',
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: 'var(--fg-default)',
+                          fontFamily: 'var(--font-ui)',
                         }}
                       >
-                        {lastAudit.agentName}
+                        {value || '—'}
                       </div>
                     </div>
-                    {lastAudit.qualityScore !== null && (
-                      <div
-                        style={{
-                          fontSize: '22px',
-                          fontWeight: 900,
-                          color:
-                            lastAudit.qualityScore >= 90
-                              ? '#10b981'
-                              : lastAudit.qualityScore >= 75
-                              ? '#f59e0b'
-                              : '#ef4444',
-                        }}
-                      >
-                        {Number(lastAudit.qualityScore).toFixed(2)}%
-                      </div>
-                    )}
-                  </div>
-                  <div
-                    style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}
-                  >
-                    {[
-                      ['Team', lastAudit.team],
-                      ['Case', lastAudit.caseType],
-                      ['Date', lastAudit.auditDate],
-                    ].map(([k, v]) => (
-                      <div key={k} style={styles.lastAuditMeta}>
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            color: 'var(--na-text-3)',
-                            fontWeight: 700,
-                            letterSpacing: '0.1em',
-                            textTransform: 'uppercase',
-                          }}
-                        >
-                          {k}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: '13px',
-                            fontWeight: 600,
-                            color: 'var(--na-text)',
-                          }}
-                        >
-                          {v || '—'}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Case Type */}
-              <div>
-                <label style={styles.fieldLabel}>Case Type</label>
-                <select
-                  value={draft.caseType}
-                  onChange={(e) => setDraftField('caseType', e.target.value)}
-                  style={styles.selectField}
-                >
-                  {CASE_TYPES.map((o) => (
-                    <option
-                      key={o || '__empty__'}
-                      value={o}
-                      style={{
-                        backgroundColor: 'var(--na-option-bg)',
-                        color: 'var(--na-option-text)',
-                      }}
-                    >
-                      {o || 'Select Case Type'}
-                    </option>
                   ))}
-                </select>
+                </div>
               </div>
+            )}
 
-              {/* Audit Date */}
-              <div>
-                <label style={styles.fieldLabel}>Audit Date</label>
-                <input
-                  type="date"
-                  value={draft.auditDate}
-                  onChange={(e) =>
-                    setDraftField('auditDate', e.target.value)
-                  }
-                  onClick={(e) => openNativeDatePicker(e.currentTarget)}
-                  onFocus={(e) => openNativeDatePicker(e.currentTarget)}
-                  style={styles.inputBase}
-                />
-              </div>
+            <div>
+              <label className="da-input-label">Case Type</label>
 
-              {(draft.team === 'Calls' || draft.team === 'Sales') && (
-                <>
-                  <div>
-                    <label style={styles.fieldLabel}>Order Number</label>
-                    <input
-                      type="text"
-                      value={draft.orderNumber}
-                      onChange={(e) =>
-                        setDraftField('orderNumber', e.target.value)
-                      }
-                      style={styles.inputBase}
-                    />
-                  </div>
-                  <div>
-                    <label style={styles.fieldLabel}>Phone Number</label>
-                    <input
-                      type="text"
-                      value={draft.phoneNumber}
-                      onChange={(e) =>
-                        setDraftField('phoneNumber', e.target.value)
-                      }
-                      style={styles.inputBase}
-                    />
-                  </div>
-                </>
-              )}
+              <select
+                value={draft.caseType}
+                onChange={(e) => setDraftField('caseType', e.target.value)}
+                className="da-select"
+              >
+                {CASE_TYPES.map((option) => (
+                  <option key={option || '__empty__'} value={option}>
+                    {option || 'Select Case Type'}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              {draft.team === 'Tickets' && (
+            <div>
+              <label className="da-input-label">Audit Date</label>
+
+              <input
+                type="date"
+                value={draft.auditDate}
+                onChange={(e) => setDraftField('auditDate', e.target.value)}
+                onClick={(e) => openNativeDatePicker(e.currentTarget)}
+                onFocus={(e) => openNativeDatePicker(e.currentTarget)}
+                className="da-input"
+              />
+            </div>
+
+            {(draft.team === 'Calls' || draft.team === 'Sales') && (
+              <>
                 <div>
-                  <label style={styles.fieldLabel}>Ticket ID</label>
+                  <label className="da-input-label">Order Number</label>
+
                   <input
                     type="text"
-                    value={draft.ticketId}
+                    value={draft.orderNumber}
                     onChange={(e) =>
-                      setDraftField('ticketId', e.target.value)
+                      setDraftField('orderNumber', e.target.value)
                     }
-                    style={styles.inputBase}
+                    className="da-input"
                   />
                 </div>
-              )}
 
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={styles.fieldLabel}>Comments</label>
-                <textarea
-                  value={draft.comments}
-                  onChange={(e) =>
-                    setDraftField('comments', e.target.value)
-                  }
-                  rows={3}
-                  style={{ ...styles.inputBase, resize: 'vertical' }}
+                <div>
+                  <label className="da-input-label">Phone Number</label>
+
+                  <input
+                    type="text"
+                    value={draft.phoneNumber}
+                    onChange={(e) =>
+                      setDraftField('phoneNumber', e.target.value)
+                    }
+                    className="da-input"
+                  />
+                </div>
+              </>
+            )}
+
+            {draft.team === 'Tickets' && (
+              <div>
+                <label className="da-input-label">Ticket ID</label>
+
+                <input
+                  type="text"
+                  value={draft.ticketId}
+                  onChange={(e) => setDraftField('ticketId', e.target.value)}
+                  className="da-input"
                 />
               </div>
+            )}
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="da-input-label">Comments</label>
+
+              <textarea
+                value={draft.comments}
+                onChange={(e) => setDraftField('comments', e.target.value)}
+                rows={3}
+                className="da-textarea"
+              />
             </div>
           </div>
         </div>
       )}
 
-      {/* Scorecards */}
       {draft.team === 'Calls' && (
         <ScorecardPanel
           title="QA Evaluation · Calls"
@@ -1487,6 +1516,7 @@ function NewAuditSupabase() {
           scoreColor={scoreColor}
         />
       )}
+
       {draft.team === 'Tickets' && (
         <ScorecardPanel
           title="QA Evaluation · Tickets"
@@ -1500,6 +1530,7 @@ function NewAuditSupabase() {
           scoreColor={scoreColor}
         />
       )}
+
       {draft.team === 'Sales' && (
         <ScorecardPanel
           title="QA Evaluation · Sales"
@@ -1514,30 +1545,28 @@ function NewAuditSupabase() {
         />
       )}
 
-      {/* Actions */}
       <div
         style={{
           display: 'flex',
-          gap: '10px',
+          gap: 10,
           flexWrap: 'wrap',
-          marginTop: '24px',
+          marginTop: 24,
         }}
       >
         <button
+          type="button"
           onClick={handleSave}
           disabled={saving || !draft.team}
-          style={{
-            ...styles.btnPrimary,
-            opacity: !draft.team ? 0.6 : 1,
-          }}
+          className="da-btn da-btn-primary"
         >
           {saving ? 'Saving…' : '✓ Save Audit'}
         </button>
+
         <button
           type="button"
           onClick={handleClearDraft}
           disabled={saving}
-          style={styles.btnSecondary}
+          className="da-btn da-btn-secondary"
         >
           Clear Draft
         </button>
@@ -1549,7 +1578,7 @@ function NewAuditSupabase() {
 export default memo(NewAuditSupabase);
 
 /* ═════════════════════════════════════════════════════════════
-   Module-level styles (no re-allocation per render)
+   Module-level styles
    ═════════════════════════════════════════════════════════════ */
 
 const styles: Record<string, CSSProperties> = {
@@ -1558,284 +1587,40 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     flexWrap: 'wrap',
-    gap: '14px',
-    marginBottom: '24px',
-  },
-  eyebrow: {
-    fontSize: '11px',
-    fontWeight: 700,
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    color: 'var(--na-accent)',
-    marginBottom: '6px',
+    gap: 14,
+    marginBottom: 24,
   },
   pageTitle: {
     margin: 0,
-    fontSize: '28px',
-    fontWeight: 900,
+    fontSize: 28,
+    fontWeight: 500,
     letterSpacing: '-0.025em',
-    color: 'var(--na-text)',
+    color: 'var(--fg-default)',
+    fontFamily: 'var(--font-ui)',
   },
   pageSub: {
     margin: '6px 0 0',
-    fontSize: '14px',
-    color: 'var(--na-text-2)',
-  },
-  card: {
-    background: 'var(--na-surface)',
-    border: '1px solid var(--na-border)',
-    borderRadius: '18px',
-    boxShadow: 'var(--na-shadow-md)',
-  },
-  cardInner: { padding: '20px 22px' },
-  sectionLabel: {
-    fontSize: '10px',
-    fontWeight: 700,
-    letterSpacing: '0.16em',
-    textTransform: 'uppercase',
-    color: 'var(--na-accent)',
-    marginBottom: '14px',
+    fontSize: 14,
+    color: 'var(--fg-muted)',
   },
   formGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-    gap: '14px',
-  },
-  fieldLabel: {
-    display: 'block',
-    fontSize: '12px',
-    fontWeight: 600,
-    color: 'var(--na-text-2)',
-    marginBottom: '6px',
-  },
-  inputBase: {
-    width: '100%',
-    padding: '11px 14px',
-    borderRadius: '12px',
-    border: '1px solid var(--na-border-strong)',
-    background: 'var(--na-field-bg)',
-    color: 'var(--na-field-text)',
-    fontSize: '14px',
-    outline: 'none',
-    boxSizing: 'border-box',
-  },
-  selectField: {
-    width: '100%',
-    padding: '11px 14px',
-    borderRadius: '12px',
-    border: '1px solid var(--na-border-strong)',
-    background: 'var(--na-field-bg)',
-    color: 'var(--na-field-text)',
-    fontSize: '14px',
-    outline: 'none',
-    boxSizing: 'border-box',
-    appearance: 'none',
-    WebkitAppearance: 'none',
-    MozAppearance: 'none',
-    backgroundImage:
-      'linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%)',
-    backgroundPosition:
-      'calc(100% - 18px) calc(50% - 2px), calc(100% - 12px) calc(50% - 2px)',
-    backgroundSize: '5px 5px, 5px 5px',
-    backgroundRepeat: 'no-repeat',
-    colorScheme: 'normal',
-  },
-  teamBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '10px 18px',
-    borderRadius: '12px',
-    border: '1px solid var(--na-border-strong)',
-    background: 'var(--na-surface-2)',
-    color: 'var(--na-text)',
-    cursor: 'pointer',
-    fontWeight: 700,
-    fontSize: '14px',
-    transition: 'all 0.2s ease',
-  },
-  infoChip: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '3px',
-    padding: '12px 14px',
-    borderRadius: '12px',
-    background: 'var(--na-surface-2)',
-    border: '1px solid var(--na-border)',
-  },
-  infoChipLabel: {
-    fontSize: '10px',
-    fontWeight: 700,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    color: 'var(--na-text-3)',
-  },
-  infoChipValue: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: 'var(--na-text)',
-  },
-  lastAuditCard: {
-    padding: '16px 18px',
-    borderRadius: '14px',
-    background: 'var(--na-accent-dim)',
-    border: '1px solid var(--na-accent-glow)',
-  },
-  lastAuditMeta: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    padding: '8px 12px',
-    borderRadius: '10px',
-    background: 'var(--na-surface)',
-    border: '1px solid var(--na-border)',
+    gap: 14,
   },
   pickerDropdown: {
     position: 'absolute',
     top: 'calc(100% + 6px)',
     left: 0,
     right: 0,
-    background: 'var(--na-surface)',
-    border: '1px solid var(--na-border-strong)',
-    borderRadius: '16px',
-    boxShadow: 'var(--na-shadow-lg)',
     zIndex: 30,
     overflow: 'hidden',
+    padding: 0,
   },
   pickerEmpty: {
     padding: '16px 12px',
-    fontSize: '13px',
-    color: 'var(--na-text-3)',
+    fontSize: 13,
+    color: 'var(--fg-muted)',
     textAlign: 'center',
-  },
-  pickerOption: {
-    width: '100%',
-    textAlign: 'left',
-    padding: '10px 12px',
-    borderRadius: '10px',
-    border: '1px solid transparent',
-    background: 'transparent',
-    color: 'var(--na-text)',
-    cursor: 'pointer',
-    marginBottom: '2px',
-    transition: 'background 0.15s',
-  },
-  pickerOptionActive: {
-    background: 'var(--na-accent-dim)',
-    border: '1px solid var(--na-accent-glow)',
-  },
-  metricCard: {
-    padding: '14px 16px',
-    borderRadius: '14px',
-    border: '1px solid var(--na-border)',
-    background: 'var(--na-surface)',
-    borderLeft: '3px solid transparent',
-    transition: 'border-color 0.2s',
-  },
-  metricName: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: 'var(--na-text)',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  metricPts: {
-    fontSize: '11px',
-    fontWeight: 700,
-    color: 'var(--na-text-3)',
-    background: 'var(--na-surface-2)',
-    padding: '2px 8px',
-    borderRadius: '999px',
-  },
-  lockedBadge: {
-    marginTop: '3px',
-    fontSize: '11px',
-    color: 'var(--na-text-3)',
-  },
-  qaNoteLabelStyle: {
-    fontSize: '10px',
-    fontWeight: 700,
-    letterSpacing: '0.12em',
-    textTransform: 'uppercase',
-    color: 'var(--na-accent)',
-    marginBottom: '6px',
-  },
-  qaTextarea: {
-    width: '100%',
-    padding: '11px 14px',
-    borderRadius: '12px',
-    border: '1px solid var(--na-border-strong)',
-    background: 'var(--na-field-bg)',
-    color: 'var(--na-field-text)',
-    outline: 'none',
-    boxSizing: 'border-box',
-    resize: 'vertical',
-    fontSize: '13px',
-  },
-  autoFailBanner: {
-    marginTop: '16px',
-    padding: '14px 18px',
-    borderRadius: '14px',
-    background: 'rgba(239,68,68,0.10)',
-    border: '1px solid rgba(239,68,68,0.24)',
-    color: '#fca5a5',
-    fontWeight: 700,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  scoreSummaryCard: {
-    marginTop: '18px',
-    padding: '20px 24px',
-    borderRadius: '18px',
-    background: 'var(--na-surface-2)',
-    border: '1px solid var(--na-border-strong)',
-  },
-  btnPrimary: {
-    padding: '13px 22px',
-    borderRadius: '13px',
-    background: 'linear-gradient(135deg, #2563eb, #1d4ed8)',
-    color: '#fff',
-    border: '1px solid rgba(96,165,250,0.3)',
-    fontWeight: 700,
-    fontSize: '14px',
-    cursor: 'pointer',
-    boxShadow: '0 6px 20px rgba(37,99,235,0.35)',
-    letterSpacing: '0.01em',
-  },
-  btnSecondary: {
-    padding: '13px 18px',
-    borderRadius: '13px',
-    background: 'var(--na-surface)',
-    color: 'var(--na-text)',
-    border: '1px solid var(--na-border-strong)',
-    fontWeight: 600,
-    fontSize: '14px',
-    cursor: 'pointer',
-  },
-  errorBanner: {
-    marginBottom: '16px',
-    padding: '13px 16px',
-    borderRadius: '13px',
-    background: 'rgba(239,68,68,0.10)',
-    border: '1px solid rgba(239,68,68,0.24)',
-    color: '#fca5a5',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  successBanner: {
-    marginBottom: '16px',
-    padding: '13px 16px',
-    borderRadius: '13px',
-    background: 'rgba(16,185,129,0.10)',
-    border: '1px solid rgba(16,185,129,0.24)',
-    color: '#6ee7b7',
-    fontWeight: 600,
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
   },
 };
